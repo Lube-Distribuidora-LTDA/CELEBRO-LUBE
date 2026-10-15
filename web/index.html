@@ -1,0 +1,229 @@
+<title>Cérebro da Lube</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@500;600;700&family=JetBrains+Mono:wght@500;600;800&display=swap">
+<link rel="stylesheet" href="css/estilo.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js">
+<link rel="modulepreload" href="js/dados.js">
+<link rel="modulepreload" href="js/holo.js">
+
+<div class="app" id="app" data-visao="robo">
+  <canvas id="palco" aria-label="Cabeça do robô do Cérebro da Lube: as notas do vault são os neurônios dentro da cúpula" role="img"></canvas>
+  <canvas id="aneis" hidden aria-label="Mapa em anéis do Cérebro da Lube" role="img"></canvas>
+
+  <header class="marca">
+    <svg class="logo" viewBox="40 20 790 575" aria-hidden="true"><g class="logo-g"><path class="logo-l" d="M165 30L400 30L295 435L740 435L705 580L230 580Q48 580 72 410Z"/><path class="logo-r" d="M430 30L650 30Q822 34 795 188L748 410L335 410Z"/></g></svg>
+    <h1>Cérebro <span>da Lube</span></h1>
+    <p id="stats">Ligando…</p>
+  </header>
+
+  <div class="topo">
+    <!-- saúde das rotinas e dos sistemas (Guardião): o js/holo.js escreve o estado; clique abre o painel Saúde -->
+    <button id="saudeChip" class="btn saude-chip" type="button" aria-controls="saude" aria-expanded="false" data-st="carregando" aria-label="Saúde dos sistemas: lendo. Abre o painel Saúde.">
+      <i class="pt" aria-hidden="true"></i><span class="sc-txt"><span class="sc-rot">Saúde…</span><span class="sc-curto">Saúde…</span><span class="sc-sub">lendo</span></span>
+    </button>
+    <div class="busca">
+      <svg class="busca-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+      <input id="q" type="search" placeholder="Buscar nota  ( / )" aria-label="Buscar nota no cérebro" autocomplete="off" spellcheck="false" role="combobox" aria-controls="resultados" aria-expanded="false" aria-autocomplete="list">
+      <div id="resultados" role="listbox" aria-label="Notas encontradas" hidden></div>
+    </div>
+    <button id="recarregar" class="btn principal" type="button" aria-label="Recarregar cérebro">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+      <span class="rot">Recarregar<span class="rot-ext"> cérebro</span></span>
+    </button>
+    <button id="maosBtn" class="btn" type="button" aria-pressed="false" aria-label="Controle pelas mãos (câmera)" title="Controlar com as mãos pela câmera" data-estado="desligado">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.6a1.5 1.5 0 0 1 3 0V11.5"/><path d="M11 11V3.9a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V5.4a1.5 1.5 0 0 1 3 0V12"/><path d="M17 9.4a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.3a6 6 0 0 1-4.5-2.1l-3.1-3.6a1.6 1.6 0 0 1 2.3-2.2L8 14.6"/></svg>
+      <span class="rot-maos">Mãos</span>
+      <i class="maos-pt" aria-hidden="true"></i>
+    </button>
+    <button id="menuBtn" class="btn" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <span class="rot-menu">Menu</span>
+    </button>
+  </div>
+
+  <div id="menu" class="menu" hidden>
+    <section aria-labelledby="mVault">
+      <h3 id="mVault" class="hud-rot">Vault do Obsidian</h3>
+      <div class="linha">
+        <button id="loadBtn" class="btn principal pequeno" type="button">Abrir pasta do vault</button>
+        <button id="demoBtn" class="btn pequeno" type="button">Ver exemplo</button>
+      </div>
+      <p id="vaultHint">Escolha a pasta do seu vault. Os arquivos são lidos só neste navegador e ficam guardados aqui para a próxima visita.</p>
+      <input type="file" id="pasta" webkitdirectory directory multiple class="sr" tabindex="-1" aria-hidden="true">
+    </section>
+    <section aria-labelledby="mVisao">
+      <h3 id="mVisao" class="hud-rot">Visão</h3>
+      <div class="segmento" role="group" aria-labelledby="mVisao">
+        <button id="visaoRobo" type="button" aria-pressed="true">Robô</button>
+        <button id="visaoAneis" type="button" aria-pressed="false">Mapa em anéis</button>
+      </div>
+      <button id="centralizarBtn" class="btn pequeno so-aneis" type="button">Centralizar mapa</button>
+    </section>
+    <section aria-labelledby="mDeptos">
+      <h3 id="mDeptos" class="hud-rot">Departamentos</h3>
+      <div id="deptChips" class="chips" role="group" aria-labelledby="mDeptos"></div>
+    </section>
+    <section aria-labelledby="mExib">
+      <h3 id="mExib" class="hud-rot">Exibição</h3>
+      <label class="chave" for="sinapses"><span>Mostrar sinapses</span><input type="checkbox" id="sinapses" checked></label>
+      <label class="chave" for="qualidade"><span>Efeitos de brilho</span><input type="checkbox" id="qualidade" checked></label>
+      <div class="so-aneis exib-aneis">
+        <label class="faixa" for="giro"><span>Giro da memória</span><input type="range" id="giro" min="0" max="1" step="0.01" value="0.15"></label>
+        <label class="chave" for="nomes"><span>Mostrar nomes das notas</span><input type="checkbox" id="nomes"></label>
+      </div>
+    </section>
+    <p class="atalhos"><kbd>/</kbd> buscar <span aria-hidden="true">·</span> <kbd>↑</kbd><kbd>↓</kbd> escolher <span aria-hidden="true">·</span> <kbd>Esc</kbd> fechar</p>
+  </div>
+
+  <!-- Modo Mãos: o cartão do app explica onde a câmera funciona e cobre os erros se a camada de efeitos
+       (js/efeitos-maos.js) não carregar; o vídeo da câmera fica escondido (o reconhecimento lê dele). -->
+  <div id="maosInfo" class="maos-info" role="dialog" aria-labelledby="maosInfoTit" aria-describedby="maosInfoTxt" hidden>
+    <span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>
+    <h2 id="maosInfoTit" class="hud-rot">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.6a1.5 1.5 0 0 1 3 0V11.5"/><path d="M11 11V3.9a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V5.4a1.5 1.5 0 0 1 3 0V12"/><path d="M17 9.4a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.3a6 6 0 0 1-4.5-2.1l-3.1-3.6a1.6 1.6 0 0 1 2.3-2.2L8 14.6"/></svg>
+      <span>Controle pelas mãos</span>
+    </h2>
+    <p id="maosInfoTxt"></p>
+    <p class="maos-privado"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>A imagem fica só neste computador.</p>
+    <div class="acoes">
+      <button id="maosInfoLigar" class="btn principal pequeno" type="button" hidden>Ligar câmera</button>
+      <button id="maosInfoFechar" class="btn pequeno" type="button">Entendi</button>
+    </div>
+  </div>
+  <video id="maosVideo" class="maos-video" playsinline muted aria-hidden="true"></video>
+
+  <nav id="trilho" class="trilho" aria-label="Departamentos e rotinas do cérebro" data-aba="deptos">
+    <div class="trilho-abas" role="tablist" aria-label="O que o trilho mostra">
+      <button id="abaDeptos" class="aba" type="button" role="tab" aria-selected="true" aria-controls="trilhoDeptos">Departamentos <b id="qtDeptos"></b></button>
+      <button id="abaRotinas" class="aba" type="button" role="tab" aria-selected="false" aria-controls="trilhoRotinas" tabindex="-1">Rotinas <b id="qtRotinas"></b></button>
+    </div>
+    <div id="trilhoDeptos" class="trilho-painel" role="tabpanel" aria-labelledby="abaDeptos"></div>
+    <div id="trilhoRotinas" class="trilho-painel" role="tabpanel" aria-labelledby="abaRotinas" hidden></div>
+  </nav>
+  <section id="recentes" class="recentes" aria-label="Memórias mais recentes" hidden></section>
+  <div id="leque" class="leque" aria-live="polite"></div>
+
+  <aside id="leitor" class="leitor" aria-label="Leitor de nota" hidden>
+    <div class="leitor-moldura">
+      <span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>
+      <span class="varredura" aria-hidden="true"></span>
+      <span class="ruido" aria-hidden="true"></span>
+      <span class="alca" aria-hidden="true"></span>
+      <header>
+        <div class="selos" id="lSelos"></div>
+        <h2 id="lTitulo"></h2>
+        <code id="lCaminho"></code>
+        <p id="lMeta" class="l-meta"></p>
+        <div class="acoes">
+          <button id="lFluxo" class="btn pequeno" type="button" hidden>
+            <svg class="ico-voltar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+            <svg class="ico-funil" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 4.5h17l-6.5 8.2v5.8l-4 2v-7.8z"/></svg>
+            <span>Voltar ao fluxo</span>
+          </button>
+          <button id="lObsidian" class="btn pequeno" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+            Abrir no Obsidian
+          </button>
+          <button id="lCopiar" class="btn pequeno" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>
+            Copiar caminho
+          </button>
+          <button id="lFechar" class="btn icone" type="button" aria-label="Fechar leitor">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="leitor-corpo" id="lCorpo" tabindex="0" role="region" aria-label="Texto da nota">
+        <div class="fm" id="lFm"></div>
+        <div class="md" id="lTexto"></div>
+        <div id="lConexoes" class="conexoes"></div>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="fluxo" class="leitor fluxo" aria-label="Fluxo da rotina" hidden>
+    <div class="leitor-moldura">
+      <span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>
+      <span class="varredura" aria-hidden="true"></span>
+      <span class="ruido" aria-hidden="true"></span>
+      <span class="alca" aria-hidden="true"></span>
+      <header>
+        <div class="selos" id="fSelos"></div>
+        <h2 id="fTitulo"></h2>
+        <p id="fSaude" class="f-saude" hidden></p>
+        <div class="acoes">
+          <button id="fNota" class="btn pequeno" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5M9 12.5h6M9 16h6"/></svg>
+            Ver nota completa
+          </button>
+          <button id="fCopiar" class="btn pequeno" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>
+            Copiar caminho
+          </button>
+          <button id="fFechar" class="btn icone" type="button" aria-label="Fechar fluxo">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="leitor-corpo" id="fCorpo" tabindex="0" role="region" aria-label="Etapas da rotina">
+        <div class="f-chips" id="fChips"></div>
+        <p id="fDeduzido" class="f-deduzido" hidden>Fluxo deduzido — escreva a seção Fluxo na nota para ficar exato.</p>
+        <div id="fFunil" class="funil">
+          <svg id="fSilhueta" class="funil-silhueta" aria-hidden="true"></svg>
+          <ol id="fEtapas" class="etapas" role="list" aria-label="Etapas do fluxo, de cima para baixo"></ol>
+        </div>
+        <div id="fConexoes" class="conexoes"></div>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="saude" class="leitor saude" aria-label="Saúde das rotinas e dos sistemas" hidden>
+    <div class="leitor-moldura">
+      <span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>
+      <span class="varredura" aria-hidden="true"></span>
+      <span class="ruido" aria-hidden="true"></span>
+      <span class="alca" aria-hidden="true"></span>
+      <header>
+        <div class="selos" id="sSelos"></div>
+        <h2 id="sTitulo"></h2>
+        <p id="sMeta" class="l-meta"></p>
+        <div class="acoes">
+          <button id="sAtualizar" class="btn pequeno" type="button" title="Lê de novo o que o Guardião já verificou. A verificação em si roda sozinha no banco, de 5 em 5 min.">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+            Ler de novo
+          </button>
+          <button id="sFechar" class="btn icone" type="button" aria-label="Fechar o painel Saúde">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="leitor-corpo" id="sCorpo" tabindex="0" role="region" aria-label="Rotinas, sistemas e incidentes vigiados pelo Guardião"></div>
+    </div>
+  </aside>
+
+  <svg id="feixe" class="feixe" aria-hidden="true"></svg>
+
+  <div id="pergunta" class="pergunta" hidden>
+    <div id="resposta" class="resposta" hidden aria-live="polite"></div>
+    <form id="perguntaForm" autocomplete="off">
+      <svg class="perg-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+      <input id="perguntaInput" placeholder="Pergunte ao cérebro da Lube…" aria-label="Pergunta para o Claude sobre o cérebro" autocomplete="off" enterkeyhint="send">
+      <button id="perguntaBtn" class="btn principal" type="submit">Perguntar</button>
+    </form>
+  </div>
+
+  <div id="dica" class="dica" hidden></div>
+  <div id="aviso" class="aviso" role="status" hidden></div>
+  <div id="legenda" class="legenda" aria-hidden="true">
+    <span><svg class="lg lg-logo" viewBox="40 20 790 575" aria-hidden="true"><g class="logo-g"><path class="logo-l" d="M165 30L400 30L295 435L740 435L705 580L230 580Q48 580 72 410Z"/><path class="logo-r" d="M430 30L650 30Q822 34 795 188L748 410L335 410Z"/></g></svg><b>Logo</b> CLAUDE.md</span>
+    <span><i class="lg lg-neur"></i><b>Neurônio</b> memória</span>
+    <span><i class="lg lg-estrela"></i><b>Estrela</b> skill</span>
+    <span><i class="lg lg-anel"></i><b>Anel vermelho</b> rotinas</span>
+    <span><i class="lg lg-sat"></i><b>Satélite</b> aplicações</span>
+  </div>
+  <div id="semWebgl" class="sem-webgl" hidden>Seu navegador não liga o 3D. Mostrando o mapa em anéis.</div>
+</div>
+
+<script type="module" src="js/app.js"></script>

@@ -1,0 +1,7 @@
+node_modules/
+ENV
+.env
+*.log
+conversas/
+dist/
+__pycache__/
