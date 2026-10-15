@@ -2613,7 +2613,8 @@ function opcoesJarvis() {
       S.jarvisCobre = false;
       $('#app')?.classList.remove('com-jarvis');
       atualizarPausa();
-      S.robo?.olharPara(null);
+      // com o leitor, o funil ou o painel Saúde abertos atrás, o robô volta olhando para o painel (CONTRATO §2)
+      S.robo?.olharPara((S.leitorNo || S.fluxoNo || S.saudeAberta) ? centroLeitor() : null);
       S.robo?.base(baseRepouso());
       agendarSono();
       // o último cartão "nota" ou "rotina" abre por trás, no leitor ou no funil

@@ -12,7 +12,9 @@ import MailComposer from 'nodemailer/lib/mail-composer';
 import { criarAcao } from '../acoes.js';
 import { ErroFerramenta, cortar, norm, quandoSP, horaSP, log } from '../util.js';
 
-const RX_EMAIL = /^[^\s@<>()",;:\\[\]]+@[^\s@<>()",;:\\[\]]+\.[^\s@<>()",;:\\[\]]{2,}$/;
+// só ASCII: letras parecidas de outro alfabeto (o "е" cirílico em lubе.com.br) e controles bidi não passam
+const RX_EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+const RX_INVISIVEL = /[\p{Cf}\p{Cc}]/u;   // controles e formatação invisível (U+202E e companhia)
 const cacheMsgs = new Map();   // uid -> {messageId, references, assunto, de, deNome} para responder
 function guardarNoCache(uid, v) {
   cacheMsgs.set(uid, v);
@@ -224,7 +226,7 @@ export async function enviarEmail(cfg, d) {
 
 export const prepararEmail = {
   nome: 'preparar_email',
-  descricao: 'Prepara um e-mail para sair da caixa cpd@ (texto simples). NÃO envia: cria um rascunho que aparece na tela do Júlio com os botões Confirmar e Cancelar, e só sai se ele confirmar. Depois de chamar, diga em uma ou duas frases para quem vai e do que se trata, e que espera a confirmação dele na tela. Para responder um e-mail, passe em_resposta_a com o id dele.',
+  descricao: 'Prepara um e-mail para sair da caixa cpd@ (texto simples). NÃO envia: cria um rascunho que aparece na tela do Júlio com os botões Confirmar e Cancelar, e só sai se ele confirmar. Depois de chamar, diga em uma ou duas frases para quem vai e do que se trata, e que espera a confirmação dele na tela. Para responder um e-mail, passe em_resposta_a com o id dele. Só um rascunho espera confirmação por vez: chamar de novo troca o anterior pela versão nova (use isso quando o Júlio pedir mudança).',
   schema: {
     type: 'object',
     properties: {
@@ -243,7 +245,8 @@ export const prepararEmail = {
     const limpar = l => [...new Set(l.map(x => String(x).trim().toLowerCase()).filter(Boolean))];
     const P = limpar(para), C = limpar(cc).filter(x => !P.includes(x));
     const ruins = [...P, ...C].filter(x => !RX_EMAIL.test(x));
-    if (ruins.length) throw new ErroFerramenta(`Endereço inválido: ${ruins.join(', ')}. Peça ao Júlio o endereço completo.`, 'email-endereco');
+    if (ruins.length) throw new ErroFerramenta(`Endereço inválido: ${ruins.map(x => x.replace(/[^\x20-\x7e]/g, '?')).join(', ')}. Só vale endereço com letras sem acento, números e . _ % + -. Peça ao Júlio o endereço completo.`, 'email-endereco');
+    if (RX_INVISIVEL.test(String(assunto || ''))) throw new ErroFerramenta('O assunto tem caracteres invisíveis de controle. Escreva o assunto de novo, só com texto comum.', 'email-assunto');
     let inReplyTo = null, references = null, original = null;
     if (resp) {
       original = cacheMsgs.get(resp) || null;
@@ -263,7 +266,7 @@ export const prepararEmail = {
       references = [original.references, original.messageId].filter(Boolean).join(' ') || null;
     }
     let ass = String(assunto || '').trim();
-    if (!ass && original) ass = /^re:/i.test(original.assunto) ? original.assunto : `Re: ${original.assunto}`;
+    if (!ass && original) ass = (/^re:/i.test(original.assunto) ? original.assunto : `Re: ${original.assunto}`).replace(/[\p{Cf}\p{Cc}]/gu, '');
     if (!ass) throw new ErroFerramenta('Falta o assunto do e-mail.', 'email-assunto');
     const detalhe = {
       de: `${ctx.cfg.smtp.nome} <${ctx.cfg.smtp.user}>`, para: P, cc: C.length ? C : undefined, assunto: ass, corpo,
@@ -271,7 +274,7 @@ export const prepararEmail = {
     };
     const resumo = `E-mail para ${P.join(', ')}: ${cortar(ass, 80)}`;
     const acao = criarAcao({
-      tipo: 'enviar_email', resumo, detalhe,
+      tipo: 'enviar_email', resumo, detalhe, aba: ctx.aba,
       executar: () => enviarEmail(ctx.cfg, { para: P, cc: C, assunto: ass, corpo, inReplyTo, references }),
     });
     ctx.emitir('acao', { id: acao.id, tipo: acao.tipo, resumo: acao.resumo, detalhe: acao.detalhe, expira_em: acao.expira_em });
@@ -279,6 +282,7 @@ export const prepararEmail = {
       conteudo: {
         situacao: 'aguardando_confirmacao', acao_id: acao.id,
         mensagem: 'Rascunho pronto e mostrado na tela. AINDA NÃO FOI ENVIADO: só sai se o Júlio confirmar na tela (expira em 5 minutos). Diga para quem vai e do que se trata, e que espera a confirmação dele.',
+        substituiu: acao.substituiu ? `O rascunho anterior ("${cortar(acao.substituiu, 120)}") saiu da tela e não será enviado: só este vale agora.` : undefined,
       },
       resumo: `para ${P[0]}${P.length > 1 ? ` +${P.length - 1}` : ''}`,
     };

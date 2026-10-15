@@ -71,6 +71,10 @@ try {
   // ---- preparar (não envia) e recusar (não envia)
   r = await executarFerramenta(prepararEmail, { para: ['email-invalido'], assunto: 'x', corpo: 'y' }, ctx);
   ok(!r.ok && /inválido/.test(r.texto), 'endereço inválido é recusado');
+  r = await executarFerramenta(prepararEmail, { para: ['cpd@lubе.com.br'], assunto: 'x', corpo: 'y' }, ctx);
+  ok(!r.ok && /inválido/.test(r.texto), 'endereço com letra de outro alfabeto (o "е" cirílico) é recusado');
+  r = await executarFerramenta(prepararEmail, { para: ['outro@exemplo.com.br'], assunto: 'Boleto ‮fdp.exe', corpo: 'y' }, ctx);
+  ok(!r.ok && /invisíveis/.test(r.texto), 'assunto com controle bidi (U+202E) é recusado');
   r = await executarFerramenta(prepararEmail, { para: ['outro@exemplo.com.br'], assunto: 'Será cancelado', corpo: 'Teste.' }, ctx);
   const acaoCancelada = eventos.filter(e => e.ev === 'acao').at(-1)?.d;
   ok(r.ok && acaoCancelada && /aguardando_confirmacao/.test(r.texto), 'preparar_email cria a ação pendente e emite o evento acao');

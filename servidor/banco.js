@@ -12,6 +12,7 @@
      3. a própria transação READ ONLY (o banco recusa qualquer escrita, até de função);
      4. protocolo estendido do Postgres (recusa mais de um comando) e cursor com FETCH de no máximo 201 linhas.
    saude.painel() e o catálogo de tabelas usam consultas fixas, escritas aqui. */
+import fs from 'node:fs';
 import pg from 'pg';
 import { ErroFerramenta, corrida, log } from './util.js';
 
@@ -21,7 +22,11 @@ const SCHEMAS_PROIBIDOS = ['financeiro', 'auth', 'vault', 'storage', 'cron', 'ne
   'graphql_public', 'pgsodium', 'pgsodium_masks', 'pgbouncer'];
 const RX_PROIBIDO = new RegExp(`\\b(${SCHEMAS_PROIBIDOS.join('|')})\\b`, 'i');
 const RX_ESCRITA = /\b(insert|update|delete|merge|truncate|drop|alter|create|grant|revoke|copy|call|do|vacuum|analyze|refresh|lock|execute|prepare|deallocate|listen|notify|unlisten|reindex|cluster|discard|into|reset|checkpoint|security|import|load)\b/i;
-const RX_FUNCAO = /\b(pg_\w+|lo_\w+|dblink\w*|\w*_to_xml\w*|query_to_\w+|set_config|current_setting|to_regclass|regclass|regproc|regprocedure|regnamespace|txid_\w+|inet_\w+)\b/i;
+// funções de sistema e as que executam SQL recebido como texto (ts_stat, ts_rewrite, *_to_xml): nem no texto, nem no plano
+const RX_FUNCAO = /\b(pg_\w+|lo_\w+|dblink\w*|\w*_to_xml\w*|query_to_\w+|ts_stat|ts_rewrite|set_config|current_setting|to_regclass|regclass|regproc|regprocedure|regnamespace|txid_\w+|inet_\w+)\b/i;
+// no plano, um schema proibido aparece qualificando um nome (financeiro.folha), também dentro de um texto constante que o
+// planejador já juntou ('select … from ' || 'finan' || 'ceiro.folha' vira um texto só)
+const RX_PROIBIDO_QUAL = new RegExp(`\\b(${SCHEMAS_PROIBIDOS.filter(x => x !== 'pg_catalog').join('|')})\\s*\\.\\s*["a-z_]`, 'i');
 const MAX_LINHAS = 200;
 const MAX_CELULA = 300;
 
@@ -51,14 +56,19 @@ export function lerSql(sql) {
       semC += ' '; ident += ' ';
       continue;
     }
-    if (c === "'") {                                       // texto; E'..' aceita barra invertida
+    if ((c === "'" || c === '"') && /u&$/i.test(semC.slice(-2))) {
+      // U&'\0066inanceiro' e U&"\0070g_read_file" escondem o nome do filtro de texto: não são aceitos
+      throw new ErroFerramenta('Não use U&\'…\' nem U&"…" (escapes Unicode) na consulta: escreva os nomes e textos por extenso.', 'sql');
+    }
+    if (c === "'") {                                       // texto; E'..' aceitaria barra invertida, que é recusada
       const anterior = semC.slice(-1);
       const comBarra = /[eE]/.test(anterior) && !/[\w$]/.test(semC.slice(-2, -1) || ' ');
       let j = i + 1, txt = "'";
       for (;;) {
         if (j >= n) throw new ErroFerramenta('A consulta tem um texto entre aspas sem fechar.', 'sql');
         const x = s[j];
-        if (comBarra && x === '\\') { txt += x + (s[j + 1] ?? ''); j += 2; continue; }
+        // E'\x66inanceiro' esconde o nome do filtro de texto: barra invertida dentro de E'…' não é aceita
+        if (comBarra && x === '\\') throw new ErroFerramenta("Não use barra invertida dentro de E'…' (escapes) na consulta: escreva o texto por extenso.", 'sql');
         if (x === "'") { if (s[j + 1] === "'") { txt += "''"; j += 2; continue; } txt += "'"; j++; break; }
         txt += x; j++;
       }
@@ -126,6 +136,19 @@ export function conferirPlano(plano) {
   })(plano);
   const fora = [...[...schemas].filter(s => !SCHEMAS_LIBERADOS.includes(s)),
     ...[...funcoes].filter(s => !SCHEMAS_LIBERADOS.includes(s) && s !== 'pg_catalog')];
+  // o plano mostra o nome real (sem escape) de cada função e os textos constantes já juntados: as mesmas travas do texto
+  // valem aqui, em todos os campos menos o "Schema" (conferido acima; funções do pg_catalog são as comuns, como sum)
+  const textos = [];
+  (function coletar(v, chave) {
+    if (Array.isArray(v)) { v.forEach(x => coletar(x, chave)); return; }
+    if (v && typeof v === 'object') { for (const [k, x] of Object.entries(v)) if (k !== 'Schema') coletar(x, k); return; }
+    if (typeof v === 'string') textos.push(v.replace(/\bpg_catalog\s*\.\s*/gi, ''));
+  })(plano, null);
+  const tudo = textos.join('\n');
+  const fn = tudo.match(RX_FUNCAO);
+  if (fn) throw new ErroFerramenta(`A consulta chega na função "${fn[1]}", que não é liberada nas consultas do Jarvis.`, 'sql-funcao');
+  const qual = tudo.match(RX_PROIBIDO_QUAL);
+  if (qual) fora.push(qual[1].toLowerCase());
   if (fora.length) {
     const lista = [...new Set(fora)];
     const msg = lista.includes('financeiro')
@@ -161,12 +184,27 @@ export function criarBanco(cfgBanco) {
   let pool = null;
   let painelCache = null, painelEm = 0, painelLendo = null;
 
+  // TLS: com SUPABASE_DB_CA (caminho do certificado do Supabase, Project Settings › Database › SSL) o certificado do
+  // servidor é conferido. Sem ele, como as ETLs (sslmode=require): cifrado, mas sem conferir (fica registrado no log).
+  function opcoesSsl() {
+    if (cfgBanco.ca) {
+      let ca;
+      try { ca = fs.readFileSync(cfgBanco.ca, 'utf8'); } catch (_) {
+        throw new ErroFerramenta('O certificado do banco (SUPABASE_DB_CA no ENV) não foi encontrado neste computador.', 'sem-banco');
+      }
+      return { ca, rejectUnauthorized: true };
+    }
+    log('banco: certificado do Supabase não conferido (sem SUPABASE_DB_CA no ENV)');
+    return { rejectUnauthorized: false };
+  }
+
   function obterPool() {
     if (!cfgBanco) throw new ErroFerramenta('O banco (DATA WAREHOUSE) não está configurado: faltam as variáveis SUPABASE_DB_ no ENV.', 'sem-banco');
     if (!pool) {
+      const { ca: _caminho, ...conexao } = cfgBanco;
       pool = new pg.Pool({
-        ...cfgBanco,
-        ssl: { rejectUnauthorized: false },   // como as ETLs (sslmode=require): cifrado, sem conferir a CA do Supabase
+        ...conexao,
+        ssl: opcoesSsl(),
         max: 3,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 15000,
@@ -182,7 +220,11 @@ export function criarBanco(cfgBanco) {
 
   /** Abre uma transação só de leitura, roda fn(client) e desfaz tudo no fim. */
   async function emLeitura(fn, { signal, timeoutMs = 15000 } = {}) {
-    const cliente = await corrida(obterPool().connect(), signal);
+    // turno cancelado com a conexão ainda abrindo: quando ela chegar, volta para o pool (senão vazava uma das 3)
+    const pedido = obterPool().connect();
+    let cliente;
+    try { cliente = await corrida(pedido, signal); }
+    catch (e) { pedido.then(c => { try { c.release(); } catch (_) { /* nada */ } }, () => {}); throw e; }
     let estragado = false;
     const aoAbortar = () => { estragado = true; try { cliente.release(new Error('cancelado')); } catch (_) { /* já solto */ } };
     try {

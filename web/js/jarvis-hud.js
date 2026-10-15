@@ -51,7 +51,18 @@ function rgbDe(c, reserva) {
   return reserva ? rgbDe(reserva) : [69, 212, 255];
 }
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a < 0 ? 0 : a > 1 ? 1 : +a.toFixed(3)})`;
+const RGBA = new Map();
+function rgba(c, a) {
+  const al = a < 0 ? 0 : a > 1 ? 1 : Math.round(a * 1000);
+  const k = (((c[0] | 0) << 16) | ((c[1] | 0) << 8) | (c[2] | 0)) * 1001 + (a > 1 ? 1000 : al);
+  let v = RGBA.get(k);
+  if (v === undefined) {
+    if (RGBA.size > 6000) RGBA.clear();
+    v = `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a > 1 ? 1 : al / 1000})`;
+    RGBA.set(k, v);
+  }
+  return v;
+}
 function lerCores() {
   let cs = null;
   try { cs = getComputedStyle(document.documentElement); } catch { cs = null; }
@@ -66,14 +77,19 @@ function novoCanvas(w, h) { const c = document.createElement('canvas'); c.width 
 
 // velocidade e movimento de cada estado (JARVIS.md §7.4); a troca tem rampa de ~400 ms, menos o "interrompido"
 const ESTADOS = {
-  repouso: { vel: 0.5, estica: 0, varre: 0, regua: 0, respira: 0.2, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
-  ouvindo: { vel: 1, estica: 0, varre: 0, regua: 0, respira: 0.5, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
-  pensando: { vel: 2.5, estica: 1, varre: 1, regua: 1, respira: 0.2, verm: 0, cinza: 0, nucleo: 1, pulso: 2 },
-  falando: { vel: 1.2, estica: 0, varre: 0, regua: 0, respira: 0.2, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
+  repouso: { vel: 0.5, estica: 0, varre: 0, regua: 0, respira: 1, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
+  ouvindo: { vel: 1, estica: 0, varre: 0, regua: 0, respira: 1, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
+  pensando: { vel: 2.5, estica: 1, varre: 1, regua: 1, respira: 0.5, verm: 0, cinza: 0, nucleo: 1, pulso: 2 },
+  falando: { vel: 1.2, estica: 0, varre: 0, regua: 0, respira: 0.5, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
   interrompido: { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
   confirmando: { vel: 0.3, estica: 0, varre: 0, regua: 0, respira: 1, verm: 1, cinza: 0, nucleo: 0.3, pulso: 0 },
   'sem-conexao': { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0, verm: 0, cinza: 1, nucleo: 0.4, pulso: 0 }
 };
+const CHAVES_P = ['estica', 'varre', 'regua', 'respira', 'verm', 'cinza', 'nucleo'];
+const V_ABERTO = { veu: 0, fundo: 1, ponto: 0, flash: 0, raias: 0, nucleo: 1, anelN: 1, onda: 1, seg: 1, regua: 1, arcos: 1, trac: 1, ext: 1, extEsc: 1, fundoCamadas: 1, micro: 1, leituras: 1 };
+const V_FECHADO = { veu: 0, fundo: 0, ponto: 0, flash: 0, raias: 0, nucleo: 0, anelN: 0, onda: 0, seg: 0, regua: 0, arcos: 0, trac: 0, ext: 0, extEsc: 1.15, fundoCamadas: 0, micro: 0, leituras: 0 };
+// as camadas que, na saída, nunca passam do quanto já estavam desenhadas (saída no meio da entrada não "pisca")
+const CAMADAS_SAIDA = ['leituras', 'micro', 'fundoCamadas', 'ext', 'trac', 'arcos', 'regua', 'seg', 'onda', 'anelN', 'nucleo', 'fundo'];
 
 /* =============================================================================
    Sons do HUD (Web Audio, gerados em código; JARVIS.md §7.6). Pico ≈ −18 dBFS.
@@ -164,20 +180,30 @@ export function criarHud(opts = {}) {
   /* ---------- medidas ---------- */
   let W = 1, H = 1, dpr = 1, R = 200, hx = 0, hy = 0, celular = false;
   let L = null, lg = null, G1 = null, g1 = null, G2 = null, g2 = null, LS = 0;   // camada dos anéis e as do brilho
-  let cacheRegua = null, cacheHex = null, hexCentros = [], chaveCache = '';
+  let cacheRegua = null, cacheHex = null, cacheReguaC = null, cacheHexC = null, hexCentros = [], chaveCache = '';
   function medir() {
     const r = raiz.getBoundingClientRect();
     W = Math.max(1, r.width || innerWidth); H = Math.max(1, r.height || innerHeight);
-    celular = W < 760;
+    // até 1023 px (tablet, janela estreita, o painel do artifact no claude.ai) o HUD fica em cima e a atividade e os
+    // cartões em faixas embaixo: com os painéis laterais, sobrava pouco para os anéis e as leituras se sobrepunham
+    celular = W < 1024;
     const baixa = !!opts.qualidadeBaixa?.();
     dpr = Math.min(window.devicePixelRatio || 1, baixa ? 1.25 : 1.75);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     // geometria (§7.3): R = 0,30 × min(L, A); abaixo de 600 px, 0,40 × largura; centro a 46% da altura; os anéis (até
     // 0,92R) cabem entre os painéis laterais e entre a barra de cima e o pé
     if (celular) {
-      R = Math.min(W < 600 ? 0.40 * W : 0.30 * Math.min(W, H), (H * 0.52) / 2.1);
-      hx = W / 2; hy = Math.max(64 + 0.98 * R, Math.min(H * 0.3, H - 360 - 0.98 * R));
+      // orçamento vertical: barra de cima, o HUD (até 1,04R acima e 1,02R abaixo do centro), a faixa de atividade
+      // (72 px), a Exibição (no mínimo 150 px no celular, 130 nas telas médias) e o pé (o --jv-pe-alt do CSS + 6)
+      let topo = 76, peAlt = 178;
+      try { const cs = getComputedStyle(raiz); topo = parseFloat(cs.getPropertyValue('--jv-topo')) || topo; peAlt = parseFloat(cs.getPropertyValue('--jv-pe-alt')) || peAlt; } catch { /* reserva */ }
+      const exMin = W < 760 ? 150 : 130, orc = H - topo - (peAlt + 6) - 72 - exMin;
+      R = Math.max(96, Math.min(W < 600 ? 0.40 * W : 0.30 * Math.min(W, H), orc / 2.06));
+      hx = W / 2; hy = topo + 1.04 * R;
+      // tela baixa demais (menos de 100 px para os cartões): as faixas saem, para não ficarem por baixo da legenda
+      raiz.classList.toggle('jv-apertado', H - (peAlt + 6) - (hy + 1.02 * R + 72) < 100);
     } else {
+      raiz.classList.remove('jv-apertado');
       // painéis: Atividade à esquerda e Exibição à direita (as mesmas larguras do CSS, --jv-pe e --jv-pd)
       // o pé (legenda + caixa de texto) ocupa ~236 px: os anéis e as leituras dos cantos ficam acima dele
       const pe = W >= 1280 ? 300 : 250, pd = W >= 1280 ? 340 : 270, livre = W - pe - pd - 4 * 24, pePx = H < 720 ? 196 : 236;
@@ -188,6 +214,9 @@ export function criarHud(opts = {}) {
     raiz.style.setProperty('--jv-cx', `${hx.toFixed(1)}px`);
     raiz.style.setProperty('--jv-cy', `${hy.toFixed(1)}px`);
     raiz.style.setProperty('--jv-r', `${R.toFixed(1)}px`);
+    // leituras dos cantos ficam a 1,9R uma da outra: com R pequeno, só os valores (sem rótulo nem 2ª linha)
+    raiz.classList.toggle('jv-r-pequeno', 1.9 * R < 300);
+    raiz.classList.toggle('jv-r-minimo', 1.9 * R < 220);
     // camada dos anéis: só o quadrado do HUD (até ~1,2R, com o anel de radar e as linhas do horizonte), não a tela
     // inteira; brilho em 1/4 e 1/8
     LS = Math.ceil(2 * 1.2 * R * dpr);
@@ -202,34 +231,41 @@ export function criarHud(opts = {}) {
 
   /* ---------- pré-desenhos (régua, malha de hexágonos, grão) ---------- */
   function montarCaches() {
+    cacheRegua = desenharRegua(C.holo); cacheReguaC = desenharRegua(C.muted);
+    cacheHex = desenharMalha(C.holo, true); cacheHexC = desenharMalha(C.muted, false);
+  }
+  function desenharRegua(cor) {
     // régua de graus (camada 5): 180 marcas a cada 2°, maiores a cada 10° e a cada 30° (com o número)
     const rr = 0.46 * R, tam = Math.ceil(2 * (rr + 0.075 * R) * dpr);
-    cacheRegua = novoCanvas(tam, tam);
-    const q = cacheRegua.getContext('2d');
+    const cvR = novoCanvas(tam, tam);
+    const q = cvR.getContext('2d');
     q.setTransform(dpr, 0, 0, dpr, tam / 2, tam / 2);
     q.lineCap = 'butt';
     for (let i = 0; i < 180; i++) {
       const a = i * 2 * DEG - Math.PI / 2, m30 = i % 15 === 0, m10 = i % 5 === 0;
       const len = m30 ? 0.04 * R : m10 ? 0.024 * R : 0.012 * R;
-      q.strokeStyle = rgba(C.holo, m30 ? 0.85 : m10 ? 0.55 : 0.36);
+      q.strokeStyle = rgba(cor, m30 ? 0.85 : m10 ? 0.55 : 0.36);
       q.lineWidth = m30 ? 1.4 : 1;
       q.beginPath(); q.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); q.lineTo(Math.cos(a) * (rr - len), Math.sin(a) * (rr - len)); q.stroke();
     }
-    q.strokeStyle = rgba(C.holo, 0.22); q.lineWidth = 1; q.beginPath(); q.arc(0, 0, rr + 1.5, 0, TAU); q.stroke();
-    q.fillStyle = rgba(C.holo, 0.72); q.textAlign = 'center'; q.textBaseline = 'middle';
+    q.strokeStyle = rgba(cor, 0.22); q.lineWidth = 1; q.beginPath(); q.arc(0, 0, rr + 1.5, 0, TAU); q.stroke();
+    q.fillStyle = rgba(cor, 0.72); q.textAlign = 'center'; q.textBaseline = 'middle';
     q.font = `600 ${Math.max(8, Math.round(R * 0.034))}px "JetBrains Mono", Consolas, monospace`;
     for (let i = 0; i < 12; i++) {
       const a = i * 30 * DEG - Math.PI / 2, rt = rr + 0.045 * R;
       q.save(); q.translate(Math.cos(a) * rt, Math.sin(a) * rt); q.rotate(a + Math.PI / 2);
       q.fillText(String(i * 30).padStart(3, '0'), 0, 0); q.restore();
     }
+    return cvR;
+  }
+  function desenharMalha(cor, guardarCentros) {
     // malha de hexágonos (camada 11): lado 18 px, recorte circular até 1,15R, mais forte perto da borda dos anéis
     const rh = 1.15 * R, th = Math.ceil(2 * rh * dpr);
-    cacheHex = novoCanvas(th, th);
-    const h = cacheHex.getContext('2d');
+    const cvH = novoCanvas(th, th);
+    const h = cvH.getContext('2d');
     h.setTransform(dpr, 0, 0, dpr, th / 2, th / 2);
     const lado = 18, wq = Math.sqrt(3) * lado, hq = 1.5 * lado;
-    hexCentros = [];
+    if (guardarCentros) hexCentros = [];
     h.lineWidth = 0.75;
     for (let row = -Math.ceil(rh / hq) - 1; row <= Math.ceil(rh / hq) + 1; row++) {
       for (let col = -Math.ceil(rh / wq) - 1; col <= Math.ceil(rh / wq) + 1; col++) {
@@ -237,11 +273,12 @@ export function criarHud(opts = {}) {
         if (d > rh - lado) continue;
         const f = clamp01(1 - Math.abs(d / R - 0.95) / 0.55) * clamp01((rh - d) / (lado * 3));
         if (f < 0.04) continue;
-        h.strokeStyle = rgba(C.holo, 0.035 + 0.11 * f);
+        h.strokeStyle = rgba(cor, 0.035 + 0.11 * f);
         caminhoHex(h, x, y, lado - 1.2); h.stroke();
-        if (d > 0.62 * R) hexCentros.push({ x, y, f });
+        if (guardarCentros && d > 0.62 * R) hexCentros.push({ x, y, f });
       }
     }
+    return cvH;
   }
   function caminhoHex(q, x, y, s) {
     q.beginPath();
@@ -262,8 +299,11 @@ export function criarHud(opts = {}) {
 
   /* ---------- estado ---------- */
   let estadoNome = 'repouso', modeloNome = 'haiku';
-  const P = { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0.2, verm: 0, cinza: 0, nucleo: 1, pulso: 0, sonnet: 0 };
-  const ang = { seg: 0, arcos: 0, colch: 0, esfera: 0, regua: 0, varre: 0, trac: 0, micro: 0, radar: 0, tempo: 0 };
+  // freqResp, pulsoAmp e pulsoF também têm rampa: as fases (ang.resp, ang.pulso, ang.lamina) acumulam, então a troca
+  // de estado muda a velocidade sem saltar a posição (o salto seco fica para o "interrompido")
+  const P = { vel: 0, estica: 0, varre: 0, regua: 0, respira: 1, verm: 0, cinza: 0, nucleo: 1, pulso: 0, sonnet: 0, freqResp: 0.2, pulsoAmp: 0, pulsoF: 2 };
+  const ang = { seg: 0, arcos: 0, colch: 0, esfera: 0, regua: 0, varre: 0, trac: 0, micro: 0, radar: 0, tempo: 0, lamina: 0, resp: 0, pulso: 0 };
+  let transfCena = '', transfLeituras = '';
   let congeladoAte = 0, flashBranco = 0, glitch = 0, ultimo = agora();
   let env = 0, nivelDb = -90, nivelGeral = 0;
   const bandas = new Float32Array(64), bandasAlvo = new Float32Array(64);
@@ -302,7 +342,11 @@ export function criarHud(opts = {}) {
     const alvo = ESTADOS[estadoNome] || ESTADOS.repouso;
     const congelado = now < congeladoAte;
     const taxa = 7.5;
-    for (const k of ['estica', 'varre', 'regua', 'respira', 'verm', 'cinza', 'nucleo']) P[k] = amortecer(P[k], alvo[k], taxa, dt);
+    for (const k of CHAVES_P) P[k] = amortecer(P[k], alvo[k], taxa, dt);
+    P.freqResp = amortecer(P.freqResp, estadoNome === 'ouvindo' ? 0.5 : estadoNome === 'confirmando' ? 1 : 0.2, taxa, dt);
+    const pens = estadoNome === 'pensando', son = modeloNome === 'sonnet';
+    P.pulsoAmp = amortecer(P.pulsoAmp, pens ? (son ? 0.05 : 0.025) : 0, taxa, dt);
+    P.pulsoF = amortecer(P.pulsoF, son ? 1 : 2, taxa, dt);
     const velAlvo = congelado ? 0 : alvo.vel * (estadoNome === 'pensando' && modeloNome === 'sonnet' ? 0.64 : 1);
     P.vel = congelado ? 0 : amortecer(P.vel, velAlvo, estadoNome === 'interrompido' ? 12 : taxa, dt);
     P.pulso = alvo.pulso;
@@ -312,7 +356,10 @@ export function criarHud(opts = {}) {
     ang.seg += 12 * DEG * v * dt;          // camada 4: +12°/s (horário)
     ang.arcos -= 20 * DEG * v * dt;        // camada 6: −20°/s (anti-horário)
     ang.colch += 6 * DEG * v * dt;         // camada 8: +6°/s
-    ang.esfera += 8 * DEG * (red ? 0 : Math.max(0.35, P.vel)) * dt;   // camada 10: 8°/s
+    ang.esfera += 8 * DEG * v * dt;          // camada 10: 8°/s (para de vez no "sem conexão" e no "interrompido")
+    ang.lamina += (0.18 + 0.03 * P.estica) * v * dt;   // lâminas do núcleo: 10°/s × velocidade, no máximo ~30°/s
+    ang.resp += TAU * P.freqResp * dt;
+    ang.pulso += TAU * P.pulsoF * dt;
     ang.regua -= 4 * DEG * P.regua * (red ? 0 : 1) * dt;              // pensando: −4°/s
     ang.varre += 90 * DEG * (red ? 0 : 1) * dt;                        // varredura: 90°/s
     ang.trac += 30 * v * dt;                                           // camada 7: a fase anda +30 px/s
@@ -326,10 +373,14 @@ export function criarHud(opts = {}) {
     const ax = red ? 0 : mola.ax, ay = red ? 0 : mola.ay;
     mola.vx += (k * (ax - mola.x) - c * mola.vx) * dt; mola.x += mola.vx * dt;
     mola.vy += (k * (ay - mola.y) - c * mola.vy) * dt; mola.y += mola.vy * dt;
-    if (cenaEl) cenaEl.style.transform = red ? '' : `perspective(1400px) rotateX(${(-mola.y * 4).toFixed(2)}deg) rotateY(${(mola.x * 4).toFixed(2)}deg)`;
-    if (leiturasEl) leiturasEl.style.transform = red ? '' : `translate(${(mola.x * 14).toFixed(1)}px, ${(mola.y * 14).toFixed(1)}px)`;
-    // hexágonos acesos ao acaso (3 a 5 na tela)
-    if (!red && V.fundoCamadas > 0.5 && now > proxHex) { acenderHex(now); proxHex = now + 500 + Math.random() * 900; }
+    // o transform só é escrito quando o valor arredondado muda (sem string nova por quadro com o mouse parado)
+    const rx = red ? 0 : Math.round(-mola.y * 400), ry = red ? 0 : Math.round(mola.x * 400);
+    const lx = red ? 0 : Math.round(mola.x * 140), ly = red ? 0 : Math.round(mola.y * 140);
+    const kc = red ? '' : `${rx}|${ry}`, kl = red ? '' : `${lx}|${ly}`;
+    if (cenaEl && kc !== transfCena) { transfCena = kc; cenaEl.style.transform = red ? '' : `perspective(1400px) rotateX(${rx / 100}deg) rotateY(${ry / 100}deg)`; }
+    if (leiturasEl && kl !== transfLeituras) { transfLeituras = kl; leiturasEl.style.transform = red ? '' : `translate(${lx / 10}px, ${ly / 10}px)`; }
+    // hexágonos acesos ao acaso (3 a 5 na tela); no "sem conexão", nenhum
+    if (!red && V.fundoCamadas > 0.5 && now > proxHex && estadoNome !== 'sem-conexao') { acenderHex(now); proxHex = now + 500 + Math.random() * 900; }
     for (let i = hexAcesos.length - 1; i >= 0; i--) if (now - hexAcesos[i].t0 > 1200) hexAcesos.splice(i, 1);
     flashBranco = Math.max(0, flashBranco - dt / 0.08);
     desenhar(now, red);
@@ -340,85 +391,101 @@ export function criarHud(opts = {}) {
   function linhaDoTempo(now, red) {
     // teste local: window.__jvT = 480 congela a transição nesse instante (ms), para conferir quadro a quadro
     const t = LOCAL && typeof window.__jvT === 'number' ? window.__jvT : (now - T.t0) / lento(), rb = robo();
-    if (T.modo === 'entrando') {
-      if (red) {
-        const f = faixa(t, 0, 200);
-        Object.assign(V, { veu: 0, fundo: f, ponto: 0, flash: 0, raias: 0, nucleo: f, anelN: f, onda: f, seg: f, regua: f, arcos: f, trac: f, ext: f, extEsc: 1, fundoCamadas: f, micro: f, leituras: f });
-        V.cx = hx; V.cy = hy;
-        if (t >= 120) fase('paineis');
-        if (t >= 200) { fase('pronto'); concluir('aberto'); }
-        return;
-      }
-      // 0–350: a câmera avança até o visor; o véu sobe de 0 a 0,4
-      const m = eic(faixa(t, 0, 350));
-      V.veu = 0.4 * eoq(faixa(t, 0, 350));
-      // 250–500: os olhos se fecham num ponto de luz
-      const p = eiq(faixa(t, 250, 500));
-      if (rb) { try { rb.mergulho(m); rb.olhosPonto(p); } catch { /* sem robô */ } }
-      // origem = os olhos do robô (seguindo a cabeça até o clarão)
-      if (t < 470 && rb) { const o = pontoVisor(rb); if (o) T.origem = o; }
-      const o = T.origem || { x: hx, y: hy };
-      V.ponto = faixa(t, 380, 470) * (1 - faixa(t, 470, 560));
-      // 450–600: clarão; o fundo do HUD fecha atrás dele (o #palco some)
-      V.flash = t >= 450 && t <= 640 ? faixa(t, 450, 640) : 0;
-      V.fundo = eoq(faixa(t, 470, 590));
-      // 550: o núcleo nasce (easeOutBack); 550–900: viaja dos olhos até o centro do HUD; a onda de choque sai dele
-      V.nucleo = t < 550 ? 0 : eob(faixa(t, 550, 900), 1.4);
-      V.raias = t < 540 ? 0 : faixa(t, 540, 880);
-      const cm = eoc(faixa(t, 550, 920));
-      V.cx = lerp(o.x, hx, cm); V.cy = lerp(o.y, hy, cm);
-      // 600–1000: anéis de dentro para fora, um a cada 70 ms
-      V.anelN = eoc(faixa(t, 600, 860));
-      V.onda = eoc(faixa(t, 670, 930));
-      V.seg = faixa(t, 740, 740 + 24 * 12);
-      V.regua = eoc(faixa(t, 810, 1110));
-      V.arcos = eoc(faixa(t, 880, 1180));
-      V.trac = eoc(faixa(t, 950, 1210));
-      V.ext = eoc(faixa(t, 1020, 1320)); V.extEsc = lerp(1.15, 1, V.ext);
-      // 1050–1350: esfera, hexágonos e grão; leituras digitadas; painéis
-      V.fundoCamadas = eoc(faixa(t, 1050, 1350));
-      V.micro = eoc(faixa(t, 1120, 1400));
-      V.leituras = faixa(t, 1050, 1300);
-      if (t >= 1050) fase('paineis');
-      if (t >= 1300) fase('pronto');
-      if (t >= 1400) concluir('aberto');
-    } else if (T.modo === 'saindo') {
-      if (red) {
-        const f = 1 - faixa(t, 0, 200);
-        Object.assign(V, { veu: 0, fundo: f, ponto: 0, flash: 0, raias: 0, nucleo: f, anelN: f, onda: f, seg: f, regua: f, arcos: f, trac: f, ext: f, fundoCamadas: f, micro: f, leituras: f });
-        if (rb) { try { rb.mergulho(0); rb.olhosPonto(0); } catch { /* nada */ } }
-        if (t >= 200) concluir('fechado');
-        return;
-      }
-      // 0–200: leituras somem; 200–700: anéis recolhem de fora para dentro (60 ms de defasagem)
-      V.leituras = 1 - faixa(t, 0, 200);
-      V.micro = 1 - eoc(faixa(t, 0, 220));
-      V.fundoCamadas = 1 - eoc(faixa(t, 60, 420));
-      const ordem = ['ext', 'trac', 'arcos', 'regua', 'seg', 'onda', 'anelN'];
-      ordem.forEach((nome, i) => { const f = eoc(faixa(t, 200 + i * 60, 200 + i * 60 + 260)); V.colapso[i] = 1 - f; V[nome] = 1 - f; });
-      V.extEsc = 1;
-      // 700–850: o núcleo vira o ponto e volta para os olhos; 600–760: o fundo abre e o robô aparece
-      const dest = rb ? pontoVisor(rb) : null;
-      if (dest) T.origem = dest;
-      const o = T.origem || { x: hx, y: hy };
-      const cm = eic(faixa(t, 620, 850));
-      V.cx = lerp(hx, o.x, cm); V.cy = lerp(hy, o.y, cm);
-      V.nucleo = 1 - eic(faixa(t, 640, 850));
-      V.ponto = faixa(t, 700, 800) * (1 - faixa(t, 840, 900));
-      V.fundo = 1 - eoq(faixa(t, 600, 780));
-      V.flash = 0; V.raias = 0;
-      // 800–1000: o ponto se abre nos olhos (neutro, olhando para o Júlio) e a câmera recua; o véu desce
-      V.veu = 0.4 * (1 - faixa(t, 800, 1000));
-      if (rb) { try { rb.olhosPonto(1 - eoc(faixa(t, 820, 1000))); rb.mergulho(1 - eio(faixa(t, 800, 1000))); } catch { /* nada */ } }
-      if (t >= 1000) concluir('fechado');
-    } else if (T.modo === 'aberto') {
-      Object.assign(V, { veu: 0, fundo: 1, ponto: 0, flash: 0, raias: 0, nucleo: 1, anelN: 1, onda: 1, seg: 1, regua: 1, arcos: 1, trac: 1, ext: 1, extEsc: 1, fundoCamadas: 1, micro: 1, leituras: 1 });
-      V.cx = hx; V.cy = hy;
-    }
+    if (T.modo === 'entrando') quadroEntrada(t, red, rb, true);
+    else if (T.modo === 'revertendo') {
+      // saída no meio da entrada: a entrada toca ao contrário, do ponto em que estava (1,4× mais rápida); o núcleo volta
+      // para os olhos do robô sem saltar, e nada aparece pronto de repente
+      const tr = Math.max(0, T.tRev - t * 1.4);
+      quadroEntrada(tr, red, rb, false);
+      if (tr <= 0) concluir('fechado');
+    } else if (T.modo === 'saindo') quadroSaida(t, red, rb);
+    else if (T.modo === 'aberto') { Object.assign(V, V_ABERTO); V.cx = hx; V.cy = hy; }
     if (veuEl) veuEl.style.opacity = V.veu.toFixed(3);
     if (fundoEl) fundoEl.style.opacity = V.fundo.toFixed(3);
     if (graoEl) graoEl.style.opacity = (V.fundoCamadas * V.fundo).toFixed(3);
     if (leiturasEl) leiturasEl.style.opacity = V.leituras.toFixed(3);
+  }
+  // a entrada no instante t (ms). comFases = dispara 'paineis' e 'pronto' e conclui (não na volta ao contrário)
+  function quadroEntrada(t, red, rb, comFases) {
+    if (red) {
+      const f = faixa(t, 0, 200);
+      Object.assign(V, { veu: 0, fundo: f, ponto: 0, flash: 0, raias: 0, nucleo: f, anelN: f, onda: f, seg: f, regua: f, arcos: f, trac: f, ext: f, extEsc: 1, fundoCamadas: f, micro: f, leituras: f });
+      V.cx = hx; V.cy = hy;
+      if (comFases) {
+        if (t >= 120) fase('paineis');
+        if (t >= 200) { fase('pronto'); concluir('aberto'); }
+      }
+      return;
+    }
+    // 0–350: a câmera avança até o visor; o véu sobe de 0 a 0,4
+    const m = eic(faixa(t, 0, 350));
+    V.veu = 0.4 * eoq(faixa(t, 0, 350));
+    // 250–500: os olhos se fecham num ponto de luz
+    const p = eiq(faixa(t, 250, 500));
+    if (rb) { try { rb.mergulho(m); rb.olhosPonto(p); } catch { /* sem robô */ } }
+    // origem = os olhos do robô (seguindo a cabeça até o clarão)
+    if (t < 470 && rb) { const o = pontoVisor(rb); if (o) T.origem = o; }
+    const o = T.origem || { x: hx, y: hy };
+    V.ponto = faixa(t, 380, 470) * (1 - faixa(t, 470, 560));
+    // 450–600: clarão; o fundo do HUD fecha atrás dele (o #palco some)
+    V.flash = t >= 450 && t <= 640 ? faixa(t, 450, 640) : 0;
+    V.fundo = eoq(faixa(t, 470, 590));
+    // 550: o núcleo nasce (easeOutBack); 550–900: viaja dos olhos até o centro do HUD; a onda de choque sai dele
+    V.nucleo = t < 550 ? 0 : eob(faixa(t, 550, 900), 1.4);
+    V.raias = t < 540 ? 0 : faixa(t, 540, 880);
+    const cm = eoc(faixa(t, 550, 920));
+    V.cx = lerp(o.x, hx, cm); V.cy = lerp(o.y, hy, cm);
+    // 600–1000: anéis de dentro para fora, um a cada 70 ms
+    V.anelN = eoc(faixa(t, 600, 860));
+    V.onda = eoc(faixa(t, 670, 930));
+    V.seg = faixa(t, 740, 740 + 24 * 12);
+    V.regua = eoc(faixa(t, 810, 1110));
+    V.arcos = eoc(faixa(t, 880, 1180));
+    V.trac = eoc(faixa(t, 950, 1210));
+    V.ext = eoc(faixa(t, 1020, 1320)); V.extEsc = lerp(1.15, 1, V.ext);
+    // 1050–1350: esfera, hexágonos e grão; leituras digitadas; painéis
+    V.fundoCamadas = eoc(faixa(t, 1050, 1350));
+    V.micro = eoc(faixa(t, 1120, 1400));
+    V.leituras = faixa(t, 1050, 1300);
+    if (!comFases) return;
+    if (t >= 1050) fase('paineis');
+    if (t >= 1300) fase('pronto');
+    if (t >= 1400) concluir('aberto');
+  }
+  // na saída, nenhuma camada passa do quanto estava desenhada quando a saída começou
+  function limitarSaida() { if (T.ini) for (const k of CAMADAS_SAIDA) if (V[k] > T.ini[k]) V[k] = T.ini[k]; }
+  function quadroSaida(t, red, rb) {
+    if (red) {
+      const f = 1 - faixa(t, 0, 200);
+      Object.assign(V, { veu: 0, fundo: f, ponto: 0, flash: 0, raias: 0, nucleo: f, anelN: f, onda: f, seg: f, regua: f, arcos: f, trac: f, ext: f, fundoCamadas: f, micro: f, leituras: f });
+      limitarSaida();
+      if (rb) { try { rb.mergulho(0); rb.olhosPonto(0); } catch { /* nada */ } }
+      if (t >= 200) concluir('fechado');
+      return;
+    }
+    // 0–200: leituras somem; 200–700: anéis recolhem de fora para dentro (60 ms de defasagem)
+    V.leituras = 1 - faixa(t, 0, 200);
+    V.micro = 1 - eoc(faixa(t, 0, 220));
+    V.fundoCamadas = 1 - eoc(faixa(t, 60, 420));
+    const ordem = ['ext', 'trac', 'arcos', 'regua', 'seg', 'onda', 'anelN'];
+    ordem.forEach((nome, i) => { const f = eoc(faixa(t, 200 + i * 60, 200 + i * 60 + 260)); V.colapso[i] = 1 - f; V[nome] = 1 - f; });
+    V.extEsc = 1;
+    // 700–850: o núcleo vira o ponto e volta para os olhos; 600–760: o fundo abre e o robô aparece
+    const dest = rb ? pontoVisor(rb) : null;
+    if (dest) T.origem = dest;
+    const o = T.origem || { x: hx, y: hy };
+    const cm = eic(faixa(t, 620, 850));
+    const x0 = T.ini ? T.ini.cx : hx, y0 = T.ini ? T.ini.cy : hy;
+    V.cx = lerp(x0, o.x, cm); V.cy = lerp(y0, o.y, cm);
+    V.nucleo = 1 - eic(faixa(t, 640, 850));
+    V.ponto = faixa(t, 700, 800) * (1 - faixa(t, 840, 900));
+    V.fundo = 1 - eoq(faixa(t, 600, 780));
+    V.flash = 0; V.raias = 0;
+    limitarSaida();
+    // 800–1000: o ponto se abre nos olhos (neutro, olhando para o Júlio) e a câmera recua; o véu desce
+    V.veu = 0.4 * (1 - faixa(t, 800, 1000));
+    if (rb) { try { rb.olhosPonto(1 - eoc(faixa(t, 820, 1000))); rb.mergulho(1 - eio(faixa(t, 800, 1000))); } catch { /* nada */ } }
+    if (t >= 1000) concluir('fechado');
   }
   function pontoVisor(rb) {
     try {
@@ -458,9 +525,9 @@ export function criarHud(opts = {}) {
     if (V.fundoCamadas > 0.01) {
       const bx = cx + px * 4, by = cy + py * 4;
       if (cacheHex) {
-        g.globalAlpha = V.fundoCamadas * (1 - 0.5 * P.cinza);
-        const s = cacheHex.width / dpr;
-        g.drawImage(cacheHex, bx - s / 2, by - s / 2, s, s);
+        const aHex = V.fundoCamadas * (1 - 0.5 * P.cinza), s = cacheHex.width / dpr;
+        if (P.cinza < 0.999) { g.globalAlpha = aHex * (1 - P.cinza); g.drawImage(cacheHex, bx - s / 2, by - s / 2, s, s); }
+        if (P.cinza > 0.001 && cacheHexC) { g.globalAlpha = aHex * P.cinza; g.drawImage(cacheHexC, bx - s / 2, by - s / 2, s, s); }
         g.globalAlpha = 1;
         desenharHexAcesos(now, bx, by, cl);
       }
@@ -469,7 +536,8 @@ export function criarHud(opts = {}) {
     // halo difuso atrás do núcleo (--azul) e o "disco" do holograma: volume sutil por trás dos anéis
     if (V.nucleo > 0.01) {
       const hr = 0.62 * R, gr = g.createRadialGradient(cx, cy, 0, cx, cy, hr);
-      gr.addColorStop(0, rgba(C.azul, 0.5 * V.nucleo * P.nucleo)); gr.addColorStop(0.55, rgba(C.azul, 0.14 * V.nucleo)); gr.addColorStop(1, rgba(C.azul, 0));
+      const kh = 1 - 0.7 * P.cinza;   // sem conexão: o halo azul quase some
+      gr.addColorStop(0, rgba(C.azul, 0.5 * V.nucleo * P.nucleo * kh)); gr.addColorStop(0.55, rgba(C.azul, 0.14 * V.nucleo * kh)); gr.addColorStop(1, rgba(C.azul, 0));
       g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, hr, 0, TAU); g.fill();
     }
     if (V.ext > 0.01) {
@@ -596,7 +664,9 @@ export function criarHud(opts = {}) {
       q.globalAlpha = T.modo === 'saindo' ? V.regua : 1;
       if (T.modo === 'entrando' && V.regua < 1) { q.beginPath(); q.moveTo(0, 0); q.arc(0, 0, s, -Math.PI / 2, -Math.PI / 2 + TAU * V.regua); q.closePath(); q.clip(); }
       q.rotate(ang.regua);
-      q.drawImage(cacheRegua, -s * e / 2, -s * e / 2, s * e, s * e);
+      const g0 = q.globalAlpha;
+      if (P.cinza < 0.999) { q.globalAlpha = g0 * (1 - P.cinza); q.drawImage(cacheRegua, -s * e / 2, -s * e / 2, s * e, s * e); }
+      if (P.cinza > 0.001 && cacheReguaC) { q.globalAlpha = g0 * P.cinza; q.drawImage(cacheReguaC, -s * e / 2, -s * e / 2, s * e, s * e); }
       q.restore();
     }
     // 6 — arcos de progresso (0,54R): 4 arcos de 20°, 35°, 50°, 70°; −20°/s; pensando: esticam e encolhem (20° ↔ 110°, 1,2 s)
@@ -604,10 +674,12 @@ export function criarHud(opts = {}) {
       const r = 0.54 * R * esc(2), ARC = [20, 35, 50, 70], INI = [0, 82, 168, 250];
       q.strokeStyle = rgba(cl, 0.12 * V.arcos); q.lineWidth = 1;
       q.beginPath(); q.arc(0, 0, r, 0, TAU); q.stroke();
-      q.strokeStyle = rgba(ca, 0.7 * (T.modo === 'saindo' ? V.arcos : 1)); q.lineWidth = 5;
+      // movimento reduzido: os arcos não esticam; o "pensando" aparece só no brilho (0,5 ↔ 0,9)
+      const aArc = red ? lerp(0.7, 0.5 + 0.4 * (0.5 + 0.5 * Math.sin((t / 1.2) * TAU)), P.estica) : 0.7;
+      q.strokeStyle = rgba(ca, aArc * (T.modo === 'saindo' ? V.arcos : 1)); q.lineWidth = 5;
       for (let i = 0; i < 4; i++) {
-        const osc = 0.5 + 0.5 * Math.sin((t / 1.2) * TAU + i * 1.7);
-        const len = lerp(ARC[i], lerp(20, 110, osc), P.estica) * DEG * V.arcos;
+        const osc = red ? 0.5 : 0.5 + 0.5 * Math.sin((t / 1.2) * TAU + i * 1.7);
+        const len = lerp(ARC[i], lerp(20, 110, osc), red ? 0 : P.estica) * DEG * V.arcos;
         const a0 = ang.arcos + INI[i] * DEG - Math.PI / 2;
         q.beginPath(); q.arc(0, 0, r, a0, a0 + len); q.stroke();
         // ponta de leitura: um tique fino depois de cada arco
@@ -628,8 +700,7 @@ export function criarHud(opts = {}) {
     }
     // 8 — anel externo (0,74R): 1 px a 0,3 + 3 colchetes de 8° a cada 120°; respira (1,00–1,02)
     if (V.ext > 0.001) {
-      const freq = estadoNome === 'ouvindo' ? 0.5 : estadoNome === 'confirmando' ? 1 : 0.2;
-      const resp = red ? 1 : 1 + 0.01 * (1 + Math.sin(t * TAU * freq)) * Math.max(0.35, P.respira);
+      const resp = red ? 1 : 1 + 0.01 * (1 + Math.sin(ang.resp)) * P.respira;   // a frequência muda com rampa (ang.resp acumula)
       const r = 0.74 * R * resp * V.extEsc * esc(0), al = T.modo === 'saindo' ? V.ext : V.ext;
       q.strokeStyle = rgba(ca, 0.3 * al + 0.25 * P.verm * (0.5 + 0.5 * Math.sin(t * TAU))); q.lineWidth = 1;
       q.beginPath(); q.arc(0, 0, r, 0, TAU); q.stroke();
@@ -668,7 +739,7 @@ export function criarHud(opts = {}) {
     for (const base of [0, Math.PI]) { const a0 = ang.radar + base + 20 * DEG; q.beginPath(); q.arc(0, 0, r - 0.018 * R, a0, a0 + 100 * DEG); q.stroke(); }
     // um ponto de luz correndo no anel
     const ao = -ang.radar * 2.5;
-    q.fillStyle = rgba(C.ink, 0.9 * al); q.beginPath(); q.arc(Math.cos(ao) * r, Math.sin(ao) * r, 2.2, 0, TAU); q.fill();
+    q.fillStyle = rgba(P.cinza > 0.001 ? mix(C.ink, C.muted, P.cinza) : C.ink, 0.9 * al); q.beginPath(); q.arc(Math.cos(ao) * r, Math.sin(ao) * r, 2.2, 0, TAU); q.fill();
     // horizonte: linhas curtas à esquerda e à direita, com 4 marcas cada
     q.strokeStyle = rgba(cl, 0.42 * al); q.lineWidth = 1;
     q.beginPath();
@@ -691,7 +762,7 @@ export function criarHud(opts = {}) {
         // 64 bandas espelhadas em volta (a de baixo em cima, como no filme)
         const k = i < 64 ? i : 127 - i;
         d = bandas[k] * (0.85 + 0.15 * Math.sin(th * 7 + t * 4));
-      } else if (estadoNome === 'falando') {
+      } else if (estadoNome === 'falando' || (estadoNome === 'confirmando' && env > 0.01)) {
         d = env * (0.55 + 0.45 * Math.sin(th * 5 + t * 3.1) * Math.sin(th * 3 - t * 2.3)) + 0.04 * Math.sin(th * 9 + t * 6);
       } else if (estadoNome === 'pensando') {
         d = 0.14 * (0.5 + 0.5 * Math.sin(th * 4 + t * 1.6)) * (0.6 + 0.4 * Math.sin(th * 2 - t));
@@ -739,12 +810,13 @@ export function criarHud(opts = {}) {
   // raias da onda de choque (ângulos e velocidades fixos, sorteio determinístico)
   const RAIAS = (() => { let s = 7; const r = () => ((s = (s * 16807) % 2147483647) / 2147483647); return Array.from({ length: 34 }, (_, i) => ({ a: (i / 34) * TAU + r() * 0.16, v: 0.65 + r() * 0.55, forte: r() < 0.3 })); })();
   let cenaEm = -1e9, cenaCache = {};   // o que o cérebro tem agora (contagens e saúde), lido no máximo 1 vez por segundo
+  let rotulosMicro = ['MEMÓRIAS', 'ROTINAS', 'APLICAÇÕES', 'CONEXÕES'], fonteMicro = '', fonteMicroTam = 0;
 
   function desenharMicro(q, cl, red) {
     const al = V.micro * (1 - 0.4 * P.cinza);
     // equalizador fino: 90 barras radiais; reage ao microfone (ouvindo) e à voz (falando)
     const re = 0.82 * R, n = 90, t = ang.tempo;
-    const nivel = estadoNome === 'ouvindo' && micVivo ? nivelGeral : estadoNome === 'falando' ? env * 0.8 : estadoNome === 'pensando' ? 0.25 : 0.06;
+    const nivel = (estadoNome === 'ouvindo' && micVivo ? nivelGeral : estadoNome === 'falando' || estadoNome === 'confirmando' ? env * 0.8 : estadoNome === 'pensando' ? 0.25 : 0.06) * (1 - P.cinza);
     q.strokeStyle = rgba(cl, 0.32 * al); q.lineWidth = 1.2;
     q.beginPath();
     for (let i = 0; i < n; i++) {
@@ -759,20 +831,29 @@ export function criarHud(opts = {}) {
     q.strokeStyle = rgba(cl, 0.14 * al); q.lineWidth = 1;
     q.beginPath(); q.arc(0, 0, rm, 0, TAU); q.stroke();
     const t0 = agora();
-    if (t0 - cenaEm > 1000) { cenaEm = t0; try { cenaCache = cena() || {}; } catch { cenaCache = {}; } }
-    const c = cenaCache;
-    const rotulos = [c.memorias != null ? `MEMÓRIAS ${c.memorias}` : 'MEMÓRIAS', c.rotinas != null ? `ROTINAS ${c.rotinas}` : 'ROTINAS',
-      c.apps != null ? `APLICAÇÕES ${c.apps}` : 'APLICAÇÕES', c.saude ? `SAÚDE ${c.saude}` : `CONEXÕES ${c.conexoes ?? ''}`.trim()];
+    if (t0 - cenaEm > 1000) {
+      cenaEm = t0;
+      try { cenaCache = cena() || {}; } catch { cenaCache = {}; }
+      const c = cenaCache;
+      rotulosMicro = [c.memorias != null ? `MEMÓRIAS ${c.memorias}` : 'MEMÓRIAS', c.rotinas != null ? `ROTINAS ${c.rotinas}` : 'ROTINAS',
+        c.apps != null ? `APLICAÇÕES ${c.apps}` : 'APLICAÇÕES', c.saude ? `SAÚDE ${c.saude}` : `CONEXÕES ${c.conexoes ?? ''}`.trim()].map((x) => x.toUpperCase());
+    }
+    // com R pequeno (celular apertado) as letras não cabem no anel: ele fica só com o traço
+    if (R < 140) return;
+    const fs = Math.max(8, Math.round(R * 0.03));
+    if (fs !== fonteMicroTam) { fonteMicroTam = fs; fonteMicro = `600 ${fs}px "JetBrains Mono", Consolas, monospace`; }
     q.fillStyle = rgba(cl, 0.62 * al);
-    q.font = `600 ${Math.max(8, Math.round(R * 0.03))}px "JetBrains Mono", Consolas, monospace`;
+    q.font = fonteMicro;
     q.textAlign = 'center'; q.textBaseline = 'middle';
+    // ângulo por letra pelo tamanho real da fonte (a mono avança ~0,6 em; com folga): com o piso de 8 px, as letras
+    // se encavalavam em R pequeno
+    const passo = (fs * 0.66) / rm;
     for (let i = 0; i < 4; i++) {
       const a = (45 + i * 90) * DEG - Math.PI / 2;
-      const txt = rotulos[i].toUpperCase();
+      const txt = rotulosMicro[i];
       // texto seguindo a curva (letra por letra), legível nos dois lados
       const baixo = Math.sin(a) > 0.2;
       q.save();
-      const passo = (R * 0.03 * 0.78) / rm;   // ângulo por letra
       let a0 = a - (txt.length - 1) * passo / 2 * (baixo ? -1 : 1);
       for (const ch of txt) {
         q.save(); q.translate(Math.cos(a0) * rm, Math.sin(a0) * rm); q.rotate(a0 + (baixo ? -Math.PI / 2 : Math.PI / 2)); q.fillText(ch, 0, 0); q.restore();
@@ -838,26 +919,29 @@ export function criarHud(opts = {}) {
   function desenharNucleo(cx, cy, now, red) {
     if (V.nucleo <= 0.001) return;
     const t = ang.tempo;
-    let esc = red ? 1 : 1 + 0.03 * Math.sin(t * TAU * 0.25);   // respira 0,97–1,03 a 0,25 Hz
-    if (!red && estadoNome === 'pensando') esc *= 1 + (modeloNome === 'sonnet' ? 0.05 : 0.025) * Math.sin(t * TAU * (modeloNome === 'sonnet' ? 1 : 2));
-    if (!red && estadoNome === 'falando') esc *= 1 + 0.08 * env;
+    let esc = red ? 1 : 1 + 0.03 * (1 - P.cinza) * Math.sin(t * TAU * 0.25);   // respira 0,97–1,03 a 0,25 Hz (parado sem conexão)
+    if (!red && P.pulsoAmp > 0.0005) esc *= 1 + P.pulsoAmp * Math.sin(ang.pulso);   // pensando: pulso com rampa, sem salto
+    if (!red && (estadoNome === 'falando' || estadoNome === 'confirmando')) esc *= 1 + 0.08 * env;
     esc *= V.nucleo;
     const r = 0.16 * R * esc, brilho = P.nucleo * (1 - 0.35 * P.cinza);
-    const tint = P.verm > 0.01 ? mix(C.holo, C.vermelho, 0.4 * P.verm) : C.holo;
+    let tint = P.verm > 0.01 ? mix(C.holo, C.vermelho, 0.4 * P.verm) : C.holo;
+    if (P.cinza > 0.001) tint = mix(tint, C.muted, P.cinza);
+    const ink = P.cinza > 0.001 ? mix(C.ink, C.muted, 0.7 * P.cinza) : C.ink;
+    const azul = P.cinza > 0.001 ? mix(C.azul, C.muted, P.cinza) : C.azul;
     g.save();
     g.globalCompositeOperation = 'lighter';
     // núcleo como um anel de luz: miolo azul profundo (a logo aparece), aro branco-ciano quente e o brilho para fora
     const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r * 1.55);
-    gr.addColorStop(0, rgba(C.azul, 0.55 * brilho));
+    gr.addColorStop(0, rgba(azul, 0.55 * brilho));
     gr.addColorStop(0.4, rgba(tint, 0.32 * brilho));
-    gr.addColorStop(0.58, rgba(C.ink, 0.95 * brilho));
+    gr.addColorStop(0.58, rgba(ink, 0.95 * brilho));
     gr.addColorStop(0.66, rgba(tint, 0.85 * brilho));
     gr.addColorStop(0.8, rgba(tint, 0.22 * brilho));
     gr.addColorStop(1, rgba(tint, 0));
     g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r * 1.55, 0, TAU); g.fill();
     // 12 lâminas finas girando dentro do aro (o "motor" do núcleo); param no movimento reduzido
-    g.strokeStyle = rgba(C.ink, 0.42 * brilho); g.lineWidth = 1.4;
-    const giro = red ? 0 : t * (estadoNome === 'pensando' ? 2.6 : 0.7);
+    g.strokeStyle = rgba(ink, 0.42 * brilho); g.lineWidth = 1.4;
+    const giro = red ? 0 : ang.lamina;   // acumulada: a troca de estado muda a velocidade sem saltar a posição
     g.beginPath();
     for (let i = 0; i < 12; i++) {
       const a = giro + (i / 12) * TAU;
@@ -869,10 +953,10 @@ export function criarHud(opts = {}) {
     if (!red) {
       const l = r * 3.2;
       const lx = g.createLinearGradient(cx - l, 0, cx + l, 0);
-      lx.addColorStop(0, rgba(tint, 0)); lx.addColorStop(0.5, rgba(C.ink, 0.32 * brilho)); lx.addColorStop(1, rgba(tint, 0));
+      lx.addColorStop(0, rgba(tint, 0)); lx.addColorStop(0.5, rgba(ink, 0.32 * brilho)); lx.addColorStop(1, rgba(tint, 0));
       g.fillStyle = lx; g.fillRect(cx - l, cy - 0.75, l * 2, 1.5);
       const ly = g.createLinearGradient(0, cy - l * 0.5, 0, cy + l * 0.5);
-      ly.addColorStop(0, rgba(tint, 0)); ly.addColorStop(0.5, rgba(C.ink, 0.2 * brilho)); ly.addColorStop(1, rgba(tint, 0));
+      ly.addColorStop(0, rgba(tint, 0)); ly.addColorStop(0.5, rgba(ink, 0.2 * brilho)); ly.addColorStop(1, rgba(tint, 0));
       g.fillStyle = ly; g.fillRect(cx - 0.6, cy - l * 0.5, 1.2, l);
     }
     g.restore();
@@ -881,7 +965,7 @@ export function criarHud(opts = {}) {
       const alt = 0.15 * R * esc, k = alt / 575;
       g.save();
       g.translate(cx, cy); g.scale(k, k); g.translate(-435, -307);
-      g.globalAlpha = Math.min(1, V.nucleo) * (0.55 + 0.45 * P.nucleo);
+      g.globalAlpha = Math.min(1, V.nucleo) * (0.55 + 0.45 * P.nucleo) * (1 - 0.6 * P.cinza);
       g.lineJoin = 'round'; g.lineWidth = 34; g.strokeStyle = rgba(C.branco, 1);
       g.shadowColor = rgba(C.holo, 0.95); g.shadowBlur = 14 * dpr;   // o desfoque da sombra não segue a escala
       g.stroke(pLogoL); g.stroke(pLogoR);
@@ -917,20 +1001,30 @@ export function criarHud(opts = {}) {
     T.modo = 'entrando'; T.t0 = agora();
     T.origem = pontoVisor(robo() || {}) || { x: hx, y: hy };
     V.cx = T.origem.x; V.cy = T.origem.y;
-    Object.assign(V, { veu: 0, fundo: 0, ponto: 0, flash: 0, raias: 0, nucleo: 0, anelN: 0, onda: 0, seg: 0, regua: 0, arcos: 0, trac: 0, ext: 0, extEsc: 1.15, fundoCamadas: 0, micro: 0, leituras: 0 });
+    Object.assign(V, V_FECHADO);
     V.colapso = [1, 1, 1, 1, 1, 1, 1];
+    T.ini = null;
     P.vel = 0.3;
     ligar();
     return new Promise((res) => { T.resolver = res; });
   }
   function sair() {
     if (T.modo === 'fechado') return Promise.resolve();
-    // se ainda estava entrando, a saída começa do ponto atual (sem pular)
-    if (T.resolver) { const r = T.resolver; T.resolver = null; r(); }
+    const daEntrada = T.resolver; T.resolver = null;
+    const red = reduzido();
+    const tAgora = LOCAL && typeof window.__jvT === 'number' ? window.__jvT : (agora() - T.t0) / lento();
     T.fases.clear();
-    T.modo = 'saindo'; T.t0 = agora();
-    V.colapso = [1, 1, 1, 1, 1, 1, 1];
+    if (T.modo === 'entrando' && tAgora < (red ? 200 : 1050)) {
+      // ainda montando o HUD: a entrada volta ao contrário, do ponto atual (sem o "pisca e some")
+      T.modo = 'revertendo'; T.tRev = tAgora; T.ini = null;
+    } else if (T.modo !== 'revertendo') {
+      // HUD montado (ou quase): a saída de sempre, sem passar do quanto cada camada estava desenhada
+      T.modo = 'saindo'; T.ini = { ...V };
+      V.colapso = [1, 1, 1, 1, 1, 1, 1];
+    }
+    T.t0 = agora();
     ligar();
+    if (daEntrada) daEntrada();
     return new Promise((res) => { T.resolver = res; });
   }
   function estado(nome) {

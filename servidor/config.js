@@ -18,7 +18,7 @@ export const WEB = path.join(RAIZ, 'web');
 
 const NOMES = [
   'ANTHROPIC_API_KEY',
-  'SUPABASE_DB_HOST', 'SUPABASE_DB_PORT', 'SUPABASE_DB_NAME', 'SUPABASE_DB_USER', 'SUPABASE_DB_PASSWORD',
+  'SUPABASE_DB_HOST', 'SUPABASE_DB_PORT', 'SUPABASE_DB_NAME', 'SUPABASE_DB_USER', 'SUPABASE_DB_PASSWORD', 'SUPABASE_DB_CA',
   'IMAP_HOST', 'IMAP_PORT', 'IMAP_USER', 'IMAP_PASS', 'IMAP_PASTA', 'IMAP_SECURE',
   'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM_NOME',
   'VAULT_DIR', 'ARQUIVOS_RAIZES',
@@ -87,6 +87,7 @@ export function carregarConfig(argv = process.argv.slice(2)) {
       database: v.SUPABASE_DB_NAME || 'postgres',
       user: v.SUPABASE_DB_USER,
       password: v.SUPABASE_DB_PASSWORD,
+      ca: tem('SUPABASE_DB_CA') ? path.resolve(v.SUPABASE_DB_CA) : undefined,   // caminho do certificado (não é segredo)
     } : null,
     imap: tem('IMAP_HOST') && tem('IMAP_USER') && tem('IMAP_PASS') ? {
       host: v.IMAP_HOST,

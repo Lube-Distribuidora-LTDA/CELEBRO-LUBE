@@ -567,13 +567,23 @@ export async function buscarVaultLocal(){ if (!emLocalhost()) return null; retur
  */
 export function ouvirMudancas(onMudou, onEstado){
   if (typeof EventSource === 'undefined') return () => {};
-  let es; try { es = new EventSource('/api/events'); } catch (e) { return () => {}; }
-  let pend = null, caiu = false;
+  let es = null, pend = null, caiu = false, parado = false;
   const recarregar = async () => { const d = await fetchVault(); if (d) { try { onMudou?.(d); } catch (e) { console.error(e); } } };
-  es.addEventListener('change', () => { clearTimeout(pend); pend = setTimeout(recarregar, 350); });
-  es.onerror = () => { if (!caiu){ caiu = true; try { onEstado?.('reconectando'); } catch (e) {} } };
-  es.onopen = () => { const voltou = caiu; caiu = false; try { onEstado?.('ao vivo'); } catch (e) {} if (voltou) recarregar(); };
-  return () => { clearTimeout(pend); try { es.close(); } catch (e) {} };
+  function abrir(reler){
+    if (es || parado) return;
+    try { es = new EventSource('/api/events'); } catch (e) { es = null; return; }
+    es.addEventListener('change', () => { clearTimeout(pend); pend = setTimeout(recarregar, 350); });
+    es.onerror = () => { if (!caiu){ caiu = true; try { onEstado?.('reconectando'); } catch (e) {} } };
+    es.onopen = () => { const voltou = caiu; caiu = false; try { onEstado?.('ao vivo'); } catch (e) {} if (voltou) recarregar(); };
+    if (reler) recarregar();   // o que mudou enquanto a aba estava escondida
+  }
+  function fechar(){ clearTimeout(pend); try { es?.close(); } catch (e) {} es = null; }
+  // aba escondida solta a conexão: o Edge abre no máximo 6 por endereço somando abas e janelas, e com várias abas presas
+  // no /api/events o pedido do Jarvis (e o resto) ficava na fila para sempre
+  const aoVer = () => { if (typeof document === 'undefined') return; if (document.hidden) fechar(); else abrir(true); };
+  abrir(false);
+  try { document.addEventListener('visibilitychange', aoVer); } catch (e) { /* sem documento */ }
+  return () => { parado = true; fechar(); try { document.removeEventListener('visibilitychange', aoVer); } catch (e) {} };
 }
 
 /* ---------- Vault de exemplo (dados fictícios) ---------- */

@@ -552,3 +552,66 @@ O que foi ligado e corrigido depois dos três construtores, e como ficou:
   `_20260318`).
 - **Capabilities do publish (conjunto inteiro):**
   `{"sample":{},"mcp":{"servers":[{"server":"Supabase","tools":["execute_sql"]},{"server":"Microsoft 365","tools":["sharepoint_search","sharepoint_folder_search","read_resource"]}]}}`
+
+---------------------------------------------------------------------------------------------------
+## 9. Correção final (agente de CORREÇÃO, 2026-10-15)
+
+Revisão em quatro lentes (conversa, segurança, visual, regressão). O que mudou, e por quê:
+
+**Conversa e voz (web/js/jarvis.js)**
+- A frase antes da ferramenta ("Um instante, vou olhar a caixa.") vai para a voz na hora: ferramenta, cartão, ação ou
+  troca de modelo soltam o que estava no buffer, e uma frase terminada em ponto sem nada chegando em 250 ms também sai.
+  O cérebro de teste (servidor e página) agora escreve como o Claude: sem espaço no fim da frase.
+- Filtro de eco: o conjunto de eco de cada fala só cresce enquanto ela dura; número não conta como palavra nova; o hífen
+  sai dos dois lados ("e-mail" = "email"); palavra parecida (mesmas 4 letras, ou 1–2 letras trocadas) conta como eco;
+  cada palavra conta uma vez. Comandos curtos ("para", "espera aí", "não, não é isso", "cancela") valem também no fim
+  de uma fala misturada com o eco, mas nunca com palavras que o Jarvis disse nos últimos 2,5 s (antes, um "Para isso…"
+  dele mesmo o fazia parar). "Jarvis" sozinho, com ele calado, responde "Pois não?".
+- Enquanto ele pensa ou roda uma ferramenta, o eco da frase que acabou de tocar não cancela mais o turno.
+- O resultado final que chega depois de a fala já ter sido usada (parcial parado, Espaço solto) não vira pergunta
+  repetida. O Espaço começa uma fala nova (o eco de antes não gruda) e não tira a pergunta que ainda não teve resposta.
+  Espaço também funciona com o foco na caixa de texto vazia. Parar num conector ("as vendas de…") espera mais.
+- Reconhecimento: o encerramento normal por silêncio volta em 150 ms (o recuo de até 4 s ficou só para sessão que
+  morre em menos de 1 s e para erro de rede).
+- Confirmação por voz: "pode enviar" só confirma se a fala começou com o Jarvis calado há 1,5 s (ou pelo Espaço), se é
+  o mesmo rascunho de quando a fala começou, se ninguém falou outra coisa desde que o cartão abriu e, por fim, depois de
+  mais 1,2 s de silêncio ("pode enviar… mas muda o assunto" vira pergunta). "Pode", "manda" e "envia" sozinhos não
+  confirmam. O clique sintético do Modo Mãos não confirma. Um rascunho novo troca o anterior com aviso no cartão e
+  Confirmar travado por 1,5 s. O cartão mostra tudo (texto e destinatários rolam), conta destinatários e caracteres e
+  marca em vermelho quem é de fora de @lube.com.br.
+- Voz: na primeira falha a mesma frase é falada de novo; só na segunda fica a legenda, e a cada pergunta tenta a voz de
+  novo. Vigia de 8 s na primeira frase de cada resposta. Opção "Estou de fone de ouvido" (sem filtro de eco). Turno sem
+  nenhum evento: aos 8 s avisa que está demorando; aos 45 s (sem ferramenta rodando) desiste. A conversa é cortada em
+  bloco (passando de 40, ficam as 20 últimas) para o cache do prompt durar.
+
+**Servidor**
+- Só um rascunho pendente por vez (o novo substitui o velho e avisa o modelo); a recusa automática diz o motivo
+  (trocado, expirou, o Júlio saiu); os avisos de desfecho são da aba que criou a ação e voltam para a fila se o turno for
+  cancelado antes de o Jarvis dizer qualquer coisa. Haiku: até 30 s pela resposta e 1 nova tentativa por pedido.
+- `consultar_dados`: recusa `U&'…'`/`U&"…"` e barra invertida em `E'…'`; `ts_stat`, `ts_rewrite` e as `*_to_xml`
+  recusadas no texto e também no plano (o EXPLAIN mostra o nome real e os textos constantes já juntados). A trava
+  definitiva é um usuário só de leitura (pendência do Júlio). Conexão cancelada volta para o pool. `SUPABASE_DB_CA`
+  (opcional) confere o certificado do Supabase.
+- Arquivos: configuração e script (ini, cfg, bat, ps1, py, js, sql, xml…) ficam de fora, e o texto lido sai com senha,
+  token e `usuário:senha@` mascarados. As listas ficam em `web/js/bloqueio.js`, que o link também usa (no link,
+  `ler_arquivo` só abre o que uma busca da página mostrou). E-mail: endereço só ASCII; assunto sem controle invisível.
+- Raízes de arquivo conferidas sem travar o servidor (unidade de rede fora do ar); vault sem cache velho depois de uma
+  gravação durante a leitura; CSP com `object-src 'none'; base-uri 'none'`.
+- A fala interrompida com markdown ou `[[ ]]` acha o registro do turno: `web/js/fala.js` (o mesmo `limparFala` da voz)
+  é usado também por `servidor/conversa.js`.
+
+**HUD e layout (web/js/jarvis-hud.js, web/css/estilo.css)**
+- Fechar durante a entrada toca a entrada ao contrário, e nada liga depois (microfone, saudação, robô pausado).
+- Legenda: a frase da fila não ocupa linha e a janela rola para manter a palavra da vez à vista.
+- Até 1023 px: HUD em cima, atividade e cartões em faixas embaixo, com R pelo orçamento vertical (Exibição com no mínimo
+  150 px no celular); leituras resumidas quando R é pequeno; barra de cima do celular em duas linhas; tela baixa demais
+  esconde as faixas.
+- "Sem conexão" cinza e parado de verdade (régua e malha em cópia cinza); movimento reduzido sem esticar os arcos; fases
+  acumuladas (troca de estado sem salto); micro-texto pelo tamanho real da letra; data do canto certa em toda abertura;
+  menos alocação por quadro (cache de cores, transform só quando muda).
+- Ao sair do Jarvis com o leitor, o funil ou a Saúde abertos, o robô volta olhando para o painel. No app do computador,
+  erro do `api/saude` não pede mais a chave do Guardião (tenta de novo no minuto seguinte). Aba escondida solta o
+  `/api/events` (o Edge abre só 6 conexões por endereço) e o pedido do turno tem prazo de 20 s.
+
+Ficaram de fora, de propósito: filtro por confiança do reconhecimento (sem como medir aqui; perder fala do Júlio é pior)
+e `script-src`/`integrity` para o three e o MediaPipe (risco de quebrar o Modo Mãos sem câmera para testar).

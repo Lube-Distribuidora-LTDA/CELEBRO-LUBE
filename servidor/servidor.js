@@ -22,7 +22,8 @@ import { spawn } from 'node:child_process';
 import { carregarConfig, resumoConfig, WEB } from './config.js';
 import { criarVault } from './vault.js';
 import { criarBanco } from './banco.js';
-import { decidir, quantasPendentes } from './acoes.js';
+import { decidir, quantasPendentes, MOTIVOS_RECUSA } from './acoes.js';
+import { raizesConhecidas, raizesAcessiveis } from './ferramentas/arquivos.js';
 import { limparConversa } from './conversa.js';
 import { log } from './util.js';
 
@@ -36,7 +37,7 @@ const SEG = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
   'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "frame-ancestors 'none'",
+  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
@@ -140,7 +141,9 @@ async function servirEstatico(req, res, url, cabeca) {
 }
 
 function estado() {
-  const raizes = cfg.raizes.filter(r => { try { return fs.statSync(r).isDirectory(); } catch (_) { return false; } });
+  // sem esperar o disco: uma unidade de rede que não responde travaria o servidor inteiro (o último valor conhecido;
+  // a conferência roda ao fundo, com prazo)
+  const raizes = raizesConhecidas(cfg.raizes);
   return {
     ok: true, tipo: 'local', voz: true,
     ...cerebro.estado(),
@@ -229,7 +232,8 @@ async function tratar(req, res) {
       catch (e) { erro(res, e.status || 400, 'Pedido inválido.'); return; }
       const decisao = corpo && corpo.decisao;
       if (decisao !== 'confirmar' && decisao !== 'recusar') { erro(res, 400, 'Mande {"decisao":"confirmar"} ou {"decisao":"recusar"}.', 'decisao'); return; }
-      const r = await decidir(ma[1], decisao);
+      const motivo = decisao === 'recusar' && MOTIVOS_RECUSA.has(corpo.motivo) ? corpo.motivo : undefined;
+      const r = await decidir(ma[1], decisao, motivo);
       json(res, r.status, { ok: r.ok, mensagem: r.mensagem });
       return;
     }
@@ -277,6 +281,7 @@ servidor.on('error', e => {
 
 servidor.listen(PORTA, '127.0.0.1', async () => {
   vault.vigiar();
+  raizesAcessiveis(cfg.raizes).catch(() => {});   // já deixa conferido para o /api/jarvis/estado
   const r = resumoConfig(cfg);
   let notas = '?';
   try { notas = vault.existe() ? (await vault.ler()).files.length : 'pasta não encontrada'; } catch (_) { /* nada */ }

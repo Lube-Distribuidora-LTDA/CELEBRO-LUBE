@@ -9,6 +9,9 @@ import zlib from 'node:zlib';
 import { carregarConfig } from '../config.js';
 import { conferirSql, conferirPlano, criarBanco } from '../banco.js';
 import { conferirCaminho, nomeBloqueado, buscarArquivos, lerArquivo } from '../ferramentas/arquivos.js';
+import { caminhoBloqueado, mascararSegredos } from '../../web/js/bloqueio.js';
+import { limparFala } from '../../web/js/fala.js';
+import { criarAcao, decidir, tirarAvisos, devolverAvisos } from '../acoes.js';
 import { extrairTexto } from '../ferramentas/extrair.js';
 import { executarFerramenta, BASE, DELEGAR, definicoesApi } from '../ferramentas/index.js';
 import { consultarDados } from '../ferramentas/dados.js';
@@ -56,7 +59,15 @@ recusa(() => conferirSql('select 1 /* sem fim'), /comentário/, 'comentário abe
 recusa(() => conferirSql("select 'aberto"), /aspas/, 'texto aberto');
 recusa(() => conferirSql('/* x */ select 1; /* y */ drop table compras.x'), /um comando só/, 'drop escondido entre comentários');
 recusa(() => conferirSql("select '\\'; drop table compras.x; --'"), /um comando só/, "'\\' termina o texto (padrão do Postgres): o drop depois é outro comando");
-ok(!!conferirSql("select E'\\'; drop table compras.x; --'"), "E'\\'…' é um texto só no Postgres (barra escapa a aspa): passa como um SELECT");
+recusa(() => conferirSql("select E'\\'; drop table compras.x; --'"), /barra invertida/, "E'\\'…' (escape com barra) é recusado");
+// desvios achados na revisão de segurança: funções que executam SQL em texto e escapes que escondem nomes
+recusa(() => conferirSql("select * from ts_stat('select to_tsvector(''simple'', f::text) from ' || 'finan' || 'ceiro.folha f')"), /ts_stat/, 'ts_stat (executa o SQL do texto)');
+recusa(() => conferirSql("select ts_rewrite('a'::tsquery, 'select 1')"), /ts_rewrite/, 'ts_rewrite (executa o SQL do texto)');
+recusa(() => conferirSql('select U&"\\0070g_read_file"(\'x\')'), /U&/, 'U&"…" escondendo pg_read_file');
+recusa(() => conferirSql('select U&"query\\005fto\\005fxml"(\'select 1\', true, false, \'\')'), /U&/, 'U&"…" escondendo query_to_xml');
+recusa(() => conferirSql("select * from compras.x where s = U&'\\0066inanceiro'"), /U&/, "U&'…' escondendo financeiro");
+recusa(() => conferirSql("select E'\\x66inanceiro'"), /barra invertida/, "E'\\x66…' escondendo financeiro");
+ok(!!conferirSql("select e.nome from core.dim_rca e where e.nome = 'x'"), "alias e seguido de texto ('x') não vira E'…'");
 
 /* ---------------------------------------------------------------- SQL, trava 2 (plano) */
 titulo('consultar_dados: trava do plano (EXPLAIN)');
@@ -66,6 +77,10 @@ recusa(() => conferirPlano(plano('public')), /public/, 'tabela no public');
 recusa(() => conferirPlano(plano('financeiro')), /financeiro/, 'visão que chega no financeiro');
 recusa(() => conferirPlano([{ Plan: { 'Node Type': 'Result', Output: ['extensions.http_get(\'x\'::text)'] } }]), /extensions/, 'função de outro schema na saída');
 ok(Array.isArray(conferirPlano([{ Plan: { 'Node Type': 'Result', Output: ['saude.painel()'] } }])), 'saude.painel() passa');
+recusa(() => conferirPlano([{ Plan: { 'Node Type': 'Function Scan', 'Function Name': 'ts_stat', Schema: 'pg_catalog', Alias: 'ts_stat', Output: ['word', 'ndoc', 'nentry'], 'Function Call': "ts_stat('select to_tsvector(''simple''::regconfig, f.*::text) from financeiro.folha f'::text)" } }]), /ts_stat/, 'plano com ts_stat (função do pg_catalog que executa SQL)');
+recusa(() => conferirPlano([{ Plan: { 'Node Type': 'Result', Output: ["pg_read_file('x'::text)"] } }]), /pg_read_file/, 'plano com pg_read_file (o nome real aparece no plano, sem o escape)');
+recusa(() => conferirPlano([{ Plan: { 'Node Type': 'Result', Output: ["length('select * from financeiro.folha'::text)"] } }]), /financeiro/, 'plano com texto constante citando financeiro.folha');
+ok(Array.isArray(conferirPlano([{ Plan: { 'Node Type': 'Function Scan', 'Function Name': 'generate_series', Schema: 'pg_catalog', Alias: 'g', Output: ['g'], 'Function Call': 'generate_series(1, 500)' } }])), 'plano com generate_series (pg_catalog comum) passa');
 
 /* ---------------------------------------------------------------- banco de verdade (só leitura) */
 titulo('banco (DATA WAREHOUSE, só leitura)');
@@ -125,6 +140,14 @@ await recusaAsync('C:\\Windows\\win.ini', /fora das pastas liberadas/, 'fora das
 await recusaAsync('C:\\Users\\gti.julio.alves\\Desktop\\BI\\13. CEREBRO\\servidor\\config.js', /fora das pastas liberadas/, 'fora das raízes (Desktop)');
 await recusaAsync(path.join(od, '..', 'Desktop', 'x.txt'), /fora das pastas liberadas/, 'escapando com ..');
 await recusaAsync('CLAUDE.md', /caminho completo/, 'caminho relativo');
+await recusaAsync('P:\\ETC\\PCSIS504.ini', /configuração/, '*.ini (configuração, como as do WinThor)');
+await recusaAsync('P:\\Manager\\database.ini', /configuração/, 'database.ini');
+await recusaAsync('P:\\INTEGRAÇÃO BI\\TRADE\\INSTALAR TUDO.bat', /configuração/, '*.bat (script)');
+await recusaAsync('P:\\INTEGRAÇÃO BI\\TRADE\\etl\\rede.py', /configuração/, '*.py (script)');
+ok(nomeBloqueado('relatorio.json') === null && nomeBloqueado('vendas.csv') === null && nomeBloqueado('ata.docx') === null, 'documentos comuns (json, csv, docx) continuam liberados');
+ok(caminhoBloqueado('/personal/julio/Documents/RH/x.pdf') === 'folha' && caminhoBloqueado('Documentos/Compras/pedido.xlsx') === null, 'caminhoBloqueado (o link usa): pasta RH no meio do caminho');
+const masc = mascararSegredos('host=10.0.0.5\nUser Id=admwinthor;Password=Segredo123;\nsenha: abc 123\n"token": "xyz"\npostgres://etl:minhasenha@db.exemplo:5432/x\nVenda total: 1200');
+ok(!/Segredo123|minhasenha|xyz|abc/.test(masc) && /host=10\.0\.0\.5/.test(masc) && /Venda total: 1200/.test(masc), `mascararSegredos tira senha, token e usuário:senha@ → ${JSON.stringify(masc)}`);
 ok(nomeBloqueado('ENV.example') === null && nomeBloqueado('.env.example') === null, 'ENV.example (só nomes) não é bloqueado');
 ok(nomeBloqueado('ENVIO NF.xlsx') === null, '"ENVIO NF.xlsx" não é confundido com ENV');
 const ctxA = { cfg, emitir: () => {} };
@@ -270,6 +293,40 @@ ok(m3.mensagens.map(x => x.role).join(',') === 'user,assistant,user,system', `se
 // interrompido antes de falar qualquer coisa
 let m4 = montarMensagens(limparConversa([{ papel: 'julio', texto: 'a' }, { papel: 'jarvis', texto: '', interrompido: true }, { papel: 'julio', texto: 'b' }]), 'ctx');
 ok(m4.mensagens.map(x => x.role).join(',') === 'user,user,system' && /antes de você dizer/.test(m4.mensagens[2].content), 'interrompido antes de falar: sem mensagem vazia do assistente');
+
+// a fala interrompida chega limpa (sem markdown nem [[ ]]); o registro guarda o texto bruto do Claude
+_limparRegistros();
+const mk1 = montarMensagens(limparConversa([{ papel: 'julio', texto: 'O que é o BI de compras?' }]), 'ctx');
+const regMk = novoRegistro(mk1.atual, mk1.sistema);
+regMk.textoTotal = 'Um instante. A nota **[[BI COMPRAS]]** diz que as cargas rodam na SRV-IA. O resto vem depois.';
+regMk.rounds.push({ assistant: blocosParaRegistro([{ type: 'text', text: 'Um instante.' }, { type: 'tool_use', id: 'toolu_9', name: 'ler_nota', input: { nome: 'BI COMPRAS' } }]), resultados: [{ type: 'tool_result', tool_use_id: 'toolu_9', content: '{}' }], ini: 0, fim: 12 });
+regMk.rounds.push({ assistant: [{ type: 'text', text: 'A nota **[[BI COMPRAS]]** diz que as cargas rodam na SRV-IA. O resto vem depois.' }], resultados: null, ini: 13, fim: regMk.textoTotal.length });
+fecharRegistro(regMk);
+const ditoMk = limparFala('Um instante. A nota **[[BI COMPRAS]]** diz que as cargas');
+const mk2 = montarMensagens(limparConversa([
+  { papel: 'julio', texto: 'O que é o BI de compras?' },
+  { papel: 'jarvis', texto: ditoMk, interrompido: true },
+  { papel: 'julio', texto: 'E o comercial?' },
+]), 'ctx');
+ok(mk2.mensagens.some(x => x.role === 'user' && Array.isArray(x.content) && x.content[0]?.type === 'tool_result'), `fala interrompida com markdown ainda acha o registro (a rodada de ferramenta fica): "${ditoMk}"`);
+const cortadaMk = mk2.mensagens.filter(x => x.role === 'assistant').pop();
+ok(/cargas$/.test(cortadaMk?.content?.[0]?.text || ''), `e corta no ponto certo do texto bruto: "${cortadaMk?.content?.[0]?.text}"`);
+ok(limparFala('1. Primeiro *item* | segundo _ponto_ e o e_mail') === 'Primeiro item segundo ponto e o e_mail', `limparFala tira lista numerada, ênfase e barra: "${limparFala('1. Primeiro *item* | segundo _ponto_ e o e_mail')}"`);
+
+/* ---------------------------------------------------------------- ações pendentes */
+titulo('ações: só uma pendente por vez, motivo da recusa, avisos por aba');
+tirarAvisos();
+const a1 = criarAcao({ tipo: 'enviar_email', resumo: 'E-mail 1', detalhe: {}, executar: async () => ({ ok: true, mensagem: 'x' }), aba: 'abaUm123' });
+const a2 = criarAcao({ tipo: 'enviar_email', resumo: 'E-mail 2', detalhe: {}, executar: async () => ({ ok: true, mensagem: 'x' }), aba: 'abaUm123' });
+ok(a2.substituiu === 'E-mail 1', 'o rascunho novo substitui o anterior e diz qual');
+let rd = await decidir(a1.id, 'confirmar');
+ok(rd.status === 404 && !rd.ok, 'o rascunho substituído não pode mais ser confirmado');
+rd = await decidir(a2.id, 'recusar', 'saiu');
+ok(rd.ok && tirarAvisos('outraAba99').length === 0, 'o desfecho não vai para outra aba');
+const av = tirarAvisos('abaUm123');
+ok(av.length === 1 && /saiu do modo Jarvis/.test(av[0]), `o motivo da recusa entra no aviso: ${av[0]}`);
+devolverAvisos(['aviso devolvido'], 'abaUm123');
+ok(tirarAvisos('abaUm123')[0] === 'aviso devolvido', 'aviso devolvido por turno cancelado volta para a fila');
 
 /* ---------------------------------------------------------------- vault ao vivo */
 titulo('vault ao vivo (fs.watch numa pasta de teste)');

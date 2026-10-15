@@ -33,6 +33,7 @@
 
 import * as D from './dados.js';
 import { lerResultadoSql, PROJETO, SERVIDOR_MCP } from './saude.js';
+import { nomeBloqueado, caminhoBloqueado, mascararSegredos } from './bloqueio.js';
 
 /* ---------- Manifesto (o Claude principal publica com exatamente isto; a lista é o conjunto inteiro) ---------- */
 const M365 = 'Microsoft 365';
@@ -276,6 +277,29 @@ export function criarCerebroLink(opts = {}) {
     saudeCache: null,         // {dados, em}
     turno: null, seq: 0, idFerr: 0,
     instrucoes: { chave: '', texto: '' },
+    // uri -> nome do que as buscas desta página mostraram (e que passou no filtro de bloqueio.js): ler_arquivo só lê
+    // o que está aqui (nome '' = item de e-mail, agenda ou Teams, sem nome de arquivo)
+    urisVistos: new Map(),
+  };
+  const lembrarUri = (uri, nome) => {
+    if (!uri) return;
+    est.urisVistos.delete(uri); est.urisVistos.set(uri, nome || '');
+    while (est.urisVistos.size > 400) est.urisVistos.delete(est.urisVistos.keys().next().value);
+  };
+  // o mesmo filtro do app do computador (credencial, configuração e script, sistema, folha e RH), pelo nome, pela pasta
+  // e pelo caminho do endereço web
+  const itemBloqueado = (x, ehPasta) => {
+    const nome = pega(x, 'name', 'title', 'fileName');
+    if (nome && nomeBloqueado(nome, ehPasta)) return true;
+    const pasta = pega(x, 'parentPath', 'path', 'parentReference.path');
+    if (pasta && caminhoBloqueado(String(pasta), { ultimoEhPasta: true })) return true;
+    const web = pega(x, 'webUrl', 'url');
+    if (web) {
+      let caminho = '';
+      try { caminho = decodeURIComponent(new URL(String(web)).pathname); } catch (_) { caminho = ''; }
+      if (caminho && caminhoBloqueado(caminho, { ultimoEhPasta: ehPasta })) return true;
+    }
+    return false;
   };
 
   /* --- entradas do app --- */
@@ -668,8 +692,11 @@ export function criarCerebroLink(opts = {}) {
             if (texto(ent.ate, 40)) entrada.beforeDateTime = texto(ent.ate, 40);
             r = await chamarMcp(M365, 'sharepoint_search', entrada, sinal);
           } else throw new Error(motivoBloqueio(M365) || 'A busca de arquivos não está liberada nesta página.');
-          const { itens, textos, pagina } = lerBlocos(r);
+          const { itens: todos, textos, pagina } = lerBlocos(r);
           reagir('arquivo', consulta);
+          const itens = todos.filter((x) => !itemBloqueado(x, pastas));
+          const ocultos = todos.length - itens.length;
+          for (const x of itens.slice(0, limit)) lembrarUri(pega(x, 'uri', 'resourceUri'), pega(x, 'name', 'title', 'fileName') || '?');
           const lista2 = itens.slice(0, limit).map((x) => semUndef({
             nome: texto(pega(x, 'name', 'title', 'fileName'), 160) || undefined,
             uri: pega(x, 'uri', 'resourceUri') || undefined,
@@ -681,7 +708,8 @@ export function criarCerebroLink(opts = {}) {
           return semUndef({
             total: Number.isFinite(Number(pagina.totalResultCount)) ? Number(pagina.totalResultCount) : undefined,
             itens: lista2,
-            outros: !lista2.length && textos.length ? cortar(textos.join('\n'), 1500) : undefined,
+            outros: !lista2.length && !ocultos && textos.length ? cortar(textos.join('\n'), 1500) : undefined,
+            ocultos: ocultos ? `${ocultos} ${ocultos === 1 ? 'item ficou' : 'itens ficaram'} de fora: senha, configuração, script ou folha e RH, que o Jarvis não abre.` : undefined,
             mais: pagina.moreResults === true || pagina.nextOffset != null || undefined,
             proximo: Number.isFinite(Number(pagina.nextOffset)) ? Number(pagina.nextOffset) : undefined,
             aviso: lista2.length || textos.length ? undefined : 'Nada encontrado com esses termos.',
@@ -704,6 +732,10 @@ export function criarCerebroLink(opts = {}) {
           if (!uri) throw new Error('Faltou o uri do arquivo.');
           if (/^https?:/i.test(uri)) throw new Error('Endereço da web não serve: use o uri que buscar_arquivos devolveu.');
           if (!esquemas.some((p) => uri.startsWith(p))) throw new Error('Esse tipo de recurso não está liberado nesta página.');
+          // só o que uma busca desta página mostrou (e passou no filtro): um uri inventado ou tirado de um texto não abre
+          if (!est.urisVistos.has(uri)) throw new Error('Só leio o que apareceu numa busca desta conversa: use buscar_arquivos antes e passe o uri que ela devolveu.');
+          const nomeVisto = est.urisVistos.get(uri);
+          if (nomeVisto && nomeVisto !== '?' && nomeBloqueado(nomeVisto, false)) throw new Error('Esse arquivo fica fora do Jarvis (senha, configuração, script ou folha e RH).');
           const entrada = { uri };
           const pg = Math.round(Number(ent.pagina));
           if (Number.isFinite(pg) && pg >= 1) entrada.startPage = Math.min(100000, pg);
@@ -713,6 +745,7 @@ export function criarCerebroLink(opts = {}) {
           const imagens = blocos.filter((b) => b && b.type === 'image').length;
           let corpo = partes.join('\n').trim();
           if (!corpo && r && r.structuredContent) corpo = seguro(() => JSON.stringify(r.structuredContent), '');
+          corpo = mascararSegredos(corpo);   // valores de senha, token e conexão não vão para o modelo
           const prox = corpo.match(/re-call with startPage=(\d+)/i);
           reagir('arquivo', uri);
           return semUndef({
@@ -729,6 +762,7 @@ export function criarCerebroLink(opts = {}) {
     /* e-mail, agenda e Teams: só se o manifesto ganhar essas ferramentas (fora da v1; formato do resultado não medido) */
     const itensGenericos = (r, max, map) => {
       const { itens, pagina } = lerBlocos(r);
+      for (const x of itens.slice(0, max)) lembrarUri(pega(x, 'uri'), '');
       return semUndef({ itens: itens.slice(0, max).map((x) => semUndef(map(x))), mais: pagina.moreResults === true || pagina.nextOffset != null || pagina.nextCursor != null || undefined });
     };
     const datas = (ent, entrada) => {

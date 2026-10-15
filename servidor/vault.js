@@ -69,9 +69,17 @@ export function criarVault(dirPedido, { onMudou } = {}) {
     return { vaultName, files, lidoEm: Date.now() };
   }
 
+  // geração: cada aviso de mudança abre uma nova. Uma leitura que começou antes da mudança pode ter lido a nota velha:
+  // ela não grava o cache, e quem pede depois da mudança ganha uma leitura nova (não reaproveita a antiga)
+  let geracao = 0, lendoGer = -1;
   async function ler() {
     if (cache) return cache;
-    if (!lendo) lendo = lerTudo().then(d => { cache = d; return d; }).finally(() => { lendo = null; });
+    if (!lendo || lendoGer !== geracao) {
+      const ger = geracao;
+      const p = lerTudo().then(d => { if (ger === geracao) cache = d; return d; })
+        .finally(() => { if (lendo === p) lendo = null; });
+      lendo = p; lendoGer = ger;
+    }
     return lendo;
   }
 
@@ -86,7 +94,7 @@ export function criarVault(dirPedido, { onMudou } = {}) {
   function avisar() {
     const lista = [...mudados];
     mudados = new Set();
-    cache = null;
+    cache = null; geracao++;
     try { onMudou?.(lista); } catch (e) { log('vault: erro ao avisar mudança', e?.message); }
   }
 

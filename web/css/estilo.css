@@ -1190,6 +1190,12 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jv-l-se span:first-child{color:var(--ink); letter-spacing:.18em}
 .jarvis[data-estado="confirmando"] .jv-l-sd b[data-l="estado"]{color:var(--vermelho)}
 .jarvis[data-estado="sem-conexao"] .jv-l b{color:var(--muted)}
+/* R pequeno (o js/jarvis-hud.js marca): as leituras ficam a 1,9R uma da outra; somem a 2ª linha e o rótulo do estado,
+   e no mínimo o canto de cima à esquerda (o chip da barra de cima já diz o estado) */
+.jarvis.jv-r-pequeno .jv-l span + span{display:none}
+.jarvis.jv-r-pequeno .jv-l-sd i{display:none}
+.jarvis.jv-r-minimo .jv-l-se{display:none}
+.jarvis.jv-r-minimo .jv-l-ie i,.jarvis.jv-r-minimo .jv-l-id i{display:none}
 
 /* ---------- Entrada e saída das peças (a coreografia do canvas está no js/jarvis-hud.js) ---------- */
 .jv-topo,.jv-atividade,.jv-exibicao{opacity:0; transform:translateY(12px); transition:opacity .3s cubic-bezier(.2,.8,.2,1), transform .3s cubic-bezier(.2,.8,.2,1)}
@@ -1308,6 +1314,13 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jv-conf-detalhe dt{font:600 10px/1.6 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
 .jv-conf-detalhe dd{margin:0; font:500 13.5px/1.5 var(--body); color:var(--ink); overflow-wrap:anywhere; white-space:pre-line}
 .jv-cd-corpo dd{max-height:9.2em; overflow:auto}
+/* nada é cortado: o texto e a lista de destinatários rolam dentro do cartão */
+.jv-cd-para dd,.jv-cd-cc dd,.jv-cd-cco dd{max-height:5.4em; overflow:auto; white-space:normal}
+.jv-end{display:inline-block; margin:0 10px 2px 0; overflow-wrap:anywhere}
+.jv-end[data-fora]{color:var(--vermelho); color:color-mix(in srgb, var(--vermelho) 78%, var(--branco)); font-weight:600}
+.jv-end em{margin-left:6px; padding:0 5px; border:1px solid var(--vermelho); border-radius:2px; font:700 9px/1.5 var(--mono); font-style:normal; letter-spacing:.1em; text-transform:uppercase; vertical-align:1px}
+.jv-conf-conta{margin:6px 0 0; font:600 11px/1.4 var(--mono); color:var(--muted); font-variant-numeric:tabular-nums}
+.jv-conf-conta b{color:var(--vermelho); color:color-mix(in srgb, var(--vermelho) 78%, var(--branco))}
 .jv-conf-detalhe p{margin:0; font-size:13.5px; line-height:1.55}
 .jv-conf-voz{font:500 12.5px/1.5 var(--body); color:var(--muted)}
 .jv-conf-voz b{color:var(--ink); font-weight:600}
@@ -1339,9 +1352,11 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jv-lg-julio.eco .jv-lg-julio-txt{color:var(--muted); opacity:.55; font-style:italic}
 .jv-lg-julio.apagada{opacity:0}
 .jv-lg-jarvis > b{color:var(--holo)}
-.jv-frases{display:flex; flex-direction:column; justify-content:flex-end; max-height:calc(2.3 * 1.45em); overflow:hidden; font:500 19px/1.45 var(--body);
+.jv-frases{position:relative; display:flex; flex-direction:column; justify-content:flex-start; max-height:calc(2.3 * 1.45em); overflow:hidden; font:500 19px/1.45 var(--body);
   -webkit-mask-image:linear-gradient(180deg, transparent 0, var(--bg) 28%); mask-image:linear-gradient(180deg, transparent 0, var(--bg) 28%)}
 .jv-frase{margin:0; text-wrap:balance}
+/* a frase que ainda espera na fila só entra no layout quando começa a ser falada (senão empurrava a da vez para fora) */
+.jv-frase.espera{display:none}
 .jv-frase span{opacity:0; transition:opacity .12s, color .25s, text-shadow .25s}
 .jv-frase span.dita{opacity:1; color:var(--jv-tinta)}
 .jv-frase span.vez{color:var(--ink); text-shadow:0 0 14px var(--holo-medio), 0 0 2px var(--holo)}
@@ -1388,6 +1403,7 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jv-ajuda li::marker{color:var(--holo)}
 .jv-ajuda b{color:var(--branco); font-weight:700}
 .jv-ajustes .acoes{justify-content:flex-end}
+.jv-ajustes .chave small{display:block; margin-top:2px; font-size:11.5px}
 
 /* ---------- Aviso do microfone (primeira vez) ---------- */
 .jv-consent{position:absolute; inset:0; z-index:14; display:grid; place-items:center; padding:var(--g); background:radial-gradient(ellipse 60% 60% at 50% 50%, var(--veu), transparent 80%)}
@@ -1427,29 +1443,8 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 @media (max-width:1023px){
   .jv-pe{width:auto; left:var(--g); right:var(--g); translate:none; min-width:0}
   .jv-sair-rot{display:none}
-}
-@media (max-height:719px) and (min-width:760px){
-  .jv-dica{display:none}
-  .jarvis{--jv-pe-alt:196px}
-  .jv-frases{font-size:16.5px}
-}
-@media (hover:none){ .jv-dica-voz{display:none} }
-
-/* ---------- Celular: HUD em cima, atividade e cartões numa faixa rolável, legenda e caixa no pé ---------- */
-@media (max-width:759px){
-  .jarvis{--jv-topo:62px; --jv-pe-alt:178px}
-  .jv-topo{top:12px; left:14px; right:14px}
-  .jv-marca{gap:9px}
-  .jv-marca .logo{width:28px; height:21px}
-  .jv-marca h2{font-size:18px}
-  .jv-chip{height:22px; padding:0 8px; font-size:9px; letter-spacing:.1em}
-  .jv-contexto{display:none}
-  .jv-sair kbd{display:none}
-  .jv-sair{width:40px; padding:0}
-  .jv-moldura{inset:6px}
-  .jv-moldura .canto{width:20px; height:20px}
-  .jv-l{font-size:9px; letter-spacing:.1em; gap:3px}
-  .jv-l::before{display:none}
+  /* faixas: o HUD em cima, a atividade e os cartões em faixas roláveis embaixo (os painéis laterais deixavam pouco para
+     os anéis e as leituras se sobrepunham). O js/jarvis-hud.js mede o R pelo mesmo orçamento (--jv-topo, --jv-pe-alt) */
   .jv-atividade,.jv-exibicao{left:0; right:0; width:auto; max-height:none}
   .jv-atividade{top:calc(var(--jv-cy) + var(--jv-r) * 1.02 + 4px)}
   .jv-exibicao{top:calc(var(--jv-cy) + var(--jv-r) * 1.02 + 72px); bottom:calc(var(--jv-pe-alt) + 6px)}
@@ -1462,6 +1457,37 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
   .jv-cartoes{grid-auto-flow:column; grid-auto-rows:auto; align-content:normal; grid-auto-columns:min(280px, 80vw); align-items:start; overflow-x:auto; overflow-y:hidden; height:100%; padding:2px 16px 6px; margin:0; scroll-snap-type:x proximity; scroll-padding-inline:16px; scrollbar-width:none}
   .jv-cartao{max-height:100%; overflow:auto; scroll-snap-align:start}
   .jv-cartao:nth-child(n+3){opacity:1}
+  .jv-confirma{top:auto; bottom:calc(var(--jv-pe-alt) + 8px); translate:-50% 0; max-height:calc(100% - var(--jv-pe-alt) - 80px)}
+  .jv-sim{top:calc(var(--jv-topo) + 2px); bottom:auto; left:auto; right:12px; width:min(250px, calc(100% - 24px)); padding:8px 10px}
+  /* tela baixa demais para as faixas (o js/jarvis-hud.js marca): só o HUD, a legenda e a caixa de texto */
+  .jarvis.jv-apertado .jv-atividade,.jarvis.jv-apertado .jv-exibicao{display:none}
+}
+@media (max-height:719px) and (min-width:760px){
+  .jv-dica{display:none}
+  .jarvis{--jv-pe-alt:196px}
+  .jv-frases{font-size:16.5px}
+}
+@media (hover:none){ .jv-dica-voz{display:none} }
+
+/* ---------- Celular: HUD em cima, atividade e cartões numa faixa rolável, legenda e caixa no pé ---------- */
+@media (max-width:759px){
+  .jarvis{--jv-topo:72px; --jv-pe-alt:178px}
+  .jv-topo{top:12px; left:14px; right:14px}
+  /* a marca em duas linhas: logo e título em cima, o chip de estado embaixo do título (numa linha só, o chip ficava
+     escondido atrás dos botões Sem som e Ajustes); o texto longo do chip termina em reticências */
+  .jv-marca{flex-wrap:wrap; column-gap:9px; row-gap:2px}
+  .jv-marca::after{content:""; order:2; flex-basis:100%; height:0}
+  .jv-marca .logo{width:28px; height:21px}
+  .jv-marca h2{font-size:18px}
+  .jv-chip{order:3; height:22px; padding:0 8px; margin-left:37px; max-width:calc(100% - 37px); min-width:0; font-size:9px; letter-spacing:.1em}
+  .jv-chip-txt{min-width:0; overflow:hidden; text-overflow:ellipsis}
+  .jv-contexto{display:none}
+  .jv-sair kbd{display:none}
+  .jv-sair{width:40px; padding:0}
+  .jv-moldura{inset:6px}
+  .jv-moldura .canto{width:20px; height:20px}
+  .jv-l{font-size:9px; letter-spacing:.1em; gap:3px}
+  .jv-l::before{display:none}
   .jv-pe{left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); gap:6px}
   .jv-frases{font-size:16px; max-height:calc(2 * 1.45em * 1.2 + 6px)}
   .jv-lg-julio-txt{font-size:13.5px}
@@ -1470,8 +1496,6 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
   .jv-enviar span,.jv-parar span{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
   .jv-enviar,.jv-parar{width:40px; padding:0}
   .jv-dica{display:none}
-  .jv-confirma{top:auto; bottom:calc(var(--jv-pe-alt) + 8px); translate:-50% 0; max-height:calc(100% - var(--jv-pe-alt) - 80px)}
-  .jv-sim{top:calc(var(--jv-topo) + 2px); bottom:auto; left:auto; right:12px; width:min(250px, calc(100% - 24px)); padding:8px 10px}
   .jv-sim .jv-sim-form{display:none}
 }
 

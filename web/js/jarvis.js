@@ -27,6 +27,7 @@
    segredo em tela ou log; o microfone só fica aberto neste modo, com o ponto vermelho aceso. */
 
 import { criarHud, criarSons } from './jarvis-hud.js';
+import { limparFala } from './fala.js';
 
 /* ---------- utilidades ---------- */
 const PREF = 'cerebro-robo:';
@@ -35,7 +36,9 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 function lerPref(k, padrao = null) { try { const v = localStorage.getItem(PREF + k); return v === null ? padrao : v; } catch { return padrao; } }
 function gravarPref(k, v) { try { localStorage.setItem(PREF + k, v); } catch { /* sem armazenamento */ } }
 const norm = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const palavrasDe = (s) => norm(s).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+// o hífen sai antes de separar, nos dois lados do filtro de eco: "e-mail" (o que eu digo) e "email" (o que o
+// reconhecimento escreve) viram a mesma palavra
+const palavrasDe = (s) => norm(s).replace(/-/g, '').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function ehLocal() {
   try { return /^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(location.hostname); } catch { return false; }
@@ -47,26 +50,52 @@ function simular() {
 function tokenLocal() {
   try { const m = document.querySelector('meta[name="cerebro-token"]'); const v = m && m.getAttribute('content'); return v && v.trim() ? v.trim() : null; } catch { return null; }
 }
+const ABA = (() => {
+  try { if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID().replace(/-/g, '').slice(0, 20); } catch { /* sem crypto */ }
+  return `${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+})();
 const fmtNum = (n) => { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(v) < 10 ? 2 : Math.abs(v) < 1000 ? 1 : 0 }) : String(n ?? ''); };
 const doisDig = (n) => String(n).padStart(2, '0');
 
 // palavras vazias do filtro de eco (JARVIS.md §7.9) e comandos curtos
 const VAZIAS = new Set(['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'que', 'e', 'um', 'uma', 'para', 'pra', 'com', 'nao', 'isso', 'esse', 'essa', 'em', 'no', 'na', 'por', 'se', 'me', 'eu', 'mas', 'tem', 'ele', 'ela', 'voce', 'mais', 'muito', 'foi', 'sim', 'aqui', 'agora', 'entao']);
-const SO_PARAR = new Set(['jarvis', 'para', 'pare', 'parar', 'espera', 'espere', 'chega', 'silencio', 'pera', 'perai', 'calma', 'jarvis para', 'jarvis espera', 'jarvis chega', 'para jarvis', 'espera jarvis', 'para para', 'ta bom para']);
+const SO_PARAR = new Set(['jarvis', 'para', 'pare', 'parar', 'espera', 'espere', 'chega', 'silencio', 'pera', 'perai', 'calma', 'opa',
+  'espera ai', 'pera ai', 'calma ai', 'para ai', 'espera um pouco', 'jarvis para', 'jarvis espera', 'jarvis chega', 'para jarvis',
+  'espera jarvis', 'jarvis espera ai', 'para para', 'ta bom para']);
+// "não, não é isso": interrompe como fala e segue como pergunta (o Júlio vai dizer o que é)
+const CORRIGE = new Set(['nao nao', 'nao e isso', 'nao e esse', 'nao e essa', 'nao foi isso', 'errado', 'ta errado', 'esta errado']);
 const FECHAR = /^(jarvis )?(pode )?(fechar|fecha|sair|sai|encerrar|encerra|desligar|desliga)( o jarvis| jarvis| o modo jarvis)?$/;
-const SIM = new Set(['sim', 'pode', 'pode sim', 'sim pode', 'confirmo', 'confirma', 'confirmar', 'pode confirmar', 'pode enviar', 'pode mandar', 'sim pode enviar', 'sim pode mandar', 'manda', 'envia', 'pode ir', 'confirmado']);
+// "pode", "manda" e "envia" sozinhos não confirmam: "Pode… [pausa] …mudar o assunto?" não pode enviar o e-mail
+const SIM = new Set(['sim', 'pode sim', 'sim pode', 'confirmo', 'confirma', 'confirmar', 'pode confirmar', 'pode enviar', 'pode mandar', 'sim pode enviar', 'sim pode mandar', 'pode ir', 'confirmado', 'confirmo o envio']);
 const NAO = new Set(['nao', 'cancela', 'cancelar', 'cancelado', 'nao envia', 'nao manda', 'nao pode', 'nao pode enviar', 'nao quero', 'negativo', 'cancela o envio', 'nao nao']);
 const curto = (t) => palavrasDe(t).filter((w) => w !== 'jarvis' || palavrasDe(t).length === 1).join(' ');
-
-// o que vai para a voz: sem markdown, sem URL, sem emoji (a legenda mostra o mesmo texto)
-function limparFala(s) {
-  return String(s || '')
-    .replace(/https?:\/\/\S+/gi, 'o link')
-    .replace(/\*\*|__|`+|^#+\s*|^\s*[-*•]\s+/gm, '')
-    .replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+const VAZIO = new Set();
+const conteudo = (w) => w.length >= 3 && !VAZIAS.has(w) && !/^\d+$/.test(w);   // palavra que conta (número não: "três mil" vira "3.000")
+// distância de edição limitada: "estante" ≈ "instante", "julho" ≈ "julio" (o reconhecimento troca letras do meu eco)
+function distAte(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return false;
+  let ant = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const lin = [i]; let menor = i;
+    for (let j = 1; j <= b.length; j++) {
+      const v = Math.min(ant[j] + 1, lin[j - 1] + 1, ant[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      lin.push(v); if (v < menor) menor = v;
+    }
+    if (menor > max) return false;
+    ant = lin;
+  }
+  return ant[b.length] <= max;
+}
+// a palavra veio do que eu disse? igual, no plural, com as mesmas 4 primeiras letras ou com 1 (2 nas longas) letra trocada
+function ehEco(w, eco) {
+  if (eco.has(w) || (w.endsWith('s') && eco.has(w.slice(0, -1)))) return true;
+  if (w.length < 5 || !eco.size) return false;
+  const max = w.length >= 7 ? 2 : 1, p4 = w.slice(0, 4);
+  for (const e of eco) {
+    if (e.length < 4) continue;
+    if (e.slice(0, 4) === p4 || distAte(w, e, max)) return true;
+  }
+  return false;
 }
 
 const ROTULO_FERR = {
@@ -136,7 +165,7 @@ function criarVozNavegador(voz) {
   }
   function parar() { ger++; n = 0; try { ss.cancel(); } catch { /* nada */ } }
   return {
-    tipo: 'navegador', falar, parar, falando: () => n > 0,
+    tipo: 'navegador', vozObj: voz, falar, parar, falando: () => n > 0,
     configurar(o = {}) { if (Number.isFinite(o.rate)) rate = o.rate; if (Number.isFinite(o.pitch)) pitch = o.pitch; if (Number.isFinite(o.volume)) volume = o.volume; },
     get cps() { return cps * rate; }, get nome() { return nomeCurto(voz); }
   };
@@ -180,13 +209,14 @@ function criarVozRelogio(base = 15) {
 function criarOuvido(h, sons) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const O = { suportado: !!SR, ativo: false, ouvindo: false };
-  let rec = null, querLigado = false, iniciando = false, semResultado = 0, tReinicio = 0, resultadoEm = 0;
+  let rec = null, querLigado = false, iniciando = false, semResultado = 0, tReinicio = 0, resultadoEm = 0, tInicio = 0, ultimoErro = '';
   let stream = null, trilha = null, usarTrilha = true, analisador = null, fonte = null, freq = null, tempo = null, vigiaTrilha = 0;
   const bandas = new Float32Array(64);
+  const saidaNivel = { bandas, db: -90 };   // o laço lê a cada quadro: o mesmo objeto, sem alocar
   function criar() {
     const r = new SR();
     r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-    r.onstart = () => { iniciando = false; O.ouvindo = true; h.estado && h.estado('ouvindo'); };
+    r.onstart = () => { iniciando = false; O.ouvindo = true; tInicio = agora(); ultimoErro = ''; h.estado && h.estado('ouvindo'); };
     r.onresult = (e) => {
       semResultado = 0; resultadoEm = agora();
       let fin = '', parc = '';
@@ -199,16 +229,22 @@ function criarOuvido(h, sons) {
     };
     r.onerror = (e) => {
       const c = e && e.error;
+      ultimoErro = c || 'erro';
       if (c === 'no-speech' || c === 'aborted') return;   // reinicia calado
       if (c === 'not-allowed' || c === 'service-not-allowed' || c === 'audio-capture') { querLigado = false; h.erro && h.erro(c); return; }
-      if (c === 'network') { semResultado = Math.max(semResultado, 2); h.erro && h.erro('network'); return; }
+      if (c === 'network') { h.erro && h.erro('network'); return; }
       h.erro && h.erro(c || 'erro');
     };
     r.onend = () => {
       iniciando = false; O.ouvindo = false;
       if (!querLigado) { h.estado && h.estado('parado'); return; }
-      semResultado++;
-      const atraso = [150, 500, 1000, 2000, 4000][Math.min(4, semResultado - 1)];   // recuo quando encerra sem resultado
+      // o Edge encerra a sessão depois de um silêncio (no-speech), mesmo contínuo: volta em 150 ms, sem recuo (senão o
+      // microfone fica surdo boa parte do tempo e perde o começo do "Jarvis, …"). O recuo 0,5 → 1 → 2 → 4 s fica para
+      // sessões que morrem em menos de 1 s, em sequência, e para erro de rede
+      const curta = agora() - tInicio < 1000;
+      if (ultimoErro === 'network' || (curta && ultimoErro !== 'no-speech' && ultimoErro !== 'aborted')) semResultado++;
+      else semResultado = 0;
+      const atraso = semResultado ? [500, 1000, 2000, 4000][Math.min(3, semResultado - 1)] : 150;
       clearTimeout(tReinicio);
       tReinicio = setTimeout(iniciarRec, atraso);
     };
@@ -296,8 +332,8 @@ function criarOuvido(h, sons) {
     }
     analisador.getFloatTimeDomainData(tempo);
     let q = 0; for (let i = 0; i < tempo.length; i++) q += tempo[i] * tempo[i];
-    const db = 20 * Math.log10(Math.sqrt(q / tempo.length) + 1e-9);
-    return { bandas, db };
+    saidaNivel.db = 20 * Math.log10(Math.sqrt(q / tempo.length) + 1e-9);
+    return saidaNivel;
   }
   O.ligar = ligar; O.pausar = pausar; O.nivel = nivel;
   O.destruir = pausar;
@@ -334,7 +370,7 @@ function criarCerebroLocal(token) {
     },
     turno(conversa, contexto, h) {
       const ctl = new AbortController();
-      let acabou = false;
+      let acabou = false, tPrazo = 0, estourou = false;
       const terminar = (d) => { if (acabou) return; acabou = true; h.fim && h.fim(d || { motivo: 'fim' }); };
       const falhar = (mensagem) => { if (acabou) return; acabou = true; h.erro && h.erro({ mensagem }); };
       function despachar(bloco) {
@@ -363,13 +399,19 @@ function criarCerebroLocal(token) {
       }
       (async () => {
         let resp;
+        // até 20 s pela resposta (o servidor manda o primeiro byte na hora): sem isso, uma fila de conexões presas deixava o
+        // HUD em "pensando" para sempre
+        tPrazo = setTimeout(() => { estourou = true; try { ctl.abort(); } catch { /* nada */ } }, 20000);
         try {
           resp = await fetch('/api/jarvis/turno', { method: 'POST', headers: { ...cab(), accept: 'text/event-stream' }, body: JSON.stringify({ conversa, contexto }), signal: ctl.signal, cache: 'no-store' });
         } catch (err) {
+          clearTimeout(tPrazo);
+          if (estourou && !acabou) { falhar('O app do cérebro não respondeu. Ele ainda está ligado? Abra pelo INICIAR.bat.'); return; }
           if (ctl.signal.aborted) return;
           falhar('Não consegui falar com o app do cérebro. Ele ainda está ligado?');
           return;
         }
+        clearTimeout(tPrazo);
         if (resp.status === 401) { falhar(REINICIADO); return; }
         if (!resp.ok || !resp.body) {
           let msg = '';
@@ -396,11 +438,13 @@ function criarCerebroLocal(token) {
         }
         if (!ctl.signal.aborted) terminar({ motivo: 'fim' });
       })();
-      return { cancelar() { acabou = true; try { ctl.abort(); } catch { /* nada */ } } };
+      return { cancelar() { acabou = true; clearTimeout(tPrazo); try { ctl.abort(); } catch { /* nada */ } } };
     },
-    async decidirAcao(id, decisao) {
+    // motivo (só na recusa automática): 'substituida' | 'expirou' | 'saiu' — o servidor conta ao modelo o motivo certo
+    async decidirAcao(id, decisao, motivo) {
       try {
-        const r = await fetch(`/api/jarvis/acao/${encodeURIComponent(id)}`, { method: 'POST', headers: cab(), body: JSON.stringify({ decisao }), cache: 'no-store' });
+        const corpo = motivo && decisao === 'recusar' ? { decisao, motivo } : { decisao };
+        const r = await fetch(`/api/jarvis/acao/${encodeURIComponent(id)}`, { method: 'POST', headers: cab(), body: JSON.stringify(corpo), cache: 'no-store' });
         if (r.status === 401) return { ok: false, mensagem: REINICIADO };
         let j = {};
         try { j = await r.json(); } catch { j = {}; }
@@ -415,7 +459,8 @@ function criarCerebroLocal(token) {
    ============================================================================= */
 function criarCerebroSimulado(pagina) {
   let nAcao = 0, nConversa = 0;
-  const fatiar = (s) => (String(s).match(/\S+\s*/g) || []).reduce((acc, w, i) => { if (i % 2 === 0) acc.push(w); else acc[acc.length - 1] += w; return acc; }, []);
+  // como o Claude: cada trecho sai sem espaço no fim, e o espaço vem no começo do trecho seguinte
+  const fatiar = (s) => (String(s).match(/\s*\S+/g) || []).reduce((acc, w, i) => { if (i % 2 === 0) acc.push(w); else acc[acc.length - 1] += w; return acc; }, []);
   function roteiroNota(fala, ctx) {
     const n = norm(fala), passos = [];
     const t = (texto, espera = 0) => passos.push({ espera, texto });
@@ -515,12 +560,14 @@ function criarCerebroSimulado(pagina) {
       const ultima = [...conversa].reverse().find((m) => m.papel === 'julio');
       const passos = roteiro(ultima ? ultima.texto : '', contexto || {}, conversa);
       (async () => {
+        let falou = false;
         for (const p of passos) {
           if (cancelado) return;
           if (p.espera) await esperar(p.espera);
           if (cancelado) return;
           if (p.texto != null) {
-            for (const pedaco of fatiar(p.texto)) { if (cancelado) return; h.texto(pedaco); await esperar(30 + Math.random() * 45); }
+            const txt = `${falou ? ' ' : ''}${String(p.texto).trim()}`; falou = true;
+            for (const pedaco of fatiar(txt)) { if (cancelado) return; h.texto(pedaco); await esperar(30 + Math.random() * 45); }
             continue;
           }
           h[p.ev] && h[p.ev](p.dados);
@@ -600,7 +647,7 @@ function marcacao() {
     <p class="hud-rot jv-conf-rot">Ação pendente · <b class="jv-conf-tipo">enviar e-mail</b></p>
     <h3 id="jvConfTit" class="jv-conf-tit"></h3>
     <div id="jvConfTxt" class="jv-conf-detalhe"></div>
-    <p class="jv-conf-voz">Diga <b>“pode enviar”</b> ou <b>“cancela”</b>, ou use os botões. Expira em <b class="jv-conf-tempo">5:00</b>.</p>
+    <p class="jv-conf-voz"><span class="jv-conf-voz-txt">Diga <b>“pode enviar”</b> ou <b>“cancela”</b> depois que eu terminar de falar, ou use os botões.</span> Expira em <b class="jv-conf-tempo">5:00</b>.</p>
     <p class="jv-conf-res" role="status" hidden></p>
     <div class="acoes"><button class="btn principal jv-conf-sim" type="button">Confirmar</button><button class="btn jv-conf-nao" type="button">Cancelar</button></div>
   </div>
@@ -629,13 +676,14 @@ function marcacao() {
       <label class="faixa"><span>Tom <b class="jv-tom-v">0,92</b></span><input class="jv-tom" type="range" min="0.6" max="1.3" step="0.02" value="0.92"></label>
       <p class="jv-obs">O Edge ignora o tom nas vozes “Online”; a velocidade vale.</p>
       <label class="chave"><span>Sons do HUD</span><input class="jv-sons" type="checkbox" checked></label>
+      <label class="chave"><span>Estou de fone de ouvido <small class="jv-obs">sem eco: uma palavra já me interrompe</small></span><input class="jv-fone" type="checkbox"></label>
     </section>
     <section><h3 class="hud-rot">Como falar comigo</h3>
       <ul class="jv-ajuda">
         <li>Fale normalmente. Quando você para, eu respondo.</li>
         <li>Segure <kbd>Espaço</kbd> para falar; isso também me interrompe na hora.</li>
-        <li>Pode falar por cima de mim: eu paro e respondo ao que você disse. “Para”, “espera” ou “Jarvis” sozinhos só me fazem parar.</li>
-        <li>Para enviar e-mail eu sempre peço confirmação na tela: “pode enviar” ou “cancela”.</li>
+        <li>Pode falar por cima de mim: eu paro e respondo ao que você disse. “Para”, “espera”, “chega” ou “Jarvis” sozinhos só me fazem parar.</li>
+        <li>Para enviar e-mail eu sempre peço confirmação na tela: diga “pode enviar” ou “cancela” depois que eu terminar de falar, ou use os botões.</li>
         <li>“Pode fechar” ou <kbd>Esc</kbd> sai do modo Jarvis.</li>
         <li><b>Use fone de ouvido.</b> Com alto-falante o microfone me ouve, e o filtro de eco faz o possível.</li>
       </ul>
@@ -688,7 +736,7 @@ export function criarJarvis(opts = {}) {
     falado: $('.jv-falado'), form: $('.jv-form'), mic: $('.jv-mic'), micIco: $('.jv-mic-ico'), micRot: $('.jv-mic-rot'), medidor: $('.jv-medidor i'),
     entrada: $('.jv-entrada'), parar: $('.jv-parar'), enviar: $('.jv-enviar'), dicaVoz: $('.jv-dica-voz'),
     ajustes: $('.jv-ajustes'), vozSel: $('.jv-voz-sel'), notaVoz: $('.jv-nota-voz'), vel: $('.jv-vel'), velV: $('.jv-vel-v'), tom: $('.jv-tom'), tomV: $('.jv-tom-v'),
-    sonsChk: $('.jv-sons'), ajustesOk: $('.jv-ajustes-ok'),
+    sonsChk: $('.jv-sons'), foneChk: $('.jv-fone'), ajustesOk: $('.jv-ajustes-ok'), confVozTxt: $('.jv-conf-voz-txt'),
     consent: $('.jv-consent'), consSim: $('.jv-cons-sim'), consNao: $('.jv-cons-nao'), aviso: $('.jv-aviso'),
     leituras: Object.fromEntries([...raiz.querySelectorAll('[data-l]')].map((e) => [e.dataset.l, e]))
   };
@@ -708,7 +756,12 @@ export function criarJarvis(opts = {}) {
     mic: { querLigado: false, ptt: false, temporario: false, erro: null }, falaJulio: null,
     estado: '', mudo: lerPref('jarvis-mudo', '0') === '1', sons: lerPref('jarvis-sons', '1') !== '0',
     rate: Number(lerPref('jarvis-velocidade', '1.05')) || 1.05, pitch: Number(lerPref('jarvis-tom', '0.92')) || 0.92,
-    vozUri: lerPref('jarvis-voz', ''), semVozAvisado: false, saudou: false, inertes: [], focoAntes: null, raf: 0, ultimaHora: ''
+    vozUri: lerPref('jarvis-voz', ''), semVozAvisado: false, saudou: false, inertes: [], focoAntes: null, raf: 0, ultimaHora: '', ultSeg: -1,
+    // escuta e eco: fone (sem eco), palavras ditas com a hora (para saber se um "para" ouvido é o meu), o pedaço do
+    // reconhecimento que já foi usado (o resultado final dele ainda chega), a confirmação por voz esperando 1,2 s
+    fone: lerPref('jarvis-fone', '0') === '1', ecoT: [], prefixo: null, confVoz: null, nFalas: 0, pttSemResposta: false,
+    // turno: ferramentas abertas e a hora do último evento (vigia de demora), e a voz que falhou (tenta de novo)
+    ferrAbertas: new Set(), tEvento: 0, avisouDemora: false, vozRetentou: false, vozRuim: false, primeiraFrase: true
   };
   J.rate = Math.min(1.4, Math.max(0.8, J.rate)); J.pitch = Math.min(1.3, Math.max(0.6, J.pitch));
   const ouvidoReal = criarOuvido({ parcial: (t) => aoParcial(t), final: (t) => aoFinal(t), estado: () => atualizarMic(), erro: (c) => aoErroMic(c) }, sons);
@@ -765,10 +818,18 @@ export function criarJarvis(opts = {}) {
   /* ---------- fila de frases (JARVIS.md §3: a primeira frase é falada antes de a resposta terminar) ---------- */
   // frases: {texto, el, palavras, estado:'espera'|'falando'|'dita', msg} — msg = a mensagem da conversa de onde a frase
   // veio (null = frase da própria interface); msg.dito guarda o que já foi falado dela (para a interrupção)
-  const F = { buffer: '', frases: [], fechada: true, vigia: 0, msg: null };
+  const F = { buffer: '', frases: [], fechada: true, vigia: 0, msg: null, tSoltar: 0 };
+  const RX_CORTE = /[.!?…]+["'”»)\]]*\s|\n+/g;
+  const RX_FIM_FRASE = /[.!?…]+["'”»)\]]*$/;
+  // "1. " no começo da linha é número de lista, não fim de frase (senão o "um." seria falado sozinho)
+  const numeroDeLista = (s, i) => /^\s*\d{1,3}$/.test(s.slice(s.lastIndexOf('\n', i - 1) + 1, i));
   function acharCorte(s) {
-    const m = /[.!?…]+["'”»)\]]*\s|\n+/.exec(s);
-    if (m) return m.index + m[0].length;
+    RX_CORTE.lastIndex = 0;
+    let m;
+    while ((m = RX_CORTE.exec(s))) {
+      if (m[0][0] !== '\n' && numeroDeLista(s, m.index)) continue;
+      return m.index + m[0].length;
+    }
     if (s.length > 140) {
       const k = s.lastIndexOf(', ', 150);
       if (k > 40) return k + 2;
@@ -784,8 +845,20 @@ export function criarJarvis(opts = {}) {
       const frase = F.buffer.slice(0, c); F.buffer = F.buffer.slice(c);
       novaFrase(frase, F.msg);
     }
+    // o bloco de texto que vem antes de uma ferramenta termina no ponto, sem espaço: a frase só fecharia quando a
+    // ferramenta acabasse (de 2 s a 4 min de silêncio). Terminou em ponto e nada chegou em 250 ms: ela vai para a voz
+    clearTimeout(F.tSoltar); F.tSoltar = 0;
+    const m = RX_FIM_FRASE.exec(F.buffer);
+    if (m && F.buffer.trim() && !numeroDeLista(F.buffer, m.index)) F.tSoltar = setTimeout(soltarFrase, 250);
   }
-  function fecharTexto() { const resto = F.buffer; F.buffer = ''; F.fechada = true; if (resto.trim()) novaFrase(resto, F.msg); }
+  // o que está no buffer vira frase agora (chegou ferramenta, cartão, ação ou troca de modelo: a frase acabou)
+  function soltarFrase() {
+    clearTimeout(F.tSoltar); F.tSoltar = 0;
+    if (!F.buffer.trim()) return;
+    const f = F.buffer; F.buffer = '';
+    novaFrase(f, F.msg);
+  }
+  function fecharTexto() { clearTimeout(F.tSoltar); F.tSoltar = 0; const resto = F.buffer; F.buffer = ''; F.fechada = true; if (resto.trim()) novaFrase(resto, F.msg); }
   function novaFrase(bruto, msg = null) {
     const texto = limparFala(bruto);
     if (!texto) return;
@@ -803,7 +876,7 @@ export function criarJarvis(opts = {}) {
     el.frases.appendChild(div);
     el.lgJarvis.hidden = false;
     voz.falar(texto, {
-      inicio: () => { fr.estado = 'falando'; fr.t0 = agora(); fr.el.classList.remove('espera'); fr.el.classList.add('falando'); clearTimeout(F.vigia); },
+      inicio: () => { fr.estado = 'falando'; fr.t0 = agora(); fr.el.classList.remove('espera'); fr.el.classList.add('falando'); clearTimeout(F.vigia); J.vozRetentou = false; J.primeiraFrase = false; },
       palavra: (ci) => { fr.boundary = true; fr.ci = ci; },
       fim: (inf) => {
         if (inf && inf.erro && inf.erro !== 'interrupted' && inf.erro !== 'canceled' && !fr.t0) { vozFalhou(); return; }
@@ -813,6 +886,7 @@ export function criarJarvis(opts = {}) {
         J.ultimoFimVoz = agora();
         anunciar(texto);
         podar();
+        if (!F.frases.some((f) => f.estado === 'falando')) rolarLegenda(null);
         // a resposta inteira já foi dita: a próxima interrupção não mexe mais nela
         if (fr.msg && fr.msg === J.msgFala && !J.turno && F.fechada && !F.frases.some((f) => f.estado !== 'dita' && f.msg === fr.msg)) J.msgFala = null;
         if (F.frases.some((f) => f.estado === 'espera')) armarVigia();
@@ -821,19 +895,29 @@ export function criarJarvis(opts = {}) {
     });
     armarVigia();
   }
-  // vigia: a voz do navegador não começou a próxima frase em 4 s (Edge sem internet, voz presa) → segue com a legenda
+  // vigia: a voz do navegador não começou a frase (Edge sem internet, voz Online com rede lenta, speak() engolido logo
+  // depois de um cancel()). 8 s na primeira frase de cada resposta (a voz Online leva mais para começar), 4 s nas outras
   function armarVigia() {
     if (voz.tipo !== 'navegador') return;
     clearTimeout(F.vigia);
-    F.vigia = setTimeout(() => { if (F.frases.some((f) => f.estado === 'espera') && !F.frases.some((f) => f.estado === 'falando')) vozFalhou(); }, 4000);
+    F.vigia = setTimeout(() => { if (F.frases.some((f) => f.estado === 'espera') && !F.frases.some((f) => f.estado === 'falando')) vozFalhou(); }, J.primeiraFrase ? 8000 : 4000);
   }
+  // a primeira falha não derruba a voz: a mesma voz fala de novo as mesmas frases, uma vez. Na segunda, segue só com a
+  // legenda e, no próximo turno, tenta a voz do navegador outra vez
   function vozFalhou() {
     if (voz.tipo !== 'navegador') return;
     const pendentes = F.frases.filter((f) => f.estado !== 'dita');
+    const antes = voz;
     voz.parar();
-    voz = criarVozRelogio(); voz.configurar({ rate: J.rate });
-    leitura('voz', 'SÓ LEGENDA');
-    if (!J.semVozAvisado) { J.semVozAvisado = true; avisar('A voz do navegador não respondeu. Sigo com a legenda.', 4200); }
+    if (!J.vozRetentou && antes.vozObj) {
+      J.vozRetentou = true;
+      voz = criarVozNavegador(antes.vozObj); voz.configurar({ rate: J.rate, pitch: J.pitch });
+    } else {
+      voz = criarVozRelogio(); voz.configurar({ rate: J.rate });
+      J.vozRuim = true;
+      leitura('voz', 'SÓ LEGENDA');
+      if (!J.semVozAvisado) { J.semVozAvisado = true; avisar('A voz do navegador não respondeu. Sigo com a legenda.', 4200); }
+    }
     for (const f of pendentes) { f.el.remove(); F.frases.splice(F.frases.indexOf(f), 1); }
     for (const f of pendentes) novaFrase(f.texto, f.msg);
   }
@@ -844,17 +928,27 @@ export function criarJarvis(opts = {}) {
     let n = 0;
     for (const p of fr.palavras) if (tudo || p.ini <= ci) n++;
     if (n > fr.vistas) {
+      const t = agora();
       for (let i = fr.vistas; i < n; i++) {
         const p = fr.palavras[i];
         p.el.classList.add('dita');
-        J.eco.push(...palavrasDe(p.txt));
+        for (const w of palavrasDe(p.txt)) { J.eco.push(w); J.ecoT.push({ w, t }); }
         if (!tudo) hud.palavra(0.55 + 0.45 * Math.min(1, p.txt.length / 8));
       }
       if (J.eco.length > 40) J.eco.splice(0, J.eco.length - 40);
+      if (J.ecoT.length > 80) J.ecoT.splice(0, J.ecoT.length - 80);
       const ant = fr.palavras[fr.vistas - 1]; if (ant) ant.el.classList.remove('vez');
       const vez = fr.palavras[n - 1]; if (vez && !tudo) vez.el.classList.add('vez'); else if (vez) vez.el.classList.remove('vez');
       fr.vistas = n;
+      if (vez && !tudo) rolarLegenda(vez.el);
     }
+  }
+  // a legenda viva é uma janela de ~2 linhas: a palavra da vez fica sempre à vista, na última linha (as frases da fila
+  // nem entram no layout até começarem a ser faladas)
+  function rolarLegenda(alvo) {
+    const box = el.frases; if (!box) return;
+    const topo = alvo ? Math.max(0, alvo.offsetTop + alvo.offsetHeight - box.clientHeight) : Math.max(0, box.scrollHeight - box.clientHeight);
+    if (Math.abs(box.scrollTop - topo) > 1) box.scrollTop = topo;
   }
   function podar() {
     // a legenda guarda as 3 últimas frases ditas
@@ -873,8 +967,11 @@ export function criarJarvis(opts = {}) {
   function limparLegendaJarvis() {
     for (const f of [...F.frases]) if (f.estado === 'dita') { f.el.remove(); F.frases.splice(F.frases.indexOf(f), 1); }
   }
+  // sem som (mudo, "sem voz", voz do navegador caída) ou de fone de ouvido, não existe eco
+  const semEco = () => J.fone || voz.tipo === 'relogio';
   function conjuntoEco() {
     const s = new Set();
+    if (semEco()) return s;
     const add = (w) => { s.add(w); if (w.length > 4 && w.endsWith('s')) s.add(w.slice(0, -1)); };
     for (const w of J.eco.slice(-25)) add(w);
     const i = F.frases.findIndex((f) => f.estado === 'falando');
@@ -883,7 +980,7 @@ export function criarJarvis(opts = {}) {
     return s;
   }
   function limparFila({ manterDitas = true } = {}) {
-    clearTimeout(F.vigia);
+    clearTimeout(F.vigia); clearTimeout(F.tSoltar); F.tSoltar = 0;
     F.buffer = ''; F.fechada = true;
     for (const f of [...F.frases]) {
       if (manterDitas && f.estado === 'dita') continue;
@@ -908,44 +1005,66 @@ export function criarJarvis(opts = {}) {
   }
   // o que vai para o cérebro: só papel, texto e a marca de interrompido
   const conversaParaEnviar = () => J.conversa.map((m) => (m.interrompido ? { papel: m.papel, texto: m.texto, interrompido: true } : { papel: m.papel, texto: m.texto }));
-  async function enviar(texto, { origem = 'texto' } = {}) {
+  async function enviar(texto, { origem = 'texto', jaFiltrada = false } = {}) {
     texto = String(texto || '').replace(/\s+/g, ' ').trim();
     if (!texto) return;
-    if (J.acao) {
-      const k = curto(texto);
-      if (SIM.has(k)) { decidir('confirmar'); return; }
-      if (NAO.has(k)) { decidir('recusar'); return; }
+    if (J.acao && !jaFiltrada) {
+      // digitado com o cartão aberto: "pode enviar" / "cancela" seguem as mesmas regras da voz (menos a do eco)
+      const k = curto(texto), dec = SIM.has(k) ? 'confirmar' : NAO.has(k) ? 'recusar' : null;
+      if (dec && respostaAcao(dec, { texto })) return;
     }
+    J.nFalas++;   // a conversa andou: um cartão aberto antes daqui só se confirma pelo botão
+    atualizarDicaAcao();
     if (falandoAgora() || J.turno) interromper({ motivo: 'nova', silencioso: true });
     limparLegendaJarvis();
     mostrarJulio(texto, true);
     const c = J.carregandoCerebro ? await J.carregandoCerebro : J.cerebro;
     if (!J.aberto) return;
     if (!c || !J.disp.ok) { falarLocal(J.disp.motivo || 'Estou sem conexão com o cérebro agora.'); return; }
+    // a voz do navegador tinha caído (ficou só a legenda): a cada pergunta, tenta de novo
+    if (J.vozRuim && !J.mudo && J.vozUri !== 'nenhuma' && !falandoAgora()) { J.vozRuim = false; J.vozRetentou = false; montarVoz({ ja: true }); }
     // fala do Júlio sem resposta (cortada antes de eu falar) + a nova = uma pergunta só
     const ult = J.conversa[J.conversa.length - 1];
     if (ult && ult.papel === 'julio') ult.texto = `${ult.texto} ${texto}`;
     else J.conversa.push({ papel: 'julio', texto });
-    if (J.conversa.length > 30) J.conversa.splice(0, J.conversa.length - 30);
+    // passando de 40 entradas, corta em bloco (ficam as 20 últimas, começando pelo Júlio): o começo das mensagens fica
+    // igual por vários turnos, e o cache do prompt continua valendo
+    if (J.conversa.length > 40) {
+      let k = J.conversa.length - 20;
+      while (k < J.conversa.length - 1 && J.conversa[k].papel !== 'julio') k++;
+      J.conversa.splice(0, k);
+    }
     while (J.conversa.length && J.conversa[0].papel !== 'julio') J.conversa.shift();   // começa sempre pelo Júlio
     const ger = ++J.ger;
     J.msgTurno = null; F.msg = null; J.nFerr = 0; J.t0Turno = agora(); J.latencia = null; J.retirado = false;
+    J.tEvento = agora(); J.avisouDemora = false; J.ferrAbertas.clear(); J.primeiraFrase = true;
     leitura('ferramentas', '0'); leitura('resposta', '…');
     const vivo = () => ger === J.ger && J.aberto;
+    const evento = () => { J.tEvento = agora(); };
     const h = {
       texto: (delta) => {
         if (!vivo() || !delta) return;
+        evento();
         if (!J.msgTurno) { J.msgTurno = { papel: 'jarvis', texto: '', dito: '' }; J.conversa.push(J.msgTurno); J.msgFala = J.msgTurno; F.msg = J.msgTurno; }
         if (J.latencia == null) { J.latencia = (agora() - J.t0Turno) / 1000; leitura('resposta', `${J.latencia.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} S`); }
         J.msgTurno.texto += delta;
         empurrarTexto(delta);
         atualizarEstado();
       },
-      ferramenta: (f) => { if (vivo()) aoFerramenta(f || {}); },
-      cartao: (c2) => { if (vivo()) mostrarCartao(c2 || {}); },
-      acao: (a) => { if (vivo()) abrirAcao(a || {}); },
+      // ferramenta, cartão, ação ou troca de modelo: a frase que veio antes acabou e já vai para a voz ("Um instante, vou
+      // olhar a caixa." preenche o silêncio da ferramenta, em vez de ficar parada no buffer)
+      ferramenta: (f) => {
+        if (!vivo()) return;
+        evento();
+        const d = f || {}, id = String(d.id || d.nome || '');
+        if (d.estado === 'inicio') { soltarFrase(); if (id) J.ferrAbertas.add(id); } else if (id) J.ferrAbertas.delete(id);
+        aoFerramenta(d);
+      },
+      cartao: (c2) => { if (!vivo()) return; evento(); soltarFrase(); mostrarCartao(c2 || {}); },
+      acao: (a) => { if (!vivo()) return; evento(); soltarFrase(); abrirAcao(a || {}); },
       modelo: (m) => {
         if (!vivo()) return;
+        evento(); soltarFrase();
         J.modelo = m && m.nome === 'sonnet' ? 'sonnet' : 'haiku';
         hud.modelo(J.modelo);
         // no link o nível vem com rótulo próprio (RÁPIDO / ANÁLISE): o modelo exato lá não é garantido
@@ -953,7 +1072,7 @@ export function criarJarvis(opts = {}) {
       },
       fim: (d) => {
         if (!vivo()) return;
-        J.turno = null;
+        J.turno = null; J.ferrAbertas.clear();
         encerrarFerramentas('sem resposta');
         if (J.modelo !== 'haiku') { J.modelo = 'haiku'; hud.modelo('haiku'); leitura('modelo', rotuloModelo('haiku')); }
         if (J.retirado) { J.retirado = false; atualizarEstado(); return; }
@@ -975,7 +1094,7 @@ export function criarJarvis(opts = {}) {
       },
       erro: (e) => {
         if (!vivo()) return;
-        J.turno = null;
+        J.turno = null; J.ferrAbertas.clear();
         encerrarFerramentas('parou com o erro');
         const msg = String((e && e.mensagem) || 'O cérebro não conseguiu responder.');
         if (e && e.retirar) {
@@ -991,15 +1110,17 @@ export function criarJarvis(opts = {}) {
         fecharTexto();
         avisar(msg, 6500, 'alerta');
         // erro antes de eu dizer qualquer coisa: a pergunta sai do histórico (ele vai repetir; não junta duas vezes)
-        if (!J.msgTurno) { const ult = J.conversa[J.conversa.length - 1]; if (ult && ult.papel === 'julio') J.conversa.pop(); }
+        if (!J.msgTurno) { const ult2 = J.conversa[J.conversa.length - 1]; if (ult2 && ult2.papel === 'julio') J.conversa.pop(); }
         // frases curtas do cérebro já vêm prontas para falar; o resto vira uma frase genérica
         falarLocal(msg.length <= 140 ? msg : J.msgTurno ? 'A conexão caiu no meio. Pode repetir?' : 'Não consegui responder agora. Pode repetir daqui a pouco?');
         leitura('resposta', 'ERRO');
         J.retirado = true;   // o fim que vem depois do erro não fala de novo
       }
     };
+    const ctxTurno = contexto();
+    if (c.tipo === 'local') ctxTurno.aba = ABA;   // os desfechos das ações desta janela só voltam para ela
     try {
-      J.turno = c.turno(conversaParaEnviar(), contexto(), h) || { cancelar() {} };
+      J.turno = c.turno(conversaParaEnviar(), ctxTurno, h) || { cancelar() {} };
     } catch (err) {
       J.turno = null;
       avisar('O cérebro não aceitou o pedido.', 5000, 'alerta');
@@ -1008,15 +1129,34 @@ export function criarJarvis(opts = {}) {
     atualizarEstado();
   }
 
+  // vigia do turno (roda no laço, uma vez por segundo): 8 s sem nenhum evento e sem ferramenta rodando → avisa uma vez,
+  // em voz, que está demorando; 45 s → desiste e diz que não conseguiu. Ferramenta rodando tem o prazo dela (no servidor)
+  function vigiarTurno() {
+    if (!J.turno || J.ferrAbertas.size) return;
+    const sem = agora() - J.tEvento;
+    if (sem > 45000) {
+      interromper({ motivo: 'tempo', silencioso: true });
+      avisar('O cérebro não respondeu a tempo.', 6000, 'alerta');
+      falarLocal('Não consegui resposta a tempo. Pode repetir daqui a pouco?');
+      return;
+    }
+    if (sem > 8000 && !J.avisouDemora && !J.msgTurno && !falandoAgora()) {
+      J.avisouDemora = true;
+      falarLocal('Está demorando mais que o normal. Continuo tentando.');
+    }
+  }
+
   // Interromper (o requisito central): corta a voz na hora, cancela o turno e guarda no histórico só o que foi dito.
-  // motivo 'voz' e 'nova' = o Júlio continua falando (a fala dele vira a próxima pergunta); 'tecla', 'botao', 'comando',
-  // 'digitando' = ele só mandou parar. silencioso = sem o clarão do "interrompido".
+  // motivo 'voz', 'nova' e 'ptt' = o Júlio continua falando (a fala dele vira a próxima pergunta, junto da anterior se
+  // ainda não houve resposta); 'tecla', 'botao', 'comando', 'digitando', 'tempo' = ele só mandou parar (ou desisti).
+  // silencioso = sem o clarão do "interrompido".
   function interromper({ motivo = 'voz', silencioso = false } = {}) {
     const falando = falandoAgora(), pensando = !!J.turno;
     if (!falando && !pensando) return false;
     const msg = J.msgFala, dito = ditoDe(msg);
     voz.parar();
     if (J.turno) { try { J.turno.cancelar(); } catch { /* nada */ } J.turno = null; encerrarFerramentas('interrompido'); }
+    J.ferrAbertas.clear();
     J.ger++;
     if (msg) {
       const completo = limparFala(msg.texto || '');
@@ -1026,7 +1166,7 @@ export function criarJarvis(opts = {}) {
     // parou antes de eu dizer qualquer coisa: se ele só mandou parar, a pergunta sai do histórico; se ele continua
     // falando, a fala nova junta com ela
     const ult = J.conversa[J.conversa.length - 1];
-    if (!dito && pensando && ult && ult.papel === 'julio' && motivo !== 'voz' && motivo !== 'nova') J.conversa.pop();
+    if (!dito && pensando && ult && ult.papel === 'julio' && motivo !== 'voz' && motivo !== 'nova' && motivo !== 'ptt') J.conversa.pop();
     J.msgFala = null; J.msgTurno = null; F.msg = null;
     if (J.modelo !== 'haiku') { J.modelo = 'haiku'; hud.modelo('haiku'); leitura('modelo', rotuloModelo('haiku')); }
     limparFila({ manterDitas: true });
@@ -1043,54 +1183,129 @@ export function criarJarvis(opts = {}) {
   function pararSo() { interromper({ motivo: 'comando' }); }
 
   /* ---------- ouvir: fala do Júlio, fim da fala, eco ---------- */
-  function novaFalaJulio() { return { finais: '', parcial: '', tUlt: 0, tFinal: 0, timer: 0, interrompeu: false, cancelouPensando: false, durante: null, naJanela: null, descartar: false }; }
+  function novaFalaJulio() {
+    return {
+      finais: '', parcial: '', tUlt: 0, tFinal: 0, timer: 0, interrompeu: false, cancelouPensando: false, durante: null, naJanela: null,
+      descartar: false, ptt: false, eco: new Set(), antes: '', acaoId: J.acao ? J.acao.id : null
+    };
+  }
+  // o pedaço do reconhecimento que já foi usado (o parcial de uma fala concluída; o trecho em curso quando o Espaço foi
+  // apertado): o resultado final dele ainda vai chegar e não pode virar fala nova nem repetir a pergunta
+  function ignorarPrefixo(texto) { const ps = palavrasDe(texto); J.prefixo = ps.length ? { ps, ate: agora() + 4000 } : null; }
+  function tirarPrefixo(t) {
+    const P = J.prefixo;
+    if (!P || !t) return t;
+    if (agora() > P.ate) { J.prefixo = null; return t; }
+    const brutas = t.split(/\s+/).filter(Boolean);
+    let i = 0, j = 0;
+    while (i < brutas.length && j < P.ps.length) {
+      const ws = palavrasDe(brutas[i]);
+      if (!ws.length) { i++; continue; }
+      let igual = true;
+      for (const w of ws) { if (j < P.ps.length && P.ps[j] === w) j++; else { igual = false; break; } }
+      if (!igual) break;
+      i++;
+    }
+    if (j < Math.min(2, P.ps.length) && i < brutas.length) return t;   // quase nada em comum: é fala nova
+    return brutas.slice(i).join(' ');
+  }
   function aoParcial(t) {
+    const bruto = String(t || '');
+    if (!bruto.trim()) { if (J.falaJulio) J.falaJulio.parcial = ''; return; }
+    t = tirarPrefixo(bruto);
+    if (!t.trim()) return;
+    seguirConfirmacao();
     const fj = J.falaJulio || (J.falaJulio = novaFalaJulio());
-    fj.parcial = t || ''; fj.tUlt = agora();
+    fj.parcial = t; fj.tUlt = agora();
     avaliarFala();
   }
   function aoFinal(t) {
+    t = tirarPrefixo(String(t || ''));
+    J.prefixo = null;   // o trecho do reconhecimento fechou: o que vier depois é fala nova
+    if (!t.trim()) return;
+    seguirConfirmacao();
     const fj = J.falaJulio || (J.falaJulio = novaFalaJulio());
     fj.finais = `${fj.finais} ${t}`.trim(); fj.parcial = ''; fj.tFinal = fj.tUlt = agora();
     avaliarFala();
   }
   const textoFala = (fj) => `${fj.finais} ${fj.parcial}`.replace(/\s+/g, ' ').trim();
-  // filtro de eco (JARVIS.md §7.9): só contam palavras de 3+ letras fora da lista de vazias e fora do que eu disse
-  function palavrasNovas(texto, eco) {
-    let n = 0;
-    for (const w of palavrasDe(texto)) {
-      if (w.length < 3 || VAZIAS.has(w)) continue;
-      if (!eco.has(w) && !(w.endsWith('s') && eco.has(w.slice(0, -1)))) n++;
-    }
-    return n;
+  // filtro de eco (JARVIS.md §7.9): só contam palavras de 3+ letras, fora das vazias, fora dos números e fora do que eu
+  // disse (igual, no plural ou com uma letra trocada pelo reconhecimento)
+  function palavrasNovas(texto, eco) { const vistas = new Set(); for (const w of palavrasDe(texto)) if (conteudo(w) && !ehEco(w, eco)) vistas.add(w); return vistas.size; }   // cada palavra conta uma vez
+  function palavrasEco(texto, eco) { let n = 0; for (const w of palavrasDe(texto)) if (conteudo(w) && ehEco(w, eco)) n++; return n; }
+  const todasEco = (texto, eco) => { const ps = palavrasDe(texto); return ps.length > 0 && ps.every((w) => eco.has(w) || VAZIAS.has(w) || /^\d+$/.test(w) || (conteudo(w) && ehEco(w, eco))); };
+  // o eco de uma fala só cresce enquanto ela dura: nada do que eu disse sai da janela antes de a fala terminar (a fala
+  // do microfone pode juntar o eco de várias frases minhas)
+  function mesclarEco(fj) { if (semEco()) return VAZIO; for (const w of conjuntoEco()) fj.eco.add(w); return fj.eco; }
+  // alguma dessas palavras eu disse há pouco (2,5 s) ou estou dizendo agora? Então o "para" ouvido pode ser o meu
+  function ditaRecente(ws) {
+    if (semEco() || !ws.length) return false;
+    const t = agora(), atual = F.frases.find((f) => f.estado === 'falando');
+    const daFrase = atual ? new Set(palavrasDe(atual.texto)) : null;
+    return ws.some((w) => (daFrase && daFrase.has(w)) || J.ecoT.some((e) => e.w === w && t - e.t < 2500));
   }
-  const todasEco = (texto, eco) => { const ps = palavrasDe(texto); return ps.length > 0 && ps.every((w) => eco.has(w) || VAZIAS.has(w)); };
-  const ehConfirmacao = (k) => !!J.acao && (SIM.has(k) || NAO.has(k));
+  // o que vem depois da última palavra minha (com alto-falante, o reconhecimento junta o meu eco e a fala do Júlio
+  // no mesmo trecho: "…a filial um puxa a fila para")
+  function sufixoNovo(texto, eco) {
+    const ps = String(texto).split(/\s+/).filter(Boolean);
+    let ult = -1;
+    ps.forEach((p, i) => { const w = palavrasDe(p).join(''); if (w && conteudo(w) && ehEco(w, eco)) ult = i; });
+    return ult < 0 ? '' : ps.slice(ult + 1).join(' ');
+  }
+  // um comando curto (para, espera, não não, cancela…): a fala inteira, ou o que veio depois do meu eco; nunca
+  // palavras que eu mesmo acabei de dizer (no Espaço não há eco: vale direto)
+  function comandoDe(texto, eco, conjunto, fj) {
+    const recente = (s) => !(fj && fj.ptt) && ditaRecente(palavrasDe(s));
+    const k = curto(texto);
+    if (conjunto.has(k) && !recente(k)) return k;
+    const suf = curto(sufixoNovo(texto, eco));
+    if (suf && suf !== k && conjunto.has(suf) && !recente(suf)) return suf;
+    return null;
+  }
+  // uma confirmação por voz espera 1,2 s de silêncio: se o Júlio continua falando ("pode enviar… mas muda o assunto"),
+  // não confirma, e o que ele disse vira o começo da fala nova (que vai para o cérebro)
+  function seguirConfirmacao() {
+    const c = J.confVoz; if (!c) return;
+    clearTimeout(c.timer); J.confVoz = null;
+    const fj = J.falaJulio || (J.falaJulio = novaFalaJulio());
+    fj.finais = `${c.texto} ${fj.finais}`.trim();
+    if (fj.durante === null) { fj.durante = c.durante; fj.naJanela = c.naJanela; }
+    fj.ptt = fj.ptt || c.ptt;
+    if (el.confRes.textContent === 'Confirmando…') el.confRes.hidden = true;
+  }
   function avaliarFala() {
     const fj = J.falaJulio; if (!fj || !J.aberto) return;
     const texto = textoFala(fj);
     if (!texto) return;
-    const k = curto(texto), falando = falandoAgora();
+    const falando = falandoAgora();
     if (fj.durante === null) { fj.durante = falando; fj.naJanela = !falando && agora() - J.ultimoFimVoz < 1500; }
+    const eco = mesclarEco(fj), minimo = semEco() ? 1 : 2;
     if (falando && !fj.interrompeu) {
       // eu estou falando: o microfone pode estar ouvindo a minha voz
-      if (SO_PARAR.has(k)) { pararSo(); fj.descartar = true; mostrarJulio(texto, false); agendarFim(); return; }
-      if (ehConfirmacao(k)) { mostrarJulio(texto, false); agendarFim(); return; }
-      if (palavrasNovas(texto, conjuntoEco()) >= 2) { interromper({ motivo: 'voz' }); fj.interrompeu = true; }
-      else { mostrarJulio(texto, false, true); agendarFim(); return; }   // eco (ou ainda curto demais para saber)
-    } else if (J.turno && !fj.cancelouPensando && palavrasNovas(texto, new Set()) >= 2) {
-      // o Júlio voltou a falar enquanto eu pensava: não respondo por cima; a fala nova junta com a anterior
-      interromper({ motivo: 'voz', silencioso: true }); fj.cancelouPensando = true;
+      if (comandoDe(texto, eco, SO_PARAR, fj)) { pararSo(); fj.descartar = true; mostrarJulio(texto, false); agendarFim(); return; }
+      if (J.acao && (SIM.has(curto(texto)) || comandoDe(texto, eco, NAO, fj))) { mostrarJulio(texto, false); agendarFim(); return; }
+      if (comandoDe(texto, eco, CORRIGE, fj) || palavrasNovas(texto, eco) >= minimo) {
+        fj.antes = texto;   // o que veio até aqui pode começar com o fim da minha frase (eco); o que vier depois é do Júlio
+        interromper({ motivo: 'voz' }); fj.interrompeu = true;
+      } else { mostrarJulio(texto, false, true); agendarFim(); return; }   // eco (ou ainda curto demais para saber)
+    } else if (J.turno && !fj.cancelouPensando && !fj.interrompeu) {
+      // o Júlio voltou a falar enquanto eu pensava (ou rodava uma ferramenta): não respondo por cima; a fala nova junta
+      // com a anterior. Se a fala começou com a minha voz no ar, ou logo depois, o eco dela não conta como palavra nova
+      const veioDoEco = (fj.durante || fj.naJanela) && !semEco();
+      if (palavrasNovas(texto, veioDoEco ? eco : VAZIO) >= minimo) { interromper({ motivo: 'voz', silencioso: true }); fj.cancelouPensando = true; }
     }
     mostrarJulio(texto, false);
     agendarFim();
   }
-  // fim da fala: resultado final + 700 ms sem palavra nova; parcial parado por 1,2 s também conta (JARVIS.md §7.8)
+  // fim da fala: resultado final + 700 ms sem palavra nova; parcial parado por 1,2 s também conta (JARVIS.md §7.8).
+  // Parou num conector ("as vendas de…", "e", "que"): a frase ainda não acabou, espera mais
+  const CONECTORES = new Set(['e', 'de', 'do', 'da', 'dos', 'das', 'que', 'pra', 'para', 'o', 'a', 'os', 'as', 'com', 'no', 'na', 'nos', 'nas', 'mas', 'ou', 'um', 'uma', 'em', 'por', 'se']);
   function agendarFim() {
     const fj = J.falaJulio; if (!fj) return;
     clearTimeout(fj.timer);
     if (J.mic.ptt) return;   // segurando Espaço: só termina ao soltar
-    fj.timer = setTimeout(concluirFala, fj.parcial ? 1200 : 700);
+    const ps = palavrasDe(textoFala(fj)), conector = CONECTORES.has(ps[ps.length - 1] || '');
+    fj.timer = setTimeout(concluirFala, fj.parcial ? (conector ? 1800 : 1200) : (conector ? 1500 : 700));
   }
   function concluirFala() {
     const fj = J.falaJulio; if (!fj) return;
@@ -1098,29 +1313,42 @@ export function criarJarvis(opts = {}) {
     J.falaJulio = null;
     let texto = textoFala(fj);
     if (!texto) { limparJulio(); return; }
-    let k = curto(texto);
-    if (fj.descartar && SO_PARAR.has(k)) { limparJulio(); return; }   // "para" sozinho: já parei
-    if (!fj.interrompeu && !ehConfirmacao(k) && !SO_PARAR.has(k)) {
-      const eco = conjuntoEco();
-      // começou enquanto eu falava e não trouxe 2 palavras novas: era a minha voz no microfone
-      if (fj.durante && palavrasNovas(texto, eco) < 2) { limparJulio(); return; }
+    if (fj.parcial) ignorarPrefixo(fj.parcial);   // o resultado final desse trecho ainda vai chegar: não vira fala nova
+    const eco = mesclarEco(fj);
+    const parar = comandoDe(texto, eco, SO_PARAR, fj);
+    if (fj.descartar && (parar || SO_PARAR.has(curto(texto)))) { limparJulio(); return; }   // "para" sozinho: já parei
+    // resposta ao cartão: "pode enviar" só pela fala inteira (e com as regras do respostaAcao); "cancela" também vale
+    // depois do meu eco, menos quando fui eu que acabei de dizer a palavra
+    const k0 = curto(texto), ecoPossivel = (fj.durante || fj.naJanela) && !fj.ptt;
+    const resposta = !J.acao ? null : SIM.has(k0) ? 'confirmar' : (ecoPossivel ? comandoDe(texto, eco, NAO, fj) : NAO.has(k0)) ? 'recusar' : null;
+    if (!fj.interrompeu && !fj.ptt && !parar && !resposta && !comandoDe(texto, eco, CORRIGE, fj) && !semEco()) {
+      const novas = palavrasNovas(texto, eco), ecos = palavrasEco(texto, eco);
+      // começou enquanto eu falava sem nenhuma palavra nova, ou com uma só no meio do que eu disse: era a minha voz
+      if (fj.durante && (novas === 0 || (novas < 2 && ecos >= 2))) { limparJulio(); return; }
       // começou logo depois de eu parar (eco atrasado): descarta só se for tudo eco
       if (fj.naJanela && todasEco(texto, eco)) { limparJulio(); return; }
     }
-    if (fj.interrompeu) { texto = tirarEcoInicial(texto); k = curto(texto); }
-    if (SO_PARAR.has(k)) { pararSo(); limparJulio(); return; }
-    if (FECHAR.test(k)) { fechar(); return; }
-    if (J.acao) {
-      if (SIM.has(k)) { mostrarJulio(texto, true); decidir('confirmar'); return; }
-      if (NAO.has(k)) { mostrarJulio(texto, true); decidir('recusar'); return; }
+    if (fj.interrompeu && !fj.ptt && fj.antes) texto = tirarEcoInicial(texto, eco, fj.antes.split(/\s+/).filter(Boolean).length);
+    const k = curto(texto);
+    if (parar || SO_PARAR.has(k)) {
+      // "Jarvis" sozinho, comigo calado: quem chama uma pessoa pelo nome espera resposta (frase da interface)
+      if (k === 'jarvis' && !falandoAgora() && !J.turno) { mostrarJulio(texto, true); falarLocal('Pois não?'); return; }
+      pararSo(); limparJulio(); return;
     }
-    enviar(texto, { origem: 'voz' });
+    if (FECHAR.test(k)) { fechar(); return; }
+    if (resposta && respostaAcao(resposta, { fj, texto })) return;
+    enviar(texto, { origem: 'voz', jaFiltrada: true });
   }
-  // a fala que interrompeu pode começar com o fim da minha frase (eco): tira o começo que é eco
-  function tirarEcoInicial(texto) {
-    const eco = conjuntoEco(), ps = texto.split(/\s+/);
+  // a fala que interrompeu pode começar com o fim da minha frase (eco): tira o começo que é eco, só no pedaço que veio
+  // até a interrupção (o que veio depois é do Júlio, mesmo repetindo palavras minhas: é o jeito normal de responder)
+  function tirarEcoInicial(texto, eco, nAntes) {
+    const ps = texto.split(/\s+/).filter(Boolean);
+    const lim = Math.min(nAntes, ps.length - 1);
     let i = 0;
-    while (i < ps.length - 2 && eco.has(norm(ps[i]).replace(/[^a-z0-9]/g, ''))) i++;
+    while (i < lim) {
+      const w = palavrasDe(ps[i]).join('');
+      if (!w || eco.has(w) || (conteudo(w) && ehEco(w, eco))) i++; else break;
+    }
     return ps.slice(i).join(' ');
   }
   function mostrarJulio(texto, final, eco = false) {
@@ -1138,11 +1366,13 @@ export function criarJarvis(opts = {}) {
   /* ---------- microfone ---------- */
   function micDisponivel() { return J.disp.voz !== false && ouvido.suportado; }
   async function ligarMic({ temporario = false } = {}) {
-    if (!micDisponivel()) return false;
+    // o microfone só abre com o modo Jarvis aberto (e não saindo): nunca fica ligado fora dele
+    if (!micDisponivel() || !J.aberto || J.saindo) return false;
     J.mic.querLigado = true; J.mic.temporario = temporario; J.mic.erro = null;
     atualizarMic();
     try {
       await ouvido.ligar();
+      if (!J.aberto || J.saindo) { J.mic.querLigado = false; ouvido.pausar(); atualizarMic(); return false; }
       if (!temporario) gravarPref('jarvis-mic', 'ligado');
     } catch (err) {
       J.mic.querLigado = false;
@@ -1207,13 +1437,21 @@ export function criarJarvis(opts = {}) {
     return false;
   }
   async function pttInicio() {
-    if (J.mic.ptt || !micDisponivel()) return;
+    if (J.mic.ptt || !micDisponivel() || !J.aberto || J.saindo) return;
     J.mic.ptt = true;
-    interromper({ motivo: 'tecla' });
-    if (!J.falaJulio) J.falaJulio = novaFalaJulio();
-    J.falaJulio.interrompeu = true;   // o que vier agora é fala nova, não eco
+    J.pttSemResposta = !!J.turno && !J.msgTurno;   // apertou com a pergunta ainda sem nada dito da resposta
+    interromper({ motivo: 'ptt' });
+    // fala nova: o que o microfone ouvia antes (o meu eco pelo alto-falante) não gruda no começo da pergunta
+    const velha = J.falaJulio, nova = novaFalaJulio();
+    nova.ptt = true; nova.interrompeu = true;   // o que vier agora é fala nova, não eco
+    if (velha) {
+      clearTimeout(velha.timer);
+      if (!velha.durante && !velha.naJanela && !velha.descartar) nova.finais = textoFala(velha);   // era o Júlio falando: segue a mesma fala
+      if (velha.parcial) ignorarPrefixo(velha.parcial);   // o trecho em curso do reconhecimento ainda traz o que veio antes
+    }
+    J.falaJulio = nova;
     if (!J.mic.querLigado) {
-      if (lerPref('jarvis-mic-aceito', '0') !== '1' && !SIM_MODO) { J.mic.ptt = false; abrirConsent(); return; }
+      if (lerPref('jarvis-mic-aceito', '0') !== '1' && !SIM_MODO) { J.mic.ptt = false; J.falaJulio = null; abrirConsent(); return; }
       await ligarMic({ temporario: true });
     }
     atualizarMic();
@@ -1222,9 +1460,17 @@ export function criarJarvis(opts = {}) {
     if (!J.mic.ptt) return;
     J.mic.ptt = false;
     atualizarMic();
-    // espera o resultado final chegar (até ~0,6 s) e envia
+    // espera o resultado final chegar (até ~0,6 s) e envia; o final que chegar depois disso é tirado pelo prefixo
     setTimeout(() => {
-      if (J.falaJulio && textoFala(J.falaJulio)) concluirFala(); else J.falaJulio = null;
+      const fj = J.falaJulio;
+      if (fj && textoFala(fj)) concluirFala();
+      else {
+        if (fj && fj.ptt) J.falaJulio = null;
+        // segurou o Espaço com a pergunta sem resposta e não disse nada: era só para parar (a pergunta sai)
+        const ult = J.conversa[J.conversa.length - 1];
+        if (J.pttSemResposta && !J.turno && ult && ult.papel === 'julio') J.conversa.pop();
+      }
+      J.pttSemResposta = false;
       if (J.mic.temporario) pausarMic({ lembrar: false });
     }, 650);
   }
@@ -1232,29 +1478,100 @@ export function criarJarvis(opts = {}) {
   /* ---------- confirmação de ação ---------- */
   const TIPO_ACAO = { enviar_email: 'enviar e-mail' };
   const CAMPO = { de: 'De', para: 'Para', cc: 'Cópia', cco: 'Cópia oculta', assunto: 'Assunto', corpo: 'Texto', em_resposta_a: 'Em resposta a', anexos: 'Anexos', observacao: 'Observação' };
+  const DICA_VOZ = el.confVozTxt ? el.confVozTxt.innerHTML : '';
+  const daLube = (e) => /@lube\.com\.br$/i.test(String(e || '').trim());
+  const listaDe = (v) => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(/[,;]\s*/)).map((x) => String(x).trim()).filter(Boolean);
+  // o rascunho inteiro, sem cortar nada (o texto e os destinatários rolam dentro do cartão): o Júlio confirma o que vê.
+  // Destinatário fora de @lube.com.br vem em vermelho, com o rótulo
+  function detalheAcaoHtml(d) {
+    if (!d) return '';
+    if (typeof d !== 'object') return `<p>${escHtml(String(d))}</p>`;
+    const linhas = Object.entries(d).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length)).map(([k, v]) => {
+      const dd = (k === 'para' || k === 'cc' || k === 'cco')
+        ? listaDe(v).map((e) => (daLube(e) ? `<span class="jv-end">${escHtml(e)}</span>` : `<span class="jv-end" data-fora="1">${escHtml(e)}<em>fora da Lube</em></span>`)).join('')
+        : escHtml(Array.isArray(v) ? v.join(', ') : String(v));
+      return `<div class="jv-cd-${escHtml(k)}"><dt>${escHtml(CAMPO[k] || k.replace(/_/g, ' '))}</dt><dd>${dd}</dd></div>`;
+    });
+    const dest = [...listaDe(d.para), ...listaDe(d.cc), ...listaDe(d.cco)], fora = dest.filter((e) => !daLube(e)).length;
+    const corpo = typeof d.corpo === 'string' ? d.corpo : '';
+    const conta = dest.length
+      ? `<p class="jv-conf-conta">${dest.length} ${dest.length === 1 ? 'destinatário' : 'destinatários'}${fora ? ` · <b>${fora} fora da Lube</b>` : ''}${corpo ? ` · ${corpo.length.toLocaleString('pt-BR')} caracteres no texto` : ''}</p>`
+      : '';
+    return `<dl>${linhas.join('')}</dl>${conta}`;
+  }
+  function dicaAcao(msg) {
+    if (!J.acao || J.decidindo) return;
+    el.confRes.hidden = false; el.confRes.textContent = msg; delete el.confRes.dataset.tom;
+  }
+  function atualizarDicaAcao() {
+    if (!el.confVozTxt) return;
+    el.confVozTxt.innerHTML = J.acao && J.acao.nFalas !== J.nFalas ? 'A conversa seguiu: agora este rascunho só se confirma pelo botão.' : DICA_VOZ;
+  }
   function abrirAcao(a) {
     if (!a || !a.id) return;
-    if (J.acao && J.acao.id !== a.id) { const velha = J.acao; J.cerebro?.decidirAcao(velha.id, 'recusar').catch(() => {}); }
+    const trocou = !!(J.acao && J.acao.id !== a.id);
+    if (trocou) {
+      // só um rascunho por vez: o anterior sai (o servidor já trocou; o aviso dele diz "trocado", não "cancelado")
+      const velha = J.acao; J.cerebro?.decidirAcao(velha.id, 'recusar', 'substituida').catch(() => {});
+      clearTimeout(J.confVoz?.timer); J.confVoz = null;
+    }
     // a ação expira em 5 min (o servidor pode mandar a hora exata em expira_em)
     let resta = 5 * 60000;
     const exp = typeof a.expira_em === 'number' ? a.expira_em : Date.parse(a.expira_em || '');
     if (Number.isFinite(exp)) { const r = exp - Date.now(); if (r > 0 && r <= 10 * 60000) resta = r; }
-    J.acao = { ...a, expira: agora() + resta, total: Math.max(resta, 1) };
+    J.acao = { ...a, expira: agora() + resta, total: Math.max(resta, 1), desde: agora(), nFalas: J.nFalas, trocou };
     J.decidindo = false;
     el.confTipo.textContent = TIPO_ACAO[a.tipo] || String(a.tipo || 'ação').replace(/_/g, ' ');
     el.confTit.textContent = String(a.resumo || 'Ação pendente');
-    const d = a.detalhe;
-    if (d && typeof d === 'object') {
-      el.confDet.innerHTML = `<dl>${Object.entries(d).filter(([, v]) => v != null && v !== '').map(([k, v]) => `<div class="jv-cd-${escHtml(k)}"><dt>${escHtml(CAMPO[k] || k.replace(/_/g, ' '))}</dt><dd>${escHtml((Array.isArray(v) ? v.join(', ') : String(v)).slice(0, 1200))}</dd></div>`).join('')}</dl>`;
-    } else el.confDet.innerHTML = d ? `<p>${escHtml(String(d).slice(0, 1200))}</p>` : '';
-    el.confRes.hidden = true; el.confRes.textContent = '';
-    el.confSim.disabled = false; el.confNao.disabled = false;
+    el.confDet.innerHTML = detalheAcaoHtml(a.detalhe);
+    el.confDet.scrollTop = 0;
+    el.confRes.hidden = !trocou; el.confRes.textContent = trocou ? 'O rascunho mudou: este é o novo. Confira antes de confirmar.' : ''; delete el.confRes.dataset.tom;
+    // rascunho trocado: Confirmar só depois de 1,5 s (ninguém confirma o novo achando que é o velho)
+    el.confSim.disabled = trocou; el.confNao.disabled = false;
+    clearTimeout(J.acaoLibera);
+    if (trocou) J.acaoLibera = setTimeout(() => { if (J.acao && J.acao.id === a.id && !J.decidindo) el.confSim.disabled = false; }, 1500);
+    atualizarDicaAcao();
     el.conf.hidden = false;
     raiz.classList.add('com-acao');
     tocar('confirmacao');
     clearInterval(J.acaoT);
     J.acaoT = setInterval(tickAcao, 250); tickAcao();
     atualizarEstado();
+  }
+  // "pode enviar" / "cancela" valem para o cartão aberto só se: é o mesmo rascunho de quando a fala começou, ninguém
+  // falou outra coisa desde que ele abriu (senão o "sim" é resposta a outra pergunta e vai para o cérebro) e, se o
+  // rascunho acabou de trocar, o novo já está na tela há 1,5 s. Para CONFIRMAR por voz, a fala ainda precisa ter começado com a minha voz calada há
+  // 1,5 s (ou pelo Espaço): o microfone nunca confirma o que o alto-falante disse. Devolve true se tratou a fala.
+  function respostaAcao(dec, { fj = null, texto = '' } = {}) {
+    const a = J.acao;
+    if (!a) return false;
+    if (J.decidindo) return true;
+    if (J.nFalas !== a.nFalas) return false;
+    mostrarJulio(texto, true);
+    if (fj && fj.acaoId !== a.id) { dicaAcao('O rascunho mudou enquanto você falava. Confira e responda de novo.'); return true; }
+    if (a.trocou && agora() - a.desde < 1500) { dicaAcao('O rascunho acabou de mudar. Confira antes de responder.'); return true; }
+    if (dec === 'confirmar' && fj && !fj.ptt && (fj.durante || fj.naJanela) && voz.tipo !== 'relogio') {
+      dicaAcao(fj.durante ? 'Para confirmar, use o botão ou diga de novo quando eu terminar de falar.'
+        : 'Você falou logo depois de mim e não dá para separar da minha voz: diga de novo ou use o botão.');
+      return true;
+    }
+    if (dec === 'confirmar' && fj) { agendarConfirmacao(texto, fj); return true; }
+    decidir(dec);
+    return true;
+  }
+  // por voz, a confirmação espera mais 1,2 s de silêncio ("pode enviar… mas muda o assunto" não envia nada)
+  function agendarConfirmacao(texto, fj) {
+    clearTimeout(J.confVoz?.timer);
+    const id = J.acao.id;
+    dicaAcao('Confirmando…');
+    J.confVoz = {
+      texto, durante: fj.durante, naJanela: fj.naJanela, ptt: fj.ptt,
+      timer: setTimeout(() => {
+        J.confVoz = null;
+        if (J.acao && J.acao.id === id && !J.falaJulio) decidir('confirmar');
+        else if (J.acao && J.acao.id === id) el.confRes.hidden = true;
+      }, 1200)
+    };
   }
   function tickAcao() {
     if (!J.acao) { clearInterval(J.acaoT); return; }
@@ -1263,7 +1580,7 @@ export function criarJarvis(opts = {}) {
     el.confResta.style.strokeDashoffset = String(100 - (resta / (J.acao.total || 5 * 60000)) * 100);
     if (resta <= 0 && !J.decidindo) {
       const id = J.acao.id; fecharAcao();
-      J.cerebro?.decidirAcao(id, 'recusar').catch(() => {});
+      J.cerebro?.decidirAcao(id, 'recusar', 'expirou').catch(() => {});
       falarLocal('O pedido de confirmação expirou. Se ainda quiser, eu preparo de novo.');
     }
   }
@@ -1271,7 +1588,9 @@ export function criarJarvis(opts = {}) {
     const a = J.acao;
     if (!a || J.decidindo || !J.cerebro) return;
     J.decidindo = true;
-    if (falandoAgora()) interromper({ motivo: 'comando', silencioso: true });
+    clearTimeout(J.confVoz?.timer); J.confVoz = null;
+    // a decisão encerra o que eu estava dizendo ou ainda pensando sobre o rascunho
+    if (falandoAgora() || J.turno) interromper({ motivo: 'comando', silencioso: true });
     el.confSim.disabled = true; el.confNao.disabled = true;
     el.confRes.hidden = false; el.confRes.textContent = decisao === 'confirmar' ? 'Enviando…' : 'Cancelando…';
     let r;
@@ -1293,7 +1612,8 @@ export function criarJarvis(opts = {}) {
     setTimeout(() => { if (J.acao === a) fecharAcao(); }, ok ? 1400 : 2600);
   }
   function fecharAcao() {
-    J.acao = null; J.decidindo = false; clearInterval(J.acaoT);
+    J.acao = null; J.decidindo = false; clearInterval(J.acaoT); clearTimeout(J.acaoLibera);
+    clearTimeout(J.confVoz?.timer); J.confVoz = null;
     el.conf.hidden = true; raiz.classList.remove('com-acao');
     atualizarEstado();
   }
@@ -1409,7 +1729,7 @@ export function criarJarvis(opts = {}) {
     }
     if (agora() >= J.rotuloInterrompidoAte) leitura('estado', e === 'pensando' && J.modelo === 'sonnet' ? 'ANÁLISE' : (ESTADO_ROT[e] || e).toUpperCase());
     else leitura('estado', 'INTERROMPIDO');
-    el.parar.hidden = !(e === 'falando' || e === 'pensando');
+    el.parar.hidden = !(falandoAgora() || J.turno);
   }
   // o rótulo do modelo na leitura do HUD: no link o claude.ai escolhe o modelo (nível RÁPIDO / ANÁLISE); no app com o
   // cérebro de teste, TESTE
@@ -1456,10 +1776,12 @@ export function criarJarvis(opts = {}) {
         leiturasMic(n.db);
       }
     } else { hud.nivel(null); if (el.medidor) el.medidor.style.transform = 'scaleX(0)'; }
-    const d = new Date(), hora = `${doisDig(d.getHours())}:${doisDig(d.getMinutes())}:${doisDig(d.getSeconds())}`;
-    if (hora !== J.ultimaHora) {
-      J.ultimaHora = hora;
-      if (raiz.classList.contains('paineis')) { el.leituras.hora.textContent = hora; }
+    const seg = (Date.now() / 1000) | 0;
+    if (seg !== J.ultSeg) {
+      J.ultSeg = seg;
+      const d = new Date(), hora = `${doisDig(d.getHours())}:${doisDig(d.getMinutes())}:${doisDig(d.getSeconds())}`;
+      if (hora !== J.ultimaHora) { J.ultimaHora = hora; if (raiz.classList.contains('paineis')) el.leituras.hora.textContent = hora; }
+      vigiarTurno();
     }
     atualizarEstado();
     J.raf = requestAnimationFrame(laco);
@@ -1474,7 +1796,9 @@ export function criarJarvis(opts = {}) {
   function aoPaineis() {
     raiz.classList.add('paineis');
     const d = new Date(), DIAS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'], MESES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-    if (el.leituras.data) el.leituras.data.textContent = `${DIAS[d.getDay()]} ${doisDig(d.getDate())} ${MESES[d.getMonth()]}`;
+    const dataStr = `${DIAS[d.getDay()]} ${doisDig(d.getDate())} ${MESES[d.getMonth()]}`;
+    // o alvo da digitação fica guardado no próprio elemento: a data entra lá também, senão a 2ª abertura digitava a velha
+    if (el.leituras.data) { el.leituras.data.dataset.txt = dataStr; el.leituras.data.textContent = dataStr; }
     // leituras "digitadas" (25 ms por caractere): só os rótulos; os valores rolam até o valor (classe .rola)
     if (reduzido()) return;
     // o laço da interface (rAF) digita: o mesmo relógio dos anéis, sem timers soltos
@@ -1544,10 +1868,11 @@ export function criarJarvis(opts = {}) {
     // a conversa continua de onde parou; a legenda começa limpa
     F.frases.forEach((f) => f.el.remove()); F.frases = []; F.buffer = ''; F.fechada = true;
     el.lgJarvis.hidden = true; el.lgJulio.hidden = true; el.lgJulio.classList.remove('apagada');
-    J.interrompidoAte = 0; J.rotuloInterrompidoAte = 0; J.modelo = 'haiku'; hud.modelo('haiku'); leitura('modelo', rotuloModelo('haiku'));
+    J.interrompidoAte = 0; J.rotuloInterrompidoAte = 0; J.primeiraFrase = true; J.modelo = 'haiku'; hud.modelo('haiku'); leitura('modelo', rotuloModelo('haiku'));
     el.mudo.setAttribute('aria-pressed', String(J.mudo)); raiz.classList.toggle('mudo', J.mudo);
     el.mudo.setAttribute('aria-label', J.mudo ? 'Ligar o som' : 'Sem som');
     el.sonsChk.checked = J.sons;
+    if (el.foneChk) el.foneChk.checked = J.fone;
     el.vel.value = String(J.rate); el.velV.textContent = J.rate.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     el.tom.value = String(J.pitch); el.tomV.textContent = J.pitch.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     sons.mudo(J.mudo || !J.sons);
@@ -1560,19 +1885,21 @@ export function criarJarvis(opts = {}) {
     const pVozes = esperarVozes(1500);
     if (!J.raf) J.raf = requestAnimationFrame(laco);
     await hud.entrar();
-    if (!J.aberto) return;
+    // Esc, Ctrl+J ou "Sair" durante a entrada: o hud.sair() resolve a entrada, mas J.aberto só vira false no fim da
+    // saída. Nada de cobrir o robô, ligar o microfone ou saudar com o HUD fechando
+    if (!J.aberto || J.saindo) return;
     J.entrando = false;
     try { opts.onCoberto && opts.onCoberto(true); } catch { /* nada */ }
     try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ }
     await pVozes;
-    if (!J.aberto) return;
+    if (!J.aberto || J.saindo) return;
     montarVoz();
     await (J.carregandoCerebro || Promise.resolve());
-    if (!J.aberto) return;
+    if (!J.aberto || J.saindo) return;
     atualizarMic();
     // o reconhecimento só liga depois do "pronto" (~150 ms)
     setTimeout(() => {
-      if (!J.aberto) return;
+      if (!J.aberto || J.saindo) return;
       if (micDisponivel()) {
         if (SIM_MODO || (lerPref('jarvis-mic-aceito', '0') === '1' && lerPref('jarvis-mic', 'ligado') === 'ligado')) ligarMic();
         else if (lerPref('jarvis-mic-aceito', '0') !== '1') abrirConsent();
@@ -1581,6 +1908,7 @@ export function criarJarvis(opts = {}) {
     }, 150);
   }
   function saudar() {
+    if (!J.aberto || J.saindo) return;
     if (!J.disp.ok) { falarLocal(J.disp.motivo || 'Estou sem conexão com o cérebro agora.'); return; }
     if (J.saudou) return;
     J.saudou = true;
@@ -1600,7 +1928,8 @@ export function criarJarvis(opts = {}) {
     voz.parar(); limparFila({ manterDitas: true });
     if (J.turno) { try { J.turno.cancelar(); } catch { /* nada */ } J.turno = null; encerrarFerramentas('interrompido'); }
     J.ger++;
-    if (J.acao) { const id = J.acao.id; fecharAcao(); J.cerebro?.decidirAcao(id, 'recusar').catch(() => {}); }
+    if (J.acao) { const id = J.acao.id; fecharAcao(); J.cerebro?.decidirAcao(id, 'recusar', 'saiu').catch(() => {}); }
+    clearTimeout(J.confVoz?.timer); J.confVoz = null; J.ferrAbertas.clear();
     pausarMic({ lembrar: false });
     fecharConsent(); fecharAjustes();
     J.mic.ptt = false; J.mic.voltar = false;
@@ -1609,6 +1938,10 @@ export function criarJarvis(opts = {}) {
     raiz.classList.remove('pronto', 'paineis'); raiz.classList.add('saindo');
     tocar('sair');
     await hud.sair();
+    // garantia: nada do que a entrada interrompida possa ter ligado continua depois da saída
+    J.mic.querLigado = false; J.mic.ptt = false; J.falaJulio = null;
+    try { ouvido.pausar(); } catch { /* nada */ }
+    voz.parar(); limparFila({ manterDitas: false });
     raiz.hidden = true; raiz.classList.remove('saindo');
     inerte(false);
     J.aberto = false; J.saindo = false; J.entrando = false;
@@ -1665,7 +1998,11 @@ export function criarJarvis(opts = {}) {
   el.mudo.addEventListener('click', alternarMudo);
   el.ajustesBtn.addEventListener('click', () => (el.ajustes.hidden ? abrirAjustes() : fecharAjustes()));
   el.ajustesOk.addEventListener('click', () => { fecharAjustes(); try { el.ajustesBtn.focus({ preventScroll: true }); } catch { /* nada */ } });
-  el.confSim.addEventListener('click', () => decidir('confirmar'));
+  el.confSim.addEventListener('click', (e) => {
+    // o Modo Mãos dispara cliques sintéticos (e.daMao) no que está sob o cursor: envio só com mouse, toque ou teclado
+    if (!e.isTrusted || e.daMao) { dicaAcao('Para confirmar o envio, use o mouse ou o teclado: o gesto das mãos não confirma.'); return; }
+    decidir('confirmar');
+  });
   el.confNao.addEventListener('click', () => decidir('recusar'));
   el.consSim.addEventListener('click', () => { gravarPref('jarvis-mic-aceito', '1'); fecharConsent(); ligarMic(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
   el.consNao.addEventListener('click', () => { gravarPref('jarvis-mic', 'pausado'); fecharConsent(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
@@ -1673,6 +2010,8 @@ export function criarJarvis(opts = {}) {
   el.vel.addEventListener('input', () => { J.rate = Number(el.vel.value) || 1.05; el.velV.textContent = J.rate.toLocaleString('pt-BR', { minimumFractionDigits: 2 }); gravarPref('jarvis-velocidade', String(J.rate)); voz.configurar({ rate: J.rate }); });
   el.tom.addEventListener('input', () => { J.pitch = Number(el.tom.value) || 0.92; el.tomV.textContent = J.pitch.toLocaleString('pt-BR', { minimumFractionDigits: 2 }); gravarPref('jarvis-tom', String(J.pitch)); voz.configurar({ pitch: J.pitch }); });
   el.sonsChk.addEventListener('change', () => { J.sons = el.sonsChk.checked; gravarPref('jarvis-sons', J.sons ? '1' : '0'); sons.mudo(J.mudo || !J.sons); });
+  // de fone não há eco: o filtro sai e uma palavra já interrompe
+  el.foneChk && el.foneChk.addEventListener('change', () => { J.fone = el.foneChk.checked; gravarPref('jarvis-fone', J.fone ? '1' : '0'); avisar(J.fone ? 'De fone: uma palavra já me interrompe.' : 'Sem fone: eu filtro o meu eco do alto-falante.', 2600); });
   // clique fora dos ajustes fecha
   raiz.addEventListener('pointerdown', (e) => { if (!el.ajustes.hidden && !el.ajustes.contains(e.target) && !el.ajustesBtn.contains(e.target)) fecharAjustes(); });
 
@@ -1687,7 +2026,9 @@ export function criarJarvis(opts = {}) {
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); e.stopPropagation(); fechar(); return; }
     if (e.code === 'Space' || e.key === ' ') {
-      if (emCampoTexto(document.activeElement) || !el.consent.hidden || !el.ajustes.hidden) return;
+      // na caixa de texto vazia, o Espaço também é "segure para falar" (o foco fica nela ao abrir e depois de cada envio)
+      const a = document.activeElement, caixaVazia = a === el.entrada && !el.entrada.value.trim() && micDisponivel();
+      if ((emCampoTexto(a) && !caixaVazia && !J.mic.ptt) || !el.consent.hidden || !el.ajustes.hidden) return;
       e.preventDefault(); e.stopPropagation();
       if (!e.repeat) pttInicio();
       return;

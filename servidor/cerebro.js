@@ -16,7 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BASE, DELEGAR, definicoesApi, acharFerramenta, inputDoBloco, executarFerramenta } from './ferramentas/index.js';
 import { promptHaiku, promptSonnet, contextoDaLube } from './prompts.js';
-import { tirarAvisos } from './acoes.js';
+import { tirarAvisos, devolverAvisos } from './acoes.js';
 import {
   limparConversa, linhaContexto, montarMensagens, novoRegistro, fecharRegistro, blocosParaRegistro, resultadosParaRegistro,
 } from './conversa.js';
@@ -48,6 +48,12 @@ function rotuloCom(nome, input) {
     case 'delegar': return i.porque ? `Pensando com mais calma: ${cortar(i.porque, 60)}` : ROTULOS[nome];
     default: return ROTULOS[nome] || nome;
   }
+}
+
+/* O id da aba (janela) que mandou o turno: os desfechos das ações dela só voltam para ela. */
+function abaDe(contexto) {
+  const v = contexto && typeof contexto === 'object' ? contexto.aba : null;
+  return typeof v === 'string' && /^[A-Za-z0-9_-]{6,40}$/.test(v) ? v : null;
 }
 
 export function mensagemErroApi(e) {
@@ -246,14 +252,15 @@ export function criarCerebro({ cfg, vault, banco }) {
     await garantirDecisao();
     const ent = limparConversa(conversa);
     const linhaTela = linhaContexto(contexto);
-    const avisos = tirarAvisos();
+    const aba = abaDe(contexto);
+    const avisos = tirarAvisos(aba);
     const sistemaTurno = [linhaTela, ...(avisos.length ? [`Desde a sua última fala: ${avisos.join(' ')}`] : [])].join('\n');
     const { mensagens: msgs, sistema, atual } = montarMensagens(ent, sistemaTurno);
     const reg = novoRegistro(atual, sistema);
     const t0 = Date.now();
     let primeiraFala = null, nFerramentas = 0, motivo = 'fim';
     const extraFim = {};
-    const ctx = { cfg, vault, banco, emitir, signal, conversa: ent, linhaTela };
+    const ctx = { cfg, vault, banco, emitir, signal, conversa: ent, linhaTela, aba };
     let marcado = null;
     let pendente = null;          // {conteudo, ini} de uma rodada cujas ferramentas ainda não voltaram
     let rodada = null;
@@ -305,7 +312,8 @@ export function criarCerebro({ cfg, vault, banco }) {
         const params = () => ({ model: HAIKU, max_tokens: 4000, output_config: { effort: 'low' }, system: sysHaiku, tools: toolsHaiku, messages: msgs });
         let msg;
         try {
-          msg = await rodarStream(() => client.messages.stream(params(), { signal }), aoEvento, signal);
+          // voz: até 30 s pela resposta (cabeçalhos) e 1 nova tentativa, por pedido; o streaming em si não tem prazo
+          msg = await rodarStream(() => client.messages.stream(params(), { signal, timeout: 30000, maxRetries: 1 }), aoEvento, signal);
         } catch (e) {
           if (buscaHaiku && e instanceof Anthropic.BadRequestError && /web_search|tool/i.test(String(e.message)) && !rodada.temTexto) {
             log('jarvis: a API recusou a pesquisa no Haiku; daqui em diante ele delega');
@@ -356,6 +364,9 @@ export function criarCerebro({ cfg, vault, banco }) {
         break;
       }
     } catch (e) {
+      // cancelado ou com erro antes de dizer qualquer coisa: a interface tira (ou junta) a fala do Júlio, e o registro
+      // deste turno nunca mais é achado; os avisos de desfecho voltam para a fila, para a próxima fala levar
+      if (primeiraFala === null) devolverAvisos(avisos, aba);
       if (signal.aborted || e instanceof Anthropic.APIUserAbortError) {
         motivo = 'cancelado';
         if (pendente) reg.rounds.push({ assistant: blocosParaRegistro(pendente.content, { semFerramentas: true }), resultados: null, ini: pendente.ini, fim: pendente.fim });

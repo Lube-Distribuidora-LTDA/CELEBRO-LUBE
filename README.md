@@ -26,6 +26,7 @@ log ou resposta. Peça vazia = desligada, o resto continua.
 |---|---|
 | `ANTHROPIC_API_KEY` | o Claude (conversa e análise) |
 | `SUPABASE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | DATA WAREHOUSE (os mesmos das ETLs): saúde, consultas, só leitura |
+| `SUPABASE_DB_CA` | opcional: caminho do certificado do Supabase; com ele, o certificado do banco é conferido |
 | `IMAP_HOST`, `_PORT`, `_USER`, `_PASS`, `_PASTA` | ler a caixa `cpd@` (Locaweb, os mesmos nomes do Gestão TI) |
 | `SMTP_HOST`, `_PORT`, `_SECURE`, `_USER`, `_PASS`, `_FROM_NOME` | enviar e-mail (só depois de o Júlio confirmar na tela) |
 | `VAULT_DIR`, `ARQUIVOS_RAIZES` | opcional: pasta do vault e raízes de arquivos (padrão: `OneDrive - Lube\CEREBRO DA LUBE`; `OneDrive - Lube` e `P:\`) |
@@ -44,8 +45,8 @@ a API confirmar o suporte na partida; senão ele delega.
 | `saude_sistemas` | o `saude.painel()` do Guardião, resumido ou de um item | só leitura |
 | `consultar_dados`, `descrever_dados` | SELECT no DATA WAREHOUSE | transação READ ONLY, 15 s, 200 linhas, só `compras, comercial, reposicao, trade, core, saude`; recusa `financeiro`, `auth`, `vault`, `storage`, `cron`, `net`…, escrita e mais de um comando; o `EXPLAIN` confere cada tabela tocada |
 | `listar_emails`, `ler_email` | a caixa `cpd@` | pasta aberta só para leitura (EXAMINE) e `BODY.PEEK`: nada vira "lido"; não usa o `SEARCH` da Locaweb; anexos só listados |
-| `preparar_email` | rascunho → **ação pendente** na tela | só sai com o `POST /api/jarvis/acao/:id` vindo da interface; expira em 5 min; a cópia vai para Enviados |
-| `buscar_arquivos`, `ler_arquivo` | OneDrive da Lube e `P:\` | só leitura; nunca ENV, `.env`, `*.cred`, `*.key`, nomes com senha/token, `.git`, `node_modules`; nada da folha/RH; texto de txt, md, csv, json, docx, xlsx, pptx, odt, ods e pdf |
+| `preparar_email` | rascunho → **ação pendente** na tela | só sai com o `POST /api/jarvis/acao/:id` vindo da interface; um rascunho por vez (o novo troca o velho); expira em 5 min; a cópia vai para Enviados |
+| `buscar_arquivos`, `ler_arquivo` | OneDrive da Lube e `P:\` | só leitura; nunca ENV, `.env`, `*.cred`, `*.key`, nomes com senha/token, configuração e script (ini, bat, ps1, py, sql…), `.git`, `node_modules`; nada da folha/RH; senha e token mascarados no texto; texto de txt, md, csv, json, docx, xlsx, pptx, odt, ods e pdf |
 | `mostrar_na_tela` | cartão no HUD: destaque, lista, tabela, barras, nota, email, rotina | só exibe |
 | `delegar` | Haiku → Sonnet 5.5 | — |
 

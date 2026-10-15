@@ -276,8 +276,34 @@ export function criarSaude({ onDados, onEstado } = {}) {
     avisar('ok', { origem });
   }
 
+  /* --- app do computador (servidor/ com a meta cerebro-token): api/saude é o próprio app, não um arquivo de teste.
+     Erro dele (banco fora, leitura lenta) não vira "arquivo baixado pedindo chave": tenta de novo no minuto seguinte.
+     Só o 503 "sem-banco" (o ENV deste computador não tem o banco) segue para o Guardião, com a chave. --- */
+  async function lerApp() {
+    const pz = prazo(20000);   // o servidor espera até 15 s pela conexão do banco
+    let r;
+    try { r = await fetch('api/saude', { cache: 'no-store', signal: pz.signal }); }
+    catch (_) { pz.fim(); falhar('erro', { motivo: 'O app do cérebro não respondeu à leitura da saúde. Tento de novo no próximo minuto.' }); return; }
+    pz.fim();
+    let j = null;
+    try { j = await r.json(); } catch (_) { j = null; }
+    if (r.status === 503 && j && j.erro === 'sem-banco') { usarTeste = false; await lerGuardiao(); return; }
+    if (!r.ok) {
+      const m = j && typeof j.mensagem === 'string' ? j.mensagem.replace(/\.?$/, '.') : `Não consegui ler a saúde agora (código ${r.status}).`;
+      usarTeste = true;
+      falhar('erro', { motivo: `${m} Tento de novo no próximo minuto.` });
+      return;
+    }
+    const p = normalizar(j);
+    if (!p) { falhar('formato'); return; }
+    usarTeste = true;
+    sucesso(p, 'teste');
+  }
+  const appLocal = () => { try { return !!document.querySelector('meta[name="cerebro-token"]'); } catch (_) { return false; } };
+
   async function rodada() {
     if (modo === 'artifact') { await lerMcp(); return; }
+    if (modo === 'local' && appLocal() && usarTeste !== false) { await lerApp(); return; }
     if (modo === 'local' && usarTeste !== false) {
       const ok = await lerTeste();
       if (ok) { usarTeste = true; return; }

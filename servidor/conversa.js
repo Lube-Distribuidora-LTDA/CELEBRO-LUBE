@@ -12,6 +12,7 @@
    - a hora e o que está na tela vão numa mensagem de sistema curta logo depois da fala do Júlio — nunca no system do
      topo (cache) e nunca misturados com as palavras dele. */
 import { ErroFerramenta, agoraPorExtenso, cortar, norm } from './util.js';
+import { limparFala } from '../web/js/fala.js';
 
 export const NOTA_INTERROMPIDO = 'O Júlio interrompeu sua última fala nesse ponto; ele não ouviu o resto.';
 export const NOTA_INTERROMPIDO_MUDO = 'O Júlio interrompeu antes de você dizer qualquer coisa; ele não ouviu nada da resposta anterior.';
@@ -108,13 +109,36 @@ function comprimentosNormalizados(s) {
   return cum;
 }
 
+/* A fala interrompida chega como a interface a falou: limpa (sem markdown, sem [[ ]], URL trocada por "o link"; o
+   mesmo limparFala de web/js/fala.js). A resposta completa chega como o Claude escreveu. */
+const limpoNorm = s => norm(limparFala(s));
+
+/* Onde, no texto bruto, termina o que foi dito. Sem nada para limpar, pelos comprimentos normalizados; com markdown
+   ou [[ ]], percorrendo o texto bruto palavra a palavra até a versão limpa dele cobrir o que foi dito. */
+function pontoDoCorte(bruto, dito) {
+  const raw = String(bruto || '');
+  if (limpoNorm(raw) === norm(raw)) {
+    const alvo = norm(dito).length, cum = comprimentosNormalizados(raw);
+    for (let k = 0; k <= raw.length; k++) if (cum[k] >= alvo) return k;
+    return raw.length;
+  }
+  const alvo = limpoNorm(dito).length;
+  for (let k = 1; k <= raw.length; k++) {
+    if (k < raw.length && !/\s/.test(raw[k])) continue;   // só nos fins de palavra
+    if (limpoNorm(raw.slice(0, k)).length >= alvo) return k;
+  }
+  return raw.length;
+}
+
 function acharRegistro(julio, jarvis) {
-  const jn = norm(julio.texto), tn = norm(jarvis.texto);
+  const jn = norm(julio.texto), tn = norm(jarvis.texto), tl = jarvis.interrompido ? limpoNorm(jarvis.texto) : '';
   for (let i = registros.length - 1; i >= 0; i--) {
     const r = registros[i];
     if (r.julioNorm !== jn) continue;
     if (r.totalNorm === tn && !jarvis.interrompido) return { r, completo: true };
-    if (jarvis.interrompido && tn && r.totalNorm.startsWith(tn)) return { r, completo: r.totalNorm === tn };
+    if (jarvis.interrompido && tn && (r.totalNorm.startsWith(tn) || (r.limpoNorm ?? limpoNorm(r.textoTotal)).startsWith(tl))) {
+      return { r, completo: r.totalNorm === tn || (r.limpoNorm ?? limpoNorm(r.textoTotal)) === tl };
+    }
     if (jarvis.interrompido && !tn) return { r, completo: false };
   }
   return null;
@@ -136,10 +160,7 @@ function mensagensDoJarvis(jarvis, achado) {
     return out;
   }
   // interrompido: as rodadas de ferramenta ditas por inteiro antes do corte, e o pedaço dito da seguinte
-  const alvo = norm(jarvis.texto).length;
-  const cum = comprimentosNormalizados(r.textoTotal);
-  let L = r.textoTotal.length;
-  for (let k = 0; k <= r.textoTotal.length; k++) if (cum[k] >= alvo) { L = k; break; }
+  const L = pontoDoCorte(r.textoTotal, jarvis.texto);
   let pos = 0;
   for (const rd of r.rounds) {
     const temFerramenta = rd.resultados && rd.assistant.some(b => b.type === 'tool_use');
@@ -195,5 +216,6 @@ export function novoRegistro(atual, sistema) {
 }
 export function fecharRegistro(reg) {
   reg.totalNorm = norm(reg.textoTotal);
+  reg.limpoNorm = limpoNorm(reg.textoTotal);
   if (reg.rounds.length || reg.textoTotal) guardarRegistro(reg);
 }
