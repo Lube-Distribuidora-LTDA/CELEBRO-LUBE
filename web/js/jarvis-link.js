@@ -130,6 +130,8 @@ const SEM_MCP = new Set(['not_granted', 'capability_disabled', 'capability_remov
 const seguro = (fn, padrao) => { try { const v = fn(); return v === undefined ? padrao : v; } catch (_) { return padrao; } };
 const N = (s) => seguro(() => D.norm(String(s ?? '')), String(s ?? '').toLowerCase());
 const texto = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+// trecho da busca do SharePoint: <c0>…</c0> marca o termo achado e <ddd/> o corte (visto numa chamada real, 2026-10-15)
+const trechoBusca = (v, max) => texto(String(v ?? '').replace(/<ddd\s*\/>/gi, ' … ').replace(/<\/?c\d+>/gi, ''), max).replace(/^…\s*|\s*…$/g, '');
 const esperar = (ms, sinal) => new Promise((res) => {
   const t = setTimeout(res, ms);
   sinal?.addEventListener?.('abort', () => { clearTimeout(t); res(); }, { once: true });
@@ -703,7 +705,7 @@ export function criarCerebroLink(opts = {}) {
             alterado_em: quandoSP(pega(x, 'lastModifiedDateTime', 'lastModified', 'modified')),
             autor: pessoa(x, 'lastModifiedBy', 'author', 'createdBy'),
             pasta: texto(pega(x, 'parentPath', 'path', 'parentReference.path'), 160) || undefined,
-            trecho: texto(pega(x, 'summary', 'snippet', 'hitHighlightedSummary', 'preview'), 240) || undefined,
+            trecho: trechoBusca(pega(x, 'summary', 'content', 'snippet', 'hitHighlightedSummary', 'preview'), 240) || undefined,
           }));
           return semUndef({
             total: Number.isFinite(Number(pagina.totalResultCount)) ? Number(pagina.totalResultCount) : undefined,
