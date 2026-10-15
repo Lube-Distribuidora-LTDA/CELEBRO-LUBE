@@ -1644,7 +1644,8 @@ export function iniciarUI(opts = {}) {
     el.saude.style.setProperty('--c', g ? stSaude(g.status).cor : 'var(--holo)');
     if (el.sSelos) {
       const selos = ['<span class="selo selo-tipo">Guardião · Saúde</span>'];
-      if (saudeInfo.modo === 'teste') selos.push('<span class="selo selo-aviso">Teste local · api/saude</span>');
+      // em localhost o api/saude é o app do computador (servidor/, lê o banco de verdade) ou um arquivo de teste
+      if (saudeInfo.modo === 'teste') selos.push(document.querySelector('meta[name="cerebro-token"]') ? '<span class="selo">App do computador · banco</span>' : '<span class="selo selo-aviso">Teste local · api/saude</span>');
       if (d && leituraParada()) selos.push(`<span class="selo selo-aviso">Sem atualizar desde ${esc(lidoAs())}</span>`);
       else if (d && saudeVelha()) selos.push('<span class="selo selo-alerta">Verificação atrasada</span>');
       el.sSelos.innerHTML = selos.join('');

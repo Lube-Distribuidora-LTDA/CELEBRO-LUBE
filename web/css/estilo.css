@@ -1112,3 +1112,378 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 @media (max-width:399px){
   .s-resumo{grid-template-columns:repeat(2, minmax(0, 1fr))}
 }
+
+/* ===== Jarvis ===== */
+/* Modo Jarvis (JARVIS.md §3 e §7): o HUD em tela cheia por cima do painel (o js/jarvis-hud.js desenha os anéis no canvas;
+   aqui ficam o véu e o fundo da transição, as leituras dos cantos, a barra de cima, os painéis Atividade e Exibição, a
+   legenda viva, a caixa de texto com o microfone, o cartão de confirmação, os ajustes e o aviso do microfone).
+   O JS escreve --jv-cx, --jv-cy e --jv-r (centro e raio R do HUD, em px) na raiz. Cores só de token. */
+
+/* ---------- Botão da barra de cima ---------- */
+#jarvisBtn{position:relative}
+#jarvisBtn svg{flex:none}
+.btn#jarvisBtn[aria-pressed="true"]{border-color:var(--holo); background:var(--holo-fraco); color:var(--holo); box-shadow:0 0 0 1px var(--holo-medio), 0 0 22px var(--holo-fraco)}
+#jarvisBtn[data-estado="carregando"] svg{animation:jvGira 1.1s linear infinite}
+.btn#jarvisBtn.mao-hover:not(:disabled){border-color:var(--holo); background:var(--surface-2)}
+:root{--topo-w:1000px}
+@media (max-width:1279px){ :root{--topo-w:890px} }
+@media (max-width:1099px){
+  :root{--topo-w:768px}
+  .rot-jarvis{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+  #jarvisBtn{width:40px; padding:0}
+}
+@media (min-width:760px) and (max-width:959px){ :root{--topo-w:548px} }
+@media (max-width:759px){ .marca{max-width:calc(100% - 296px)} }
+/* celular estreito: o botão vai para a 2ª linha, entre o chip da saúde e a busca (a marca continua inteira) */
+@media (max-width:559px){ #jarvisBtn{order:3; margin-top:8px} }
+
+/* durante o modo, a barra, o trilho, os painéis e as legendas do painel saem de cena (o robô fica para o mergulho) */
+.app.com-jarvis > :not(#jarvis):not(#palco):not(#aneis):not(.maos-fx){opacity:0!important; transition:opacity .3s ease}
+
+/* ---------- Raiz, véu, fundo, canvas, grão ---------- */
+.jarvis{--jv-cx:50%; --jv-cy:46%; --jv-r:240px; --jv-pe:300px; --jv-pd:340px; --jv-topo:78px; --jv-pe-alt:236px;
+  --jv-tinta:color-mix(in srgb, var(--holo) 72%, var(--ink));
+  position:absolute; inset:0; z-index:36; overflow:hidden; isolation:isolate; color:var(--ink)}
+.jv-veu{position:absolute; inset:0; z-index:0; background:var(--veu); opacity:0; pointer-events:none}
+.jv-fundo{position:absolute; inset:0; z-index:0; opacity:0; pointer-events:none;
+  background:
+    radial-gradient(circle at var(--jv-cx) var(--jv-cy), color-mix(in srgb, var(--azul) 26%, transparent) 0, transparent calc(var(--jv-r) * 1.25)),
+    radial-gradient(ellipse 70% 60% at var(--jv-cx) var(--jv-cy), var(--brilho-azul), transparent 75%),
+    radial-gradient(circle, var(--grade) 1px, transparent 1.3px) 0 0/26px 26px,
+    var(--bg)}
+.jv-cena{position:absolute; inset:0; z-index:1; pointer-events:none; transform-origin:var(--jv-cx) var(--jv-cy); will-change:transform}
+.jv-canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+/* grão a 3%, linhas de varredura de 2 px a 4% e vinheta (o ruído é gerado uma vez pelo HUD, em data: URI) */
+.jv-grao{position:absolute; inset:0; z-index:2; opacity:0; pointer-events:none;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 2px, color-mix(in srgb, var(--holo) 4%, transparent) 2px 4px),
+    radial-gradient(ellipse 75% 70% at var(--jv-cx) var(--jv-cy), transparent 55%, color-mix(in srgb, var(--bg) 82%, transparent) 100%)}
+.jv-grao::after{content:""; position:absolute; inset:0; background-image:var(--jv-ruido, none); background-size:140px 140px; opacity:.035; mix-blend-mode:screen}
+/* moldura da tela: os mesmos colchetes .canto do leitor, maiores */
+.jv-moldura{position:absolute; inset:12px; z-index:3; pointer-events:none; opacity:0; transition:opacity .3s}
+.jv-moldura .canto{width:30px; height:30px; border-width:2px}
+.jarvis.paineis .jv-moldura{opacity:1}
+
+/* núcleo do HUD como botão: segurar = falar (o desenho é do canvas; aqui só a área de toque e o foco) */
+.jv-nucleo{position:absolute; z-index:4; left:var(--jv-cx); top:var(--jv-cy); width:calc(var(--jv-r) * .4); height:calc(var(--jv-r) * .4); translate:-50% -50%;
+  padding:0; border:0; border-radius:50%; background:none; cursor:pointer; touch-action:none; -webkit-tap-highlight-color:transparent}
+.jv-nucleo:focus-visible{outline:2px solid var(--holo); outline-offset:6px}
+.jv-nucleo.segurando{box-shadow:0 0 0 2px var(--vermelho), 0 0 40px var(--vermelho-fraco)}
+.jarvis:not(.pronto) .jv-nucleo,.jarvis[data-estado="confirmando"] .jv-nucleo{pointer-events:none}
+
+/* ---------- Leituras dos cantos do HUD (mono, caixa alta) ---------- */
+.jv-leituras{position:absolute; inset:0; z-index:3; pointer-events:none; opacity:0; will-change:transform}
+.jv-l{position:absolute; margin:0; display:grid; gap:4px; font:600 10.5px/1.2 var(--mono); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; text-shadow:0 0 6px var(--bg)}
+.jv-l i{font-style:normal}
+.jv-l b{color:var(--jv-tinta); font-weight:800; display:inline-block}
+.jv-l b.rola{animation:jvRola .2s cubic-bezier(.2,.8,.2,1)}
+.jv-l::before{content:""; position:absolute; width:9px; height:9px; border:1.5px solid var(--holo-medio)}
+.jv-l-se{left:calc(var(--jv-cx) - var(--jv-r) * .95); top:calc(var(--jv-cy) - var(--jv-r) * .95)}
+.jv-l-sd{right:calc(100% - var(--jv-cx) - var(--jv-r) * .95); top:calc(var(--jv-cy) - var(--jv-r) * .95); text-align:right; justify-items:end}
+.jv-l-ie{left:calc(var(--jv-cx) - var(--jv-r) * .95); bottom:calc(100% - var(--jv-cy) - var(--jv-r) * .95)}
+.jv-l-id{right:calc(100% - var(--jv-cx) - var(--jv-r) * .95); bottom:calc(100% - var(--jv-cy) - var(--jv-r) * .95); text-align:right; justify-items:end}
+.jv-l-se::before{left:-15px; top:-9px; border-right:0; border-bottom:0}
+.jv-l-sd::before{right:-15px; top:-9px; border-left:0; border-bottom:0}
+.jv-l-ie::before{left:-15px; bottom:-9px; border-right:0; border-top:0}
+.jv-l-id::before{right:-15px; bottom:-9px; border-left:0; border-top:0}
+.jv-l-se span:first-child{color:var(--ink); letter-spacing:.18em}
+.jarvis[data-estado="confirmando"] .jv-l-sd b[data-l="estado"]{color:var(--vermelho)}
+.jarvis[data-estado="sem-conexao"] .jv-l b{color:var(--muted)}
+
+/* ---------- Entrada e saída das peças (a coreografia do canvas está no js/jarvis-hud.js) ---------- */
+.jv-topo,.jv-atividade,.jv-exibicao{opacity:0; transform:translateY(12px); transition:opacity .3s cubic-bezier(.2,.8,.2,1), transform .3s cubic-bezier(.2,.8,.2,1)}
+.jv-pe{opacity:0; transition:opacity .25s cubic-bezier(.2,.8,.2,1)}
+.jarvis.paineis .jv-topo,.jarvis.paineis .jv-atividade,.jarvis.paineis .jv-exibicao{opacity:1; transform:none}
+.jarvis.paineis .jv-exibicao{transition-delay:.06s}
+.jarvis.pronto .jv-pe{opacity:1}
+.jarvis.saindo .jv-topo,.jarvis.saindo .jv-atividade,.jarvis.saindo .jv-exibicao,.jarvis.saindo .jv-pe,.jarvis.saindo .jv-confirma,.jarvis.saindo .jv-sim{opacity:0; transition-duration:.18s}
+.jarvis:not(.pronto) .jv-pe,.jarvis:not(.paineis) .jv-topo{pointer-events:none}
+
+/* ---------- Barra de cima ---------- */
+.jv-topo{position:absolute; z-index:6; top:calc(var(--g) - 4px); left:var(--g); right:var(--g); display:flex; align-items:center; justify-content:space-between; gap:12px}
+.jv-marca{display:flex; align-items:center; gap:12px; min-width:0}
+.jv-marca .logo{width:36px; height:27px}
+.jv-marca h2{margin:0; font:800 23px/1 var(--display); letter-spacing:-.01em; white-space:nowrap}
+.jv-marca h2 span{color:var(--holo); font-weight:700}
+.jv-chip{--c:var(--holo); margin:0; display:inline-flex; align-items:center; gap:8px; height:26px; padding:0 11px 0 10px; border:1px solid var(--line-forte);
+  border-color:color-mix(in srgb, var(--c) 45%, var(--line)); border-radius:999px; background:var(--vidro);
+  font:600 10.5px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--c); color:color-mix(in srgb, var(--c) 80%, var(--branco)); white-space:nowrap}
+.jv-chip i{width:7px; height:7px; border-radius:50%; background:var(--c); box-shadow:0 0 8px var(--c)}
+.jv-chip[data-estado="ouvindo"] i,.jv-chip[data-estado="pensando"] i{animation:pulsoPt 1.4s ease-out infinite}
+.jv-chip[data-estado="falando"]{--c:var(--branco)}
+.jv-chip[data-estado="confirmando"]{--c:var(--vermelho)}
+.jv-chip[data-estado="confirmando"] i{animation:pulsoPt 1s ease-out infinite}
+.jv-chip[data-estado="interrompido"]{--c:var(--rever)}
+.jv-chip[data-estado="sem-conexao"]{--c:var(--muted)}
+.jv-botoes{display:flex; align-items:center; gap:8px}
+.jv-sair{gap:9px; padding:0 12px 0 11px}
+.jv-sair kbd{margin:0}
+.jv-mudo .so-mudo{display:none}
+.jarvis.mudo .jv-mudo .so-som{display:none}
+.jarvis.mudo .jv-mudo .so-mudo{display:inline}
+.jarvis.mudo .jv-mudo{border-color:var(--rever); color:var(--rever)}
+.jv-ajustes-btn[aria-expanded="true"]{border-color:var(--holo); background:var(--holo-fraco)}
+
+/* ---------- Painéis Atividade (esquerda) e Exibição (direita) ---------- */
+.jv-atividade,.jv-exibicao{position:absolute; z-index:5; top:var(--jv-topo); max-height:calc(100% - var(--jv-topo) - var(--jv-pe-alt) - 16px); display:flex; flex-direction:column; gap:10px; min-height:0}
+.jv-atividade{left:var(--g); width:var(--jv-pe)}
+.jv-exibicao{right:var(--g); width:var(--jv-pd)}
+.jv-atividade h3,.jv-exibicao h3{display:flex; align-items:center; gap:8px; padding-left:2px}
+.jv-atividade h3::before,.jv-exibicao h3::before{content:""; width:14px; height:1px; background:var(--holo)}
+.jv-at-qt:empty{display:none}
+.jv-vazio{margin:0; padding:10px 12px; max-width:34ch; border:1px dashed var(--line); border-radius:3px; font:500 12.5px/1.5 var(--body); color:var(--muted)}
+.jarvis.com-atividade .jv-at-vazio,.jarvis.com-cartoes .jv-ex-vazio{display:none}
+.jv-at-lista{list-style:none; margin:0; padding:0; display:grid; gap:6px; min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line-forte) transparent}
+.jv-at{--c:var(--holo); position:relative; display:grid; grid-template-columns:18px minmax(0,1fr) auto; gap:10px; align-items:start; padding:9px 11px 10px 10px;
+  background:var(--vidro-forte); border:1px solid var(--line-forte); border-color:color-mix(in srgb, var(--c) 34%, var(--line)); border-radius:3px;
+  box-shadow:0 10px 26px var(--sombra), inset 2px 0 0 var(--c); animation:jvEntraAt .32s cubic-bezier(.2,.8,.2,1) both}
+.jv-at[data-estado="fim"]{--c:var(--ok)}
+.jv-at[data-estado="erro"]{--c:var(--alerta)}
+.jv-at.pisca{animation:jvPiscaAt .26s steps(1) 2}
+.jv-at-ico{width:16px; height:16px; margin-top:1px; border-radius:50%; border:2px solid color-mix(in srgb, var(--c) 30%, transparent); border-top-color:var(--c); animation:jvGira .8s linear infinite}
+.jv-at[data-estado="fim"] .jv-at-ico{animation:none; border:0; background:var(--c); -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.1 3L13 4.6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.1 3L13 4.6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+.jv-at[data-estado="erro"] .jv-at-ico{animation:none; border-color:var(--c)}
+.jv-at[data-estado="parado"]{--c:var(--muted)}
+.jv-at[data-estado="parado"] .jv-at-ico{animation:none; border-color:var(--c); border-style:dashed}
+.jv-at[data-estado="parado"] .jv-at-txt span{color:var(--muted)}
+.jv-at-txt{min-width:0; display:grid; gap:3px}
+.jv-at-txt b{font:700 10.5px/1.3 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--c); color:color-mix(in srgb, var(--c) 78%, var(--branco)); overflow-wrap:anywhere}
+.jv-at-txt span{font:500 12.5px/1.4 var(--body); color:var(--ink); overflow-wrap:anywhere}
+.jv-at-txt span:empty{display:none}
+.jv-at time{font:600 10px/1.6 var(--mono); color:var(--muted); font-variant-numeric:tabular-nums}
+
+/* cada cartão fica com a altura inteira (o cartão tem overflow:hidden e, sem max-content, a grade espremia todos para
+   caber: a tabela mostrava uma linha só); quando não cabem, a coluna rola, e o cartão novo entra no topo */
+.jv-cartoes{display:grid; grid-auto-rows:max-content; align-content:start; gap:10px; min-height:0; overflow:auto; padding:2px 2px 6px; margin:-2px; scrollbar-width:thin; scrollbar-color:var(--line-forte) transparent}
+.jv-cartao{position:relative; display:grid; gap:7px; padding:13px 15px 14px; background:var(--vidro-forte); border:1px solid var(--line-forte); border-radius:3px;
+  box-shadow:0 18px 44px var(--sombra), 0 0 0 1px var(--holo-tenue), 0 0 34px var(--holo-tenue); overflow:hidden}
+.jv-cartao::after{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, var(--holo-tenue) 0 1px, transparent 1px 4px); opacity:.6}
+.jv-cartao .canto{width:12px; height:12px; border-width:1.5px}
+.jv-cartao > :not(.canto){position:relative; z-index:1; margin:0}
+.jv-cartao:nth-child(n+3){opacity:.72}
+.jv-c-tit{font:700 15.5px/1.3 var(--display); color:var(--ink); overflow-wrap:anywhere; text-wrap:balance}
+.jv-c-valor{font:800 38px/1 var(--mono); color:var(--branco); font-variant-numeric:tabular-nums; letter-spacing:-.01em; text-shadow:0 0 18px var(--holo-medio), 0 0 2px var(--holo)}
+.jv-c-det{font:500 13px/1.5 var(--body); color:var(--muted); overflow-wrap:anywhere}
+.jv-c-trecho{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden}
+.jv-c-de{font:600 11.5px/1.4 var(--mono); color:var(--jv-tinta); overflow-wrap:anywhere}
+.jv-c-abre{font:600 10.5px/1.3 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--holo)}
+.jv-c-lista{list-style:none; margin:0; padding:0; display:grid; gap:5px}
+.jv-c-lista li{position:relative; padding-left:16px; font:500 13px/1.45 var(--body); overflow-wrap:anywhere}
+.jv-c-lista li::before{content:""; position:absolute; left:2px; top:.62em; width:6px; height:6px; border:1.5px solid var(--holo); transform:rotate(45deg)}
+.jv-c-tbl{max-width:100%; overflow-x:auto; border:1px solid var(--line); border-radius:3px; scrollbar-width:thin}
+.jv-c-tbl table{border-collapse:collapse; width:100%; font:600 12px/1.35 var(--mono); font-variant-numeric:tabular-nums}
+.jv-c-tbl th{padding:6px 9px; text-align:left; white-space:nowrap; background:var(--surface); border-bottom:1px solid var(--line-forte); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+.jv-c-tbl td{padding:5px 9px; border-bottom:1px solid var(--line); white-space:nowrap; color:var(--ink)}
+.jv-c-tbl tr:last-child td{border-bottom:0}
+.jv-c-barras{list-style:none; margin:0; padding:0; display:grid; gap:6px}
+.jv-c-barras li{display:grid; grid-template-columns:minmax(0, 7.5em) minmax(0,1fr) auto; gap:9px; align-items:center; font:600 11.5px/1.2 var(--mono); font-variant-numeric:tabular-nums}
+.jv-b-rot{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted)}
+.jv-b-barra{position:relative; height:8px; border-radius:1px; background:var(--holo-tenue); overflow:hidden}
+.jv-b-barra i{position:absolute; left:0; top:0; bottom:0; width:calc(var(--v, 0) * 100%); background:linear-gradient(90deg, var(--azul), var(--holo)); box-shadow:0 0 10px var(--holo-medio); animation:jvBarra .6s cubic-bezier(.2,.8,.2,1) both}
+.jv-c-barras b{color:var(--ink); font-weight:800}
+.jv-c-saude{--c:var(--muted); display:flex; align-items:center; gap:7px; font:600 11.5px/1.35 var(--mono); color:var(--ink)}
+.jv-c-saude i{flex:none; width:7px; height:7px; border-radius:50%; background:var(--c); box-shadow:0 0 8px var(--c)}
+.jv-c-saude[data-st="ok"]{--c:var(--ok)} .jv-c-saude[data-st="atencao"]{--c:var(--rever)} .jv-c-saude[data-st="falha"]{--c:var(--alerta)}
+.jv-c-funil{list-style:none; margin:0; padding:0 0 0 12px; display:grid; gap:4px; border-left:1px solid var(--holo-medio)}
+.jv-c-funil li{position:relative; font:500 12px/1.4 var(--body); color:var(--ink); overflow-wrap:anywhere}
+.jv-c-funil li::before{content:""; position:absolute; left:-16px; top:.5em; width:7px; height:7px; border-radius:50%; background:var(--bg); border:1.5px solid var(--holo)}
+.jv-c-funil b{font:700 9.5px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--holo); margin-right:4px}
+.jv-c-funil li[data-tipo="avisa"] b{color:var(--vermelho)} .jv-c-funil li[data-tipo="confere"] b{color:var(--ok)} .jv-c-funil li[data-tipo="pessoa"] b{color:var(--rever)} .jv-c-funil li[data-tipo="processa"] b{color:var(--violeta)} .jv-c-funil li[data-tipo="le"] b{color:var(--novo)}
+
+/* ---------- Confirmação de ação: o cartão fica por cima do núcleo; Confirmar é o botão vermelho ---------- */
+.jv-confirma{position:absolute; z-index:8; left:var(--jv-cx); top:var(--jv-cy); translate:-50% -50%; width:min(460px, calc(100% - var(--g) * 2)); max-height:calc(100% - 40px); overflow:auto;
+  display:grid; gap:11px; padding:20px 22px 18px; background:var(--vidro-forte); border:1px solid var(--vermelho); border-radius:3px;
+  box-shadow:0 30px 90px var(--sombra), 0 0 0 1px var(--vermelho-fraco), 0 0 60px var(--vermelho-fraco); animation:jvConfirma .36s cubic-bezier(.2,.8,.2,1) both}
+.jv-confirma .canto{width:16px; height:16px; border-color:var(--vermelho); filter:drop-shadow(0 0 5px var(--vermelho-fraco))}
+.jv-confirma > p,.jv-confirma > h3{margin:0}
+.jv-conf-rot{color:var(--vermelho); color:color-mix(in srgb, var(--vermelho) 70%, var(--branco)); padding-right:56px}
+.jv-conf-rot b{color:inherit}
+.jv-conf-tit{font:800 19px/1.3 var(--display); text-wrap:balance; overflow-wrap:anywhere; padding-right:52px}
+.jv-conf-arco{position:absolute; top:14px; right:16px; width:44px; height:44px; transform:rotate(-90deg)}
+.jv-conf-trilha{fill:none; stroke:var(--vermelho-fraco); stroke-width:4}
+.jv-conf-resta{fill:none; stroke:var(--vermelho); stroke-width:4; stroke-dasharray:100; stroke-dashoffset:0; filter:drop-shadow(0 0 3px var(--vermelho)); transition:stroke-dashoffset .25s linear}
+.jv-conf-detalhe dl{margin:0; display:grid; gap:6px}
+.jv-conf-detalhe dl > div{display:grid; grid-template-columns:7.2em minmax(0,1fr); gap:10px; padding:6px 10px; background:var(--surface); border:1px solid var(--line); border-radius:3px}
+.jv-conf-detalhe dt{font:600 10px/1.6 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+.jv-conf-detalhe dd{margin:0; font:500 13.5px/1.5 var(--body); color:var(--ink); overflow-wrap:anywhere; white-space:pre-line}
+.jv-cd-corpo dd{max-height:9.2em; overflow:auto}
+.jv-conf-detalhe p{margin:0; font-size:13.5px; line-height:1.55}
+.jv-conf-voz{font:500 12.5px/1.5 var(--body); color:var(--muted)}
+.jv-conf-voz b{color:var(--ink); font-weight:600}
+.jv-conf-tempo{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.jv-conf-res{padding:8px 12px; border:1px solid var(--line-forte); border-radius:3px; font:600 12.5px/1.45 var(--mono); color:var(--ink)}
+.jv-conf-res[data-tom="ok"]{border-color:var(--ok); color:var(--ok); background:var(--ok-fraco)}
+.jv-conf-res[data-tom="alerta"]{border-color:var(--alerta); color:var(--alerta); background:var(--alerta-fraco)}
+.jv-confirma .acoes{justify-content:flex-end; margin-top:4px}
+.jv-confirma .acoes .btn{min-width:120px}
+
+/* ---------- Pé: contexto, legenda viva, caixa de texto e microfone ---------- */
+.jv-pe{position:absolute; z-index:6; left:var(--jv-cx); bottom:var(--g); translate:-50% 0; width:min(780px, calc(100% - var(--jv-pe) - var(--jv-pd) - var(--g) * 4)); min-width:min(520px, calc(100% - var(--g) * 2));
+  display:grid; gap:8px}
+/* o que está na tela (nota no leitor, rotina no funil, departamento): fica na barra de cima, no meio, para não brigar
+   com a legenda e as leituras do HUD; o nome longo termina em reticências */
+.jv-contexto{flex:0 1 auto; min-width:0; max-width:min(620px, 44%); margin:0 auto; padding:4px 12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  border:1px solid var(--line); border-radius:999px; background:var(--vidro);
+  font:600 10.5px/1.4 var(--mono); color:var(--muted); letter-spacing:.06em}
+.jv-contexto i{display:inline-block; vertical-align:1px; width:6px; height:6px; margin-right:8px; border-radius:50%; background:var(--holo); box-shadow:0 0 6px var(--holo)}
+.jv-contexto b{color:var(--ink); font-weight:600}
+.jv-contexto em{font-style:normal; color:var(--line-forte); margin:0 7px}
+.jv-legenda{display:grid; gap:5px; min-height:0; text-align:center; text-shadow:0 0 10px var(--bg), 0 1px 3px var(--bg)}
+.jv-legenda b{display:block; margin-bottom:2px; font:700 9.5px/1 var(--mono); letter-spacing:.24em; color:var(--muted)}
+/* a fala do Júlio cabe numa linha (o rótulo vai junto, na frente) */
+.jv-lg-julio{margin:0; display:flex; justify-content:center; align-items:baseline; gap:10px; min-width:0; transition:opacity .4s}
+.jv-lg-julio > b{display:inline; flex:none; margin:0}
+.jv-lg-julio-txt{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 14.5px/1.45 var(--body); color:var(--ink)}
+.jv-lg-julio.parcial .jv-lg-julio-txt{color:var(--muted)}
+.jv-lg-julio.eco .jv-lg-julio-txt{color:var(--muted); opacity:.55; font-style:italic}
+.jv-lg-julio.apagada{opacity:0}
+.jv-lg-jarvis > b{color:var(--holo)}
+.jv-frases{display:flex; flex-direction:column; justify-content:flex-end; max-height:calc(2.3 * 1.45em); overflow:hidden; font:500 19px/1.45 var(--body);
+  -webkit-mask-image:linear-gradient(180deg, transparent 0, var(--bg) 28%); mask-image:linear-gradient(180deg, transparent 0, var(--bg) 28%)}
+.jv-frase{margin:0; text-wrap:balance}
+.jv-frase span{opacity:0; transition:opacity .12s, color .25s, text-shadow .25s}
+.jv-frase span.dita{opacity:1; color:var(--jv-tinta)}
+.jv-frase span.vez{color:var(--ink); text-shadow:0 0 14px var(--holo-medio), 0 0 2px var(--holo)}
+.jv-frase.dita span{opacity:1}
+.jv-frase.dita:not(:last-child){opacity:.55; font-size:.86em}
+.jv-frase.cortada::after{content:" —"; color:var(--rever)}
+
+.jv-form{position:relative; display:flex; align-items:center; gap:6px; padding:5px; background:var(--vidro-forte); border:1px solid var(--line-forte); border-radius:var(--raio);
+  box-shadow:0 14px 40px var(--sombra); transition:border-color .15s, box-shadow .15s}
+.jv-form:focus-within{border-color:var(--holo); box-shadow:0 14px 40px var(--sombra), 0 0 0 3px var(--holo-fraco)}
+.jv-entrada{flex:1; min-width:0; height:38px; padding:0 8px; background:none; border:0; outline:none; font-size:14.5px}
+.jv-entrada::placeholder{color:var(--muted); opacity:1}
+.jv-enviar,.jv-parar{height:38px}
+.jv-parar{border-color:var(--alerta); color:var(--alerta)}
+.jv-parar:hover:not(:disabled){border-color:var(--alerta); background:var(--alerta-fraco)}
+.jv-mic{position:relative; flex:none; height:38px; display:inline-flex; align-items:center; gap:8px; padding:0 12px 0 10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--raio);
+  color:var(--muted); font:600 12.5px/1 var(--body); white-space:nowrap; transition:border-color .15s, background-color .15s, color .15s}
+.jv-mic:hover{border-color:var(--holo); color:var(--ink)}
+.jv-mic-ico{display:grid}
+.jv-mic-pt{width:8px; height:8px; border-radius:50%; background:var(--line-forte); transition:background-color .2s, box-shadow .2s}
+.jv-medidor{position:absolute; left:8px; right:8px; bottom:4px; height:2px; overflow:hidden; border-radius:1px; opacity:0}
+.jv-medidor i{position:absolute; inset:0; transform-origin:0 50%; transform:scaleX(0); background:linear-gradient(90deg, var(--holo), var(--vermelho))}
+/* microfone aberto: o ponto vermelho "MIC" aceso (indicador obrigatório, JARVIS.md §7.4) */
+.jarvis.mic-ligado .jv-mic{border-color:var(--vermelho); color:var(--ink); background:color-mix(in srgb, var(--vermelho) 12%, var(--surface))}
+.jarvis.mic-ligado .jv-mic-pt{background:var(--vermelho); box-shadow:0 0 10px var(--vermelho); animation:jvMicPt 1.6s ease-out infinite}
+.jarvis.mic-ligado .jv-medidor{opacity:1}
+.jv-dica{margin:0; text-align:center; font:600 10.5px/1.4 var(--mono); color:var(--muted)}
+.jv-dica kbd{font-size:10px}
+
+/* ---------- Ajustes (voz, sons, como falar comigo, privacidade) ---------- */
+.jv-ajustes{position:absolute; z-index:12; top:calc(var(--g) + 46px); right:var(--g); width:min(360px, calc(100% - var(--g) * 2)); max-height:calc(100% - var(--g) * 2 - 60px); overflow:auto;
+  display:grid; gap:18px; padding:18px; background:var(--vidro-forte); border:1px solid var(--line-forte); border-radius:var(--raio); box-shadow:0 26px 70px var(--sombra); scrollbar-width:thin}
+.jv-ajustes section{display:grid; gap:10px}
+.jv-campo{display:grid; gap:6px; font-size:13.5px}
+.jv-campo select{height:36px; padding:0 10px; background:var(--bg); border:1px solid var(--line-forte); border-radius:var(--raio); color:var(--ink); font:500 13.5px var(--body); outline:none}
+.jv-campo select:focus{border-color:var(--holo); box-shadow:0 0 0 3px var(--holo-fraco)}
+.jv-campo option{background:var(--surface); color:var(--ink)}
+.jv-ajustes .faixa span{display:flex; justify-content:space-between}
+.jv-ajustes .faixa b{font:800 12px var(--mono); color:var(--holo); font-variant-numeric:tabular-nums}
+.jv-obs,.jv-nota-voz{margin:0; font-size:12.5px; line-height:1.55; color:var(--muted)}
+.jv-nota-voz:empty{display:none}
+.jv-nota-voz{color:var(--rever)}
+.jv-ajuda{margin:0; padding-left:1.1em; display:grid; gap:6px; font-size:13px; line-height:1.5}
+.jv-ajuda li::marker{color:var(--holo)}
+.jv-ajuda b{color:var(--branco); font-weight:700}
+.jv-ajustes .acoes{justify-content:flex-end}
+
+/* ---------- Aviso do microfone (primeira vez) ---------- */
+.jv-consent{position:absolute; inset:0; z-index:14; display:grid; place-items:center; padding:var(--g); background:radial-gradient(ellipse 60% 60% at 50% 50%, var(--veu), transparent 80%)}
+.jv-cons-cartao{position:relative; width:min(460px, 100%); display:grid; gap:12px; padding:26px 26px 22px; background:var(--vidro-forte); border:1px solid var(--line-forte); border-radius:3px;
+  box-shadow:0 30px 90px var(--sombra), 0 0 0 1px var(--holo-tenue), 0 0 70px var(--holo-tenue); animation:jvConfirma .36s cubic-bezier(.2,.8,.2,1) both}
+.jv-cons-cartao .canto{width:18px; height:18px}
+.jv-cons-cartao h2{margin:0; font:800 22px/1.15 var(--display)}
+.jv-cons-cartao p{margin:0}
+#jvConsTxt{display:grid; gap:10px; font-size:14px; line-height:1.55; color:var(--ink)}
+#jvConsTxt b{color:var(--branco)}
+.jv-cons-cartao .acoes{justify-content:flex-end; margin-top:4px}
+
+/* ---------- Aviso curto do modo ---------- */
+.jv-aviso{position:absolute; z-index:13; top:calc(var(--jv-topo) + 2px); left:50%; translate:-50% 0; width:max-content; max-width:min(560px, calc(100% - var(--g) * 2));
+  display:flex; align-items:center; gap:10px; padding:10px 16px 10px 14px; background:var(--vidro-forte); border:1px solid var(--holo-medio); border-radius:var(--raio);
+  box-shadow:0 16px 44px var(--sombra); font-size:13.5px; line-height:1.4; animation:jvConfirma .3s cubic-bezier(.2,.8,.2,1) both}
+.jv-aviso::before{content:""; flex:none; width:7px; height:7px; border-radius:50%; background:var(--holo); box-shadow:0 0 10px var(--holo)}
+.jv-aviso[data-tom="alerta"]{border-color:var(--alerta)} .jv-aviso[data-tom="alerta"]::before{background:var(--alerta); box-shadow:0 0 10px var(--alerta)}
+.jv-aviso[data-tom="rever"]{border-color:var(--rever)} .jv-aviso[data-tom="rever"]::before{background:var(--rever); box-shadow:0 0 10px var(--rever)}
+
+/* ---------- Simulador (?jarvis=simular, só no teste local) ---------- */
+.jv-sim{position:absolute; z-index:9; left:var(--g); bottom:calc(var(--jv-pe-alt) - 40px); width:min(var(--jv-pe), calc(100% - var(--g) * 2)); display:grid; gap:8px; padding:10px 12px 12px;
+  background:var(--vidro-forte); border:1px dashed var(--rever); border-radius:3px; opacity:0; transition:opacity .3s}
+.jarvis.pronto .jv-sim{opacity:1}
+.jv-sim .hud-rot{color:var(--rever)}
+.jv-sim-form{display:flex; gap:6px}
+.jv-sim-txt{flex:1; min-width:0; height:32px; padding:0 8px; background:var(--bg); border:1px solid var(--line-forte); border-radius:var(--raio); outline:none; font-size:12.5px}
+.jv-sim-bts{display:flex; flex-wrap:wrap; gap:5px}
+.jv-sim-bts .btn{height:28px; padding:0 9px; font-size:11.5px}
+
+/* ---------- Estados ---------- */
+.jarvis[data-estado="confirmando"] .jv-pe .jv-legenda{opacity:.8}
+.jarvis[data-estado="sem-conexao"] .jv-chip i{box-shadow:none}
+
+/* ---------- Larguras ---------- */
+@media (max-width:1279px){ .jarvis{--jv-pe:250px; --jv-pd:270px} .jv-frases{font-size:17.5px} }
+@media (max-width:1023px){
+  .jv-pe{width:auto; left:var(--g); right:var(--g); translate:none; min-width:0}
+  .jv-sair-rot{display:none}
+}
+@media (max-height:719px) and (min-width:760px){
+  .jv-dica{display:none}
+  .jarvis{--jv-pe-alt:196px}
+  .jv-frases{font-size:16.5px}
+}
+@media (hover:none){ .jv-dica-voz{display:none} }
+
+/* ---------- Celular: HUD em cima, atividade e cartões numa faixa rolável, legenda e caixa no pé ---------- */
+@media (max-width:759px){
+  .jarvis{--jv-topo:62px; --jv-pe-alt:178px}
+  .jv-topo{top:12px; left:14px; right:14px}
+  .jv-marca{gap:9px}
+  .jv-marca .logo{width:28px; height:21px}
+  .jv-marca h2{font-size:18px}
+  .jv-chip{height:22px; padding:0 8px; font-size:9px; letter-spacing:.1em}
+  .jv-contexto{display:none}
+  .jv-sair kbd{display:none}
+  .jv-sair{width:40px; padding:0}
+  .jv-moldura{inset:6px}
+  .jv-moldura .canto{width:20px; height:20px}
+  .jv-l{font-size:9px; letter-spacing:.1em; gap:3px}
+  .jv-l::before{display:none}
+  .jv-atividade,.jv-exibicao{left:0; right:0; width:auto; max-height:none}
+  .jv-atividade{top:calc(var(--jv-cy) + var(--jv-r) * 1.02 + 4px)}
+  .jv-exibicao{top:calc(var(--jv-cy) + var(--jv-r) * 1.02 + 72px); bottom:calc(var(--jv-pe-alt) + 6px)}
+  .jv-atividade h3,.jv-exibicao h3{display:none}
+  .jv-vazio{display:none}
+  .jv-at-lista{grid-auto-flow:column; grid-auto-columns:min(230px, 72vw); overflow-x:auto; overflow-y:hidden; padding:2px 16px 6px; scroll-snap-type:x proximity; scroll-padding-inline:16px; scrollbar-width:none}
+  .jv-at{scroll-snap-align:start}
+  /* uma linha para o rótulo e uma para o resumo: a faixa de atividade tem altura fixa e os cartões de exibição vêm logo abaixo */
+  .jv-at-txt b,.jv-at-txt span{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; overflow-wrap:normal}
+  .jv-cartoes{grid-auto-flow:column; grid-auto-rows:auto; align-content:normal; grid-auto-columns:min(280px, 80vw); align-items:start; overflow-x:auto; overflow-y:hidden; height:100%; padding:2px 16px 6px; margin:0; scroll-snap-type:x proximity; scroll-padding-inline:16px; scrollbar-width:none}
+  .jv-cartao{max-height:100%; overflow:auto; scroll-snap-align:start}
+  .jv-cartao:nth-child(n+3){opacity:1}
+  .jv-pe{left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); gap:6px}
+  .jv-frases{font-size:16px; max-height:calc(2 * 1.45em * 1.2 + 6px)}
+  .jv-lg-julio-txt{font-size:13.5px}
+  .jv-mic-rot{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+  .jv-mic{padding:0 10px}
+  .jv-enviar span,.jv-parar span{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+  .jv-enviar,.jv-parar{width:40px; padding:0}
+  .jv-dica{display:none}
+  .jv-confirma{top:auto; bottom:calc(var(--jv-pe-alt) + 8px); translate:-50% 0; max-height:calc(100% - var(--jv-pe-alt) - 80px)}
+  .jv-sim{top:calc(var(--jv-topo) + 2px); bottom:auto; left:auto; right:12px; width:min(250px, calc(100% - 24px)); padding:8px 10px}
+  .jv-sim .jv-sim-form{display:none}
+}
+
+/* ---------- Movimento ---------- */
+@keyframes jvGira{to{transform:rotate(360deg)}}
+@keyframes jvRola{from{transform:translateY(-6px); opacity:.2} to{transform:none; opacity:1}}
+@keyframes jvEntraAt{from{opacity:0; transform:translateX(-14px)} to{opacity:1; transform:none}}
+@keyframes jvPiscaAt{50%{border-color:var(--alerta); background:var(--alerta-fraco)}}
+@keyframes jvBarra{from{width:0}}
+@keyframes jvConfirma{from{opacity:0; transform:scale(.94)} to{opacity:1; transform:none}}
+@keyframes jvMicPt{0%{box-shadow:0 0 0 0 var(--vermelho)} 70%,100%{box-shadow:0 0 0 7px transparent}}
+@media (prefers-reduced-motion: reduce){
+  .jv-topo,.jv-atividade,.jv-exibicao{transform:none}
+  .jv-cena,.jv-leituras{transform:none!important}
+}

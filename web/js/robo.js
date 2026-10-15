@@ -532,7 +532,8 @@ function criarRosto(largura, reduzidoFn = () => false) {
     gp.fillStyle = rgba(COR.pontoVisor, 0.10 + 0.32 * v); gp.beginPath(); gp.arc(x, y, passo * 0.13, 0, Math.PI * 2); gp.fill();
   }
   gp.fillStyle = rgba(COR.linhaVisor, 0.10); for (let y = 0; y < CH; y += 4) gp.fillRect(0, y, CW, 1);
-  const P = { ...ROSTO_PADRAO, ...ROSTO_ALVOS.apagado, abre: 1, prog: 0, scanOn: 1, flash: 0, gx: 0, gy: 0 };
+  // ponto: modo Jarvis (JARVIS.md §7.5) — 0 = rosto normal; 0→0,5 os olhos achatam; 0,5→1 viram um ponto de luz no meio
+  const P = { ...ROSTO_PADRAO, ...ROSTO_ALVOS.apagado, abre: 1, prog: 0, scanOn: 1, flash: 0, gx: 0, gy: 0, ponto: 0 };
   let T = { ...ROSTO_PADRAO, ...ROSTO_ALVOS.apagado };
   let nome = 'apagado', pisca = -1, abrindo = -1, textoBoot = 'carregando memórias', forcar = true;
   const HOLO = rgbDe(COR.holo), VERM = rgbDe(COR.alerta);   // alerta do visor = mesmo tom do aviso de alerta do HUD
@@ -577,6 +578,7 @@ function criarRosto(largura, reduzidoFn = () => false) {
     // os olhos vão um pouco além da cabeça; com a cabeça já virada, mais do que isso empurra o olho do lado
     // de fora para a borda curva do visor e ele quase some (parecia piscar um olho só)
     const gx = P.gx * 0.05 * CW, gy = P.gy * (P.gy < 0 ? 0.11 : 0.06) * CH;
+    if (P.ponto > 0.001) { olhosPonto(gx, gy, br); g.globalAlpha = 1; g.shadowBlur = 0; return; }
     if (P.olhos > 0.01) for (const lado of [-1, 1]) olho(lado, CW / 2 + lado * EX + gx, EY + gy, br * P.olhos);
     if (P.boca > 0.01) boca(CW / 2 + gx * 0.5, MY + gy * 0.45, br * P.boca);
     if (P.pontos > 0.01) {
@@ -612,6 +614,24 @@ function criarRosto(largura, reduzidoFn = () => false) {
     }
     if (P.flash > 0.001) { g.globalAlpha = 0.3 * P.flash; g.shadowBlur = 0; g.fillStyle = COR.flashVisor; g.fillRect(0, 0, CW, CH); }
     g.globalAlpha = 1; g.shadowBlur = 0;
+  }
+  // Modo Jarvis: os dois olhos achatam numa linha (ponto 0→0,5), correm para o meio e viram um ponto de luz (0,5→1).
+  // A boca e o resto do rosto somem na primeira metade. Na volta (1→0) o ponto se abre de novo nos olhos.
+  function olhosPonto(gx, gy, br) {
+    const f1 = clamp(P.ponto / 0.5), f2 = clamp((P.ponto - 0.5) / 0.5), e2 = sai(f2);
+    if (P.boca > 0.01 && f1 < 1) boca(CW / 2 + gx * 0.5, MY + gy * 0.45, br * P.boca * (1 - f1));
+    const fim = 0.03 * CW;
+    for (const lado of [-1, 1]) {
+      const x = lerp(CW / 2 + lado * EX + gx, CW / 2, e2), y = lerp(EY + gy, EY, e2);
+      const w = lerp(0.11 * CW * P.esc, fim, e2);
+      const h = Math.min(w, lerp(0.36 * CH * P.esc * P.olhoH * P.abre, fim, sai(f1)));
+      g.globalAlpha = br; g.shadowBlur = glow * (1 + 2.5 * f2);
+      retArred(g, x - w / 2, y - h / 2, w, h, Math.min(w, h) / 2); g.fill();
+    }
+    if (f2 > 0.01) {
+      g.globalAlpha = f2; g.fillStyle = COR.flashVisor; g.shadowColor = COR.flashVisor; g.shadowBlur = glow * 4;
+      g.beginPath(); g.arc(CW / 2, EY, fim * (0.42 + 0.3 * f2), 0, Math.PI * 2); g.fill();
+    }
   }
   function olho(lado, x, y, a) {
     const abre = P.abre;
@@ -650,6 +670,8 @@ function criarRosto(largura, reduzidoFn = () => false) {
     get nome() { return nome; },
     texto(t) { textoBoot = t; },
     brilhoGlow(v) { glow = CW * v; },
+    ponto(v) { P.ponto = clamp(Number(v) || 0); },   // modo Jarvis: olhos → ponto de luz
+
     dispose() { tex.dispose(); },
   };
 }
@@ -805,6 +827,8 @@ export async function criarRobo(canvas, opts = {}) {
   const ancoraLogoX = new THREE.Object3D(); ancoraLogoX.position.copy(dirEsfera(Math.asin(LOGO_ALT * 0.72 / ESC.x / Math.cos(LOGO_BETA)), LOGO_BETA).multiplyScalar(1.03)); casco.add(ancoraLogoX);
   const ancoraLogoY = new THREE.Object3D(); ancoraLogoY.position.copy(dirEsfera(0, LOGO_BETA + LOGO_ALT * 0.55).multiplyScalar(1.03)); casco.add(ancoraLogoY);
   const ancoraVisor = new THREE.Object3D(); ancoraVisor.position.copy(dirEsfera(0, -22 * DEG).multiplyScalar(1.02)); casco.add(ancoraVisor);
+  // meio da linha dos olhos no visor (v = 0,5 da textura do rosto = VIS.bm): ponto de luz da transição do modo Jarvis
+  const ancoraOlhos = new THREE.Object3D(); ancoraOlhos.position.copy(dirEsfera(0, VIS.bm).multiplyScalar(1.022)); casco.add(ancoraOlhos);
 
   /* Cúpula de vidro, aro, chão de circuito */
   const geoDomo = guarda(new THREE.SphereGeometry(DOMO_R, 96, 48, 0, Math.PI * 2, 0, DOMO_TETA));
@@ -936,6 +960,9 @@ export async function criarRobo(canvas, opts = {}) {
   const agarre = { ativo: false, x: 0, y: 0 };
   const maoCampo = { ativo: false, ax: 0, ay: 0, araio: 110, aforca: 0, x: 0, y: 0, raio: 110, forca: 0 };
   let W = 1, H = 1, dist = 9, visH = 4, visW = 6, alvoY = 0, aperto = 0;
+  // modo Jarvis (JARVIS.md §7.5): a câmera avança até ~35% do caminho para os olhos e mira neles (0 = enquadramento normal)
+  const camBase = new THREE.Vector3(), camOlha = new THREE.Vector3(), _vMerg = new THREE.Vector3(), _vMira = new THREE.Vector3();
+  let mergulhoAlvo = 0, mergulhoAplicado = -1;
 
   /* ---- Pós-processamento ---- */
   /* Camada de brilho: tudo o que emite luz (olhos, neurônios, sinapses, pulsos, anéis, contas, esferas
@@ -1031,6 +1058,7 @@ export async function criarRobo(canvas, opts = {}) {
     const elev = 9 * DEG;
     camera.position.set(0, alvoY + dist * Math.sin(elev), dist * Math.cos(elev));
     camera.lookAt(0, alvoY, 0); camera.updateProjectionMatrix();
+    camBase.copy(camera.position); camOlha.set(0, alvoY, 0); mergulhoAplicado = -1;   // mergulho do modo Jarvis parte daqui
     halo.scale.set(lerp(1, 0.86, aperto), 1, lerp(1, 0.9, aperto));
     sat.scale.set(lerp(1, 0.6, aperto), lerp(1, 1.1, aperto), lerp(1, 0.8, aperto));
     // fundo cobre a tela inteira na profundidade dele
@@ -1846,6 +1874,18 @@ export async function criarRobo(canvas, opts = {}) {
     }
     atualizarVoos(now);
     atualizarFaiscas(dt);
+    aplicarMergulho();
+  }
+  // câmera do modo Jarvis: segue os olhos (a cabeça e o rig andam) enquanto mergulhoAlvo > 0; no 0 volta exata
+  function aplicarMergulho() {
+    const f = mergulhoAlvo;
+    if (f <= 0 && mergulhoAplicado === 0) return;
+    if (f <= 0) { camera.position.copy(camBase); camera.lookAt(camOlha); mergulhoAplicado = 0; return; }
+    rig.updateMatrixWorld(true);
+    ancoraOlhos.getWorldPosition(_vMerg);
+    camera.position.copy(camBase).lerp(_vMerg, 0.35 * f);
+    camera.lookAt(_vMira.copy(camOlha).lerp(_vMerg, Math.min(1, f * 1.15)));
+    mergulhoAplicado = f;
   }
 
   /* ---- Qualidade, pausa, sinapses ---- */
@@ -1893,6 +1933,15 @@ export async function criarRobo(canvas, opts = {}) {
   }
   // olharEmVolta(): a mão saiu da câmera; esquece o último ponteiro (e o hover dele) e volta a olhar em volta
   function olharEmVolta() { aoSair(); mouse.ativo = false; mouse.vel = 0; agarre.ativo = false; }
+
+  /* ---- Modo Jarvis (JARVIS.md §7.5): a câmera mergulha no visor e os olhos viram um ponto de luz ---- */
+  // visor() -> {x,y}: ponto de tela (px do canvas) do meio dos olhos, de onde o HUD nasce e para onde ele volta
+  function visor() { rig.updateMatrixWorld(true); camera.updateMatrixWorld(); const t = telaDe(ancoraOlhos.getWorldPosition(_w)); return { x: t.x, y: t.y }; }
+  // mergulho(0..1): 0 = enquadramento de sempre; 1 = câmera ~35% mais perto, mirando os olhos. Quem anima é o HUD.
+  // Com o robô pausado o quadro é desenhado na hora (a transição continua visível).
+  function mergulho(f) { mergulhoAlvo = clamp(Number(f) || 0); if (S.pausado && !S.destruido && !S.perdido) passo(agora()); }
+  // olhosPonto(0..1): 0 = rosto normal; 0,5 = olhos achatados numa linha; 1 = um ponto de luz no meio do visor
+  function olhosPonto(f) { rosto.ponto(f); }
 
   /* ---- Saúde dos sistemas (GUARDIAO.md §7): a cúpula ganha a cor do estado ---- */
   // saude('ok'|'atencao'|'falha'|'sem_dado'|null): atenção = leve tom âmbar na borda do vidro e no chão da cúpula;
@@ -1971,6 +2020,7 @@ export async function criarRobo(canvas, opts = {}) {
     cabeca: cabecaTela, reduzir, ocultar, apontar,
     agarrar, campoMao, pular, olharEmVolta,   // modo Mãos (MAOS.md §3)
     saude: saudeRobo, clarao,                  // saúde dos sistemas (GUARDIAO.md §7)
+    visor, mergulho, olhosPonto,               // modo Jarvis (JARVIS.md §7.5)
     get expressoes() { return EXPRESSOES.slice(); },
   };
 }

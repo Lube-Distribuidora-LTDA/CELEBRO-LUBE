@@ -1625,8 +1625,9 @@ function mudarVisao(v, pelaPessoa = false) {
 }
 function atualizarPausa() {
   const oculto = document.hidden;
-  S.robo?.pausar(oculto || S.visao !== 'robo');
-  S.aneis?.ativar(!oculto && S.visao === 'aneis');
+  // com o HUD do Jarvis cobrindo a tela inteira, o robô e os anéis param (voltam antes da saída)
+  S.robo?.pausar(oculto || S.visao !== 'robo' || !!S.jarvisCobre);
+  S.aneis?.ativar(!oculto && S.visao === 'aneis' && !S.jarvisCobre);
   if (oculto) { if (rafFeixe) cancelAnimationFrame(rafFeixe); rafFeixe = 0; }
   else if ((S.leitorNo && estaAberto()) || (S.fluxoNo && fluxoAberto()) || (S.saudeAberta && saudeAbertaUI())) iniciarFeixe();
 }
@@ -1708,7 +1709,7 @@ let sonoT = 0;
 function agendarSono() { clearTimeout(sonoT); sonoT = setTimeout(dormir, SONO_MS); }
 function dormir() {
   const resp = $('#resposta');
-  const ocupado = !S.robo || S.visao !== 'robo' || document.hidden || S.leitorNo || S.fluxoNo || S.saudeAberta || painelAberto() || S.depto || S.perguntando || (resp && !resp.hidden);
+  const ocupado = !S.robo || S.visao !== 'robo' || document.hidden || S.leitorNo || S.fluxoNo || S.saudeAberta || painelAberto() || S.depto || S.perguntando || (resp && !resp.hidden) || JV.aberto;
   if (ocupado) { agendarSono(); return; }
   S.dormindo = true;
   S.robo.base('dormindo');
@@ -2520,6 +2521,148 @@ function ligarEventosMaos() {
     ui.aviso(TXT_SEM_ATIVACAO.link, 4200);
   }, true);
 }
+// ---------------------------------------------------------------------------
+// Modo Jarvis (JARVIS.md §3): conversar com o robô por voz e por texto. O js/jarvis.js (e o HUD) só é importado ao
+// entrar; se ele falhar, o resto da página segue igual. Aqui: o botão, o Ctrl+J, o contexto da tela que vai em cada
+// turno, os dados da página para os cartões e para o cérebro do link, e o robô (acorda feliz, mergulha, volta).
+// ---------------------------------------------------------------------------
+const JV = { mod: null, j: null, carregando: null, aberto: false };
+S.jarvis = JV;   // teste local: window.__cerebro.jarvis
+function textoDeHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = String(html || '');
+  return (d.textContent || '').replace(/\s+/g, ' ').trim();
+}
+// começo do corpo da nota (sem frontmatter, títulos nem marcação), para o cartão "nota" do HUD
+function trechoInicial(no, max = 240) {
+  const corpo = seguro(() => D.parseFM(String(no.text || '')).body, String(no.text || ''));
+  const linhas = String(corpo).split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(#|>|\||-{3,}|```)/.test(l))
+    .map((l) => l.replace(/^([-*+]|\d+[.)])\s+/, ''));
+  const t = linhas.join(' · ').replace(/([.:;!?])\s·\s/g, '$1 ').replace(/\[\[([^\]|]+)(\|([^\]]*))?\]\]/g, (_, a, __, b) => b || a).replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max).replace(/\s+\S*$/, '')}…` : t;
+}
+function saudeDaNota(no) {
+  const d = SA.dados;
+  if (!d || !no) return null;
+  const k = chaveNome(no.name), i = d.itens.find((x) => x.nota && chaveNome(x.nota) === k);
+  return i ? { status: i.status, resumo: `${ROT_SAUDE[i.status] || i.status}${i.resumo ? ` · ${i.resumo}` : ''}` } : null;
+}
+function paginaJarvis() {
+  const G = () => S.G;
+  return {
+    // as mesmas ferramentas do "Pergunte ao cérebro" (sem as reações do painel de resposta)
+    ferramentas: () => ferramentas({}),   // um controle que nunca é o S.ctl: nada reage no painel de resposta
+    buscarNotas: (q, n = 8) => (G() ? seguro(() => D.buscar(G(), String(q || '').slice(0, 200), n), []).filter((x) => x && x.kind !== 'dept') : [])
+      .map((x) => ({ nome: x.name, caminho: x.path, tipo: ROTULO[x.kind] || x.kind, departamento: x.dept || undefined, trecho: seguro(() => D.trecho(x, q), '') })),
+    lerNota: (c) => { const no = G() ? acharNota(G(), String(c || '')) : null; return no && no.kind !== 'dept' ? { nome: no.name, caminho: no.path, texto: String(no.text || '').slice(0, 12000) } : null; },
+    verSaude: (o = {}) => resumoSaude({ soProblemas: o.somente_problemas === true }),
+    visaoGeral: () => (G() ? visaoGeral() : ''),
+    nota: (nome) => {
+      const no = G() && nome ? (notaPorNome(nome) || acharNota(G(), String(nome))) : null;
+      if (!no || no.kind === 'dept') return null;
+      return { nome: no.name, caminho: no.path, departamento: no.dept || ROTULO[no.kind] || '', trecho: trechoInicial(no) };
+    },
+    rotina: (nome) => {
+      const no = G() && nome ? notaPorNome(nome) : null;
+      const r = no ? rotinaDe(no) : null;
+      if (!r) return null;
+      const prox = seguro(() => D.proximaExecucao(r.horarios, new Date(), { dias: r.dias, intervaloMin: r.intervaloMin }), null);
+      return {
+        titulo: r.titulo || no.name, grupo: r.grupo || '', horarios: r.resumo || r.frequenciaTexto || '', proxima: prox ? prox.texto : '',
+        saude: saudeDaNota(no),
+        passos: ((r.fluxo && r.fluxo.passos) || []).map((p) => ({ tipo: p.tipo, rotulo: p.rotulo, texto: textoDeHtml(p.html) }))
+      };
+    },
+    primeiraRotina: () => (S.rotinas[0] && S.rotinas[0].no ? S.rotinas[0].no.name : '')
+  };
+}
+function opcoesJarvis() {
+  return {
+    raiz: $('#app'),
+    botao: $('#jarvisBtn'),
+    // na visão em anéis não há robô para mergulhar: a transição nasce do centro da tela
+    robo: () => (S.robo && S.visao === 'robo' && !document.hidden ? S.robo : null),
+    reduzido,
+    qualidadeBaixa: () => $('#qualidade')?.checked === false,
+    contexto: () => ({
+      tela: S.visao === 'robo' ? 'robo' : 'aneis',
+      nota_aberta: S.leitorNo && S.leitorNo.kind !== 'dept' ? S.leitorNo.name : null,
+      rotina_aberta: S.fluxoNo ? S.fluxoNo.name : null,
+      departamento: S.depto ? S.depto.name : null
+    }),
+    cena: () => {
+      const c = S.G ? (seguro(() => D.contar(S.G), null) || contarLocal(S.G)) : {};
+      const g = SA.dados && SA.dados.geral;
+      return { memorias: c.memorias, rotinas: c.rotinas, apps: c.apps, conexoes: c.conexoes, saude: g ? String(ROT_SAUDE[g.status] || g.status || '').toUpperCase() : null };
+    },
+    pagina: paginaJarvis(),
+    // cérebro do link (js/jarvis-link.js, criarCerebroLink): o grafo, a saúde já lida e o resumo dela
+    link: { grafo: () => S.G, saude: () => SA.dados, resumoSaude: (o) => resumoSaude(o), exemplo: () => S.demo },
+    onAbrindo: () => {
+      JV.aberto = true;
+      acordar();
+      ui.dica(null);
+      $('#app')?.classList.add('com-jarvis');   // a barra, o trilho e os painéis saem de cena durante o mergulho
+      // o robô acorda feliz e olha para quem usa antes de mergulhar
+      S.robo?.expressao('feliz', 500);
+      S.robo?.olharPara({ x: S.ref.width / 2, y: S.ref.height * 0.46 });
+    },
+    onCoberto: (v) => { S.jarvisCobre = !!v; atualizarPausa(); },
+    onFechou: ({ abrir: pendente } = {}) => {
+      JV.aberto = false;
+      S.jarvisCobre = false;
+      $('#app')?.classList.remove('com-jarvis');
+      atualizarPausa();
+      S.robo?.olharPara(null);
+      S.robo?.base(baseRepouso());
+      agendarSono();
+      // o último cartão "nota" ou "rotina" abre por trás, no leitor ou no funil
+      if (pendente && pendente.nome && S.G) {
+        const no = notaPorNome(pendente.nome) || acharNota(S.G, pendente.nome);
+        if (no && no.kind !== 'dept') {
+          const origem = ponto(S.robo?.testa()) || centroTela();
+          if (pendente.tipo === 'rotina' && no.kind === 'routine') abrirRotina(no, { origem }); else abrir(no, { origem, leitor: true });
+        }
+      }
+    }
+  };
+}
+async function carregarJarvis() {
+  if (JV.j) return JV.j;
+  if (!JV.carregando) {
+    JV.carregando = (async () => {
+      try {
+        const mod = JV.mod || (JV.mod = await import('./jarvis.js'));
+        if (typeof mod.criarJarvis !== 'function') throw new Error('jarvis.js sem criarJarvis');
+        JV.j = blindar(mod.criarJarvis(opcoesJarvis()), 'Jarvis');
+        return JV.j;
+      } catch (err) {
+        avisarFalha('modo Jarvis', err);
+        ui.aviso('O Jarvis não carregou. Recarregue a página e tente de novo.', 4200, 'alerta');
+        return null;
+      } finally { JV.carregando = null; }
+    })();
+  }
+  return JV.carregando;
+}
+async function alternarJarvis() {
+  const b = $('#jarvisBtn');
+  if (JV.j && JV.j.aberto()) { JV.j.fechar(); return; }
+  b?.setAttribute('data-estado', 'carregando');
+  const j = await carregarJarvis();
+  b?.removeAttribute('data-estado');
+  if (j) j.abrir();
+}
+function ligarEventosJarvis() {
+  $('#jarvisBtn')?.addEventListener('click', () => alternarJarvis());
+  // Ctrl+J (com o Jarvis aberto, ele mesmo cuida do atalho e do Esc)
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'j' && e.key !== 'J')) return;
+    e.preventDefault();
+    alternarJarvis();
+  });
+}
+
 function ligarEventos() {
   const on = (sel, ev, fn, o) => $(sel)?.addEventListener(ev, fn, o);
 
@@ -2657,6 +2800,8 @@ function ligarEventos() {
 
   // Modo Mãos: botão, cartão do app, botões das camadas, aba escondida
   try { ligarEventosMaos(); } catch (err) { avisarFalha('modo Mãos', err); }
+  // Modo Jarvis: botão e Ctrl+J
+  try { ligarEventosJarvis(); } catch (err) { avisarFalha('modo Jarvis', err); }
 }
 
 // ---------------------------------------------------------------------------
