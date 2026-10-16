@@ -1,8 +1,29 @@
-# Cérebro da Lube — app local e Jarvis
+# Cérebro da Lube — app local, Jarvis e backup do vault
 
 O painel do robô (`web/`) é o mesmo que vai publicado no claude.ai. Este repositório também tem o **app local**
 (`servidor/`): roda no computador do Júlio, serve o painel com as notas do vault **ao vivo**, a saúde do Guardião e
 o **Jarvis**, o modo de conversa por voz, com o Claude por trás. Especificação: `docs/JARVIS.md`.
+
+E guarda uma **cópia do vault** do Obsidian (`vault/`), para não perder nada. O original continua no OneDrive
+(`OneDrive - Lube\CEREBRO DA LUBE`); aqui é o backup, com o histórico do Git.
+
+## Backup do vault
+
+Dois cliques em **`ATUALIZAR REPOSITORIO.bat`** (ou `python -I -X utf8 ferramentas/atualizar_repositorio.py`). O Claude
+roda o mesmo script no fim de toda conversa que grava no cérebro. Ele:
+
+1. espelha o vault em `vault/` (fora: o estado da janela do Obsidian, a lixeira e as **notas com dado de pessoa**);
+2. confere segredo em tudo o que vai para o Git: formatos de chave e senha e, mais forte, se alguma senha ou chave
+   **real** do `ENV` aparece em algum arquivo (até dentro de `.xlsx`). Achou, para e mostra só arquivo e linha;
+3. faz o commit, se algo mudou;
+4. sobe para o GitHub **só se o repositório for privado**. O vault descreve a infraestrutura interna e falhas de
+   segurança ainda abertas: em repositório público, qualquer pessoa leria. Com o repositório público, o commit fica
+   só no computador e o script avisa.
+
+**Dado de pessoa fica fora** (regra do Júlio: "dado de pessoa não vai para o repositório; salário é nominal e
+identificável, o lugar dele é o banco"). As notas com salário, base de IR, desconto de plano de saúde ou afastamento
+de funcionário com nome estão em `ferramentas/fora_do_repositorio.txt`; nota nova desse tipo leva `repositorio: nao`
+no frontmatter. Elas continuam no OneDrive, que guarda o histórico de versões.
 
 ## Ligar
 

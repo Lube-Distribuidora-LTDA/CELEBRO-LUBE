@@ -1,0 +1,13 @@
+# Notas do vault que NÃO vão para o GitHub (caminho relativo ao vault, uma por linha).
+# Motivo: trazem dado de pessoa com nome (salário, base de IR, desconto de plano de saúde, afastamento pelo INSS).
+# Regra do Júlio em "Como trabalhar comigo": "Dado de pessoa não vai para o repositório. Salário é nominal e
+# identificável: o lugar dele é o banco." Elas continuam no OneDrive (que guarda o histórico de versões).
+# Achadas na leitura das 133 notas em 2026-10-16. Nota nova com dado de pessoa: ponha "repositorio: nao" no
+# frontmatter dela, que o script também respeita.
+Conversas/2026-09-24 — Validação de folha do Administrativo.md
+Conversas/2026-09-25 — Sistema Financeiro no ar.md
+Conversas/2026-09-29 — Importação da folha em PDF.md
+Conversas/2026-09-30 — Cinco empresas no painel, INSS e IRRF conferidos.md
+Conversas/2026-09-30 — Conferência de descontos contra as planilhas das operadoras.md
+Memória & Infra/GESTÃO FINANCEIRO — documentação técnica.md
+Projetos/SISTEMA FINANCEIRO.md
