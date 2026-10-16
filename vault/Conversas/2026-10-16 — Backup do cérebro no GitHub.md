@@ -27,8 +27,7 @@ perder". Atualização: **no fim de cada conversa**.
   acesso anônimo (inclusive onde ficam CPF e salário do RH), 39 citam a VM e o IP interno e a [[SENTINELA LUBE]] traz
   o IP público do escritório. O cérebro não depende da Vercel, então ficar privado não quebra nada (a regra "repositório público" é só
   dos sistemas no plano Hobby).
-- 2026-10-16 (Claude): **notas com dado de pessoa ficam fora do GitHub**, pela regra do Júlio em [[Como trabalhar
-  comigo]] ("Dado de pessoa não vai para o repositório. Salário é nominal e identificável: o lugar dele é o banco").
+- 2026-10-16 (Claude): **notas com dado de pessoa ficam fora do GitHub**, pela regra do Júlio em [[Como trabalhar comigo]] ("Dado de pessoa não vai para o repositório. Salário é nominal e identificável: o lugar dele é o banco").
   São 7 notas da folha, com salário, base de IR, desconto de plano de saúde e afastamento pelo INSS de funcionários com
   nome. Continuam no OneDrive. A 8ª nota com nomes, [[Como eu gosto dos BIs]], sobe: só cita dois nomes como exemplo
   de alarme falso no cruzamento da folha, sem valor. **Contradição apontada ao Júlio:** ele pediu "tudo"; se quiser essas também, é tirar da
