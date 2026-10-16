@@ -200,6 +200,12 @@ def main():
     print(f"Vault: {total} arquivos ({copiados} copiados, {removidos} removidos da cópia); "
           f"{fora} nota(s) com dado de pessoa ficaram só no OneDrive.")
 
+    ignorados = [l for l in git("ls-files", "--others", "--ignored", "--exclude-standard", "--", "vault").stdout.splitlines() if l]
+    if ignorados:
+        print(f"PAROU: {len(ignorados)} arquivo(s) do vault estão sendo ignorados pelo .gitignore e ficariam sem backup, "
+              f"ex.: {ignorados[0]}. Ajuste o .gitignore (no Windows o Git não diferencia maiúscula).")
+        sys.exit(4)
+
     n, n_reais, problemas = conferir_segredos()
     if problemas:
         print(f"PAROU: possível segredo em {len(problemas)} ponto(s) (nada foi commitado nem enviado):")
