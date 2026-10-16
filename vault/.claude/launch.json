@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "painel-lube",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4321", "--directory", "C:\\Users\\gti.julio.alves\\Desktop\\BI\\1. PAINEL LUBE DISTRIBUIDORA"],
+      "port": 4321
+    },
+    {
+      "name": "cerebro-robo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4330", "--directory", "C:\\Users\\GTIJUL~1.ALV\\AppData\\Local\\Temp\\claude\\C--Users-gti-julio-alves-OneDrive---Lube-CEREBRO-DA-LUBE\\039b4773-f12f-401f-9e60-debd67483968\\scratchpad\\cerebro-robo"],
+      "port": 4330
+    },
+    {
+      "name": "sac",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\gti.julio.alves\\Desktop\\BI\\10. SAC\\web\\servidor_local.js"],
+      "port": 3110
+    },
+    {
+      "name": "jarvis",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\gti.julio.alves\\Desktop\\BI\\13. CEREBRO\\servidor\\servidor.js", "--simulado"],
+      "port": 8790
+    },
+    {
+      "name": "trade",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\gti.julio.alves\\Desktop\\BI\\11. TRADE\\web\\servidor_local.js"],
+      "port": 8700
+    }
+  ]
+}
