@@ -46,9 +46,18 @@ perder". Atualização: **no fim de cada conversa**.
   `ENV` plantado num arquivo temporário foi pego (e apagado).
 - O repositório local passou a assinar como "TI Lube Distribuidora <cpd@lube.com.br>", igual aos outros da Lube.
 - Nenhum nome de funcionário no código (conferido antes do push).
+- **Tropeço corrigido:** o primeiro commit da cópia pegou só 64 dos 135 arquivos. O `.gitignore` tinha `conversas/`
+  (posto em 2026-10-15 por precaução, para registros do Jarvis que nunca existiram) e, no Windows, o Git não diferencia
+  maiúscula: a pasta `vault/Conversas/` inteira ficava de fora, e também da conferência de segredos. O commit parcial
+  (nunca enviado) foi desfeito, a regra virou `/conversas/` e `/servidor/conversas/` (commit `d7d7ae0`), e o script
+  agora **para** se algum arquivo do vault estiver sendo ignorado (commit `62b5520`). O commit da cópia ficou com os
+  135 arquivos (`01f235d`) e a conferência passou por 189 arquivos.
+- [[Validação mensal da folha]] cita a grafia errada do nome de uma funcionária nas planilhas da operadora, sem valor:
+  mesmo caso de [[Como eu gosto dos BIs]], sobe.
 
 ## O que foi criado ou mudou
-- `Desktop\BI\13. CEREBRO`: remoto `origin` = `CELEBRO-LUBE`; commits até `81c247b` no GitHub; `vault/` com a cópia.
+- `Desktop\BI\13. CEREBRO`: remoto `origin` = `CELEBRO-LUBE`; código no GitHub até `62b5520`; `vault/` com a cópia,
+  em commit local (`01f235d` e os seguintes) esperando o repositório ficar privado.
 - [[Cérebro da Lube]], [[CLAUDE.md]], [[registrar-conversa]] e [[Registro de mudanças]]: o backup entra no fim de toda
   conversa.
 
