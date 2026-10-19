@@ -59,8 +59,10 @@ relógio (15:35) e confirmar que a máquina é a `SRV-IA`.
   `controle_carga`: 5.629 / 27.589 / 32.191 linhas, ~9 s; cache às 14:08:34; Postgres sem novo reinício).
   A tela mostra só a conta (`LUBE\gti.julio.alves`) e a pasta (`C:\BI\REPOSICOES`), **não o nome da máquina**; na
   `LOGISTICA-55` não há tarefa nem pasta, então foi em outra — esperado a `SRV-IA`.
-- [ ] **Confirmar a máquina (`SRV-IA`)** e **provar o relógio:** carga das 15:35 em `controle_carga`, depois 17:35 e
-  22:35, e `aquecer_painel.log` com linha nova a cada 5 min.
+- [x] **Máquina e relógio provados em 2026-10-19** (Júlio pediu: "o script está rodando como deveria?", sem usar o dia
+  19): a tarefa está na `SRV-IA` e a carga cumpriu **66 de 66 horários** de 09/10 15:35 a 18/10 22:35, todas `OK`.
+- [ ] **O aquecedor não esquenta:** `aquecer_painel.log` da `SRV-IA`, 17 e 18/10, **480 de 480 chamadas com
+  `CERTIFICATE_VERIFY_FAILED`**, nenhuma `OK`. Conserto pendente do Júlio, na VM (opções em [[REPOSIÇÕES E CHAMADOS]]).
 - [ ] Rodar o `ATUALIZAR AGORA.bat` uma vez na `SRV-IA` e conferir `controle_carga` (o instalador já provou o
   Python e as bibliotecas de lá, mas o `.bat` em si só foi testado na `LOGISTICA-55`).
 - [ ] **Banco reiniciando:** o Postgres do DATA WAREHOUSE reiniciou em **2026-10-07 14:14**, **2026-10-08 ~17:00** e

@@ -94,9 +94,9 @@ tags: [tag1, tag2]
   `reposicao` do DATA WAREHOUSE, painel de 5 páginas **publicado** (`reposicoes-web.vercel.app`, sem guarda da
   SENTINELA), onde todo número clicável abre o Detalhe já filtrado e o cartão principal compara o período com o
   **anterior** (jan/26 contra dez/25) e com o ano anterior (2026-10-09). **Carga e aquecedor agendados em 2026-10-09**
-  (Júlio rodou o `INSTALAR TUDO.bat`; cargas 07:35 a 22:35, aquecedor de 5 em 5 min; a máquina não é a LOGISTICA-55,
-  esperado `SRV-IA`, a confirmar; a primeira carga agendada de verdade era a das 15:35). O `bi_comum.py` tem a tranca
-  de carga. Para atualizar o dado na hora: **`ATUALIZAR AGORA.bat`** — ver [[Reposições - Sync]]. Abre
+  (Júlio rodou o `INSTALAR TUDO.bat`; cargas 07:35 a 22:35, aquecedor de 5 em 5 min; **na `SRV-IA`**, confirmado em
+  2026-10-19: a carga cumpriu 66 de 66 horários de 09/10 a 18/10, todas `OK`; **o aquecedor falha em toda chamada**
+  com `CERTIFICATE_VERIFY_FAILED`, conserto pendente na VM). O `bi_comum.py` tem a tranca de carga. Para atualizar o dado na hora: **`ATUALIZAR AGORA.bat`** — ver [[Reposições - Sync]]. Abre
   na hora porque **não lê o banco ao abrir** (cache no banco + CDN + cópia no navegador): em 07/10 o banco do
   Supabase saturou e o painel respondeu em 0,18 s mesmo assim — ver [[Supabase]] e [[data-warehouse]] (seção 8b).
   Atenção: somar a coluna de valor da planilha consolidada dá 44% a mais — é o total do pedido repetido em cada item.
