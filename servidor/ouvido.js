@@ -371,14 +371,14 @@ export function criarOuvidoChrome({
     cdp.ouvir(aoCdp);
     try {
       if (encerrado) throw new ErroOuvido('desligado', 503);
-      await cdp.enviar('Browser.grantPermissions', { origin, permissions: ['audioCapture'] });   // a cada partida: não fica gravada
+      await cdp.enviar('Browser.grantPermissions', { origin: origem, permissions: ['audioCapture'] });   // a cada partida: não fica gravada
       await carregarPagina();
     } catch (e) {
       // não abriu direito: fecha sem contar como queda (senão a volta automática entraria em laço)
       fechando = true;
       try { await fecharChrome(); } finally { fechando = false; }
       estadoAtual = 'caiu';
-      const x = e instanceof ErroOuvido ? e : new ErroOuvido('pagina', 503, undefined, codigoDe(e));
+      const x = e instanceof ErroOuvido ? e : new ErroOuvido('pagina', 503, undefined, `${codigoDe(e)}: ${e && e.message}`);
       log(`ouvido: a página do ouvido não carregou (${x.codigo}${x.detalhe ? `: ${x.detalhe}` : ''})`);
       throw x;
     }
