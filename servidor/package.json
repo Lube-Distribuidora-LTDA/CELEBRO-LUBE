@@ -11,10 +11,14 @@
   "scripts": {
     "start": "node servidor.js",
     "simulado": "node servidor.js --simulado",
-    "teste": "node teste/testar.js && node teste/testar-email.js && node teste/testar-cerebro.js",
+    "teste": "node teste/testar.js && node teste/testar-email.js && node teste/testar-cerebro.js && node teste/testar-rosto.js && node teste/testar-ouvido-remoto.js && node teste/testar-ouvido.js && node teste/testar-integracao.js",
     "teste:geral": "node teste/testar.js",
     "teste:email": "node teste/testar-email.js",
-    "teste:cerebro": "node teste/testar-cerebro.js"
+    "teste:cerebro": "node teste/testar-cerebro.js",
+    "teste:rosto": "node teste/testar-rosto.js",
+    "teste:ouvido": "node teste/testar-ouvido.js",
+    "teste:ouvido-remoto": "node teste/testar-ouvido-remoto.js",
+    "teste:integracao": "node teste/testar-integracao.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

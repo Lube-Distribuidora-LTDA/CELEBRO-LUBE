@@ -1,18 +1,32 @@
 /* Cérebro da Lube — servidor/servidor.js: o app local.
-   node servidor/servidor.js [--simulado] [--abrir]
+   node servidor/servidor.js [--simulado] [--abrir] [--trava-aberta] [--rosto-pasta=<pasta>] [--ouvido-perfil=<pasta>]
+                             [--ouvido-teste=<arquivo.wav>]
    Escuta SÓ em 127.0.0.1:8790 e serve:
      GET  /                         o painel (web/index.html) com a meta tag cerebro-token desta partida
      GET  /<arquivo>                os arquivos de web/ (css, js…)
      GET  /api/vault                as notas do vault: {vaultName, files:[{path, text, size, mtime}]}
      GET  /api/events               SSE: evento `change` quando uma nota muda
      GET  /api/saude                select saude.painel() no DATA WAREHOUSE (o JSON do Guardião)
-     GET  /api/jarvis/estado        o que está ligado (cérebro, banco, e-mail, arquivos) — com token
-     POST /api/jarvis/turno         uma fala do Júlio → SSE com texto, ferramenta, cartao, acao, modelo, fim, erro — com token
-     POST /api/jarvis/acao/:id      {decisao:'confirmar'|'recusar'} — com token; SÓ a interface chama
+     GET  /api/jarvis/estado        o que está ligado (cérebro, banco, e-mail, arquivos, trava, ouvido) — com token
+     POST /api/jarvis/turno         uma fala do Júlio → SSE com texto, ferramenta, cartao, acao, modelo, fim, erro — com
+                                    token; 423 enquanto a trava do rosto não liberou o dia
+     POST /api/jarvis/acao/:id      {decisao:'confirmar'|'recusar'} — com token; SÓ a interface chama; confirmar = 423
+                                    travado (recusar passa)
+     /api/rosto/*                   a trava do rosto e o Windows Hello (rosto.js; docs/OUVIDO-E-ROSTO.md §5.4) — com token
+     /api/ouvido/*                  o ouvido: o Chrome escondido que reconhece a fala no computador (ouvido.js, §3.3) —
+                                    com token; o Chrome só abre quando a interface liga o microfone, e fecha com o servidor
+   Opções: --trava-aberta (SÓ teste: a trava libera tudo, e o rosto usa uma pasta temporária) e --rosto-pasta (pasta de
+   teste) só valem com --simulado: sem ele o servidor recusa e sai (um comando de teste esquecido não desliga a trava do
+   app de verdade); --ouvido-perfil (perfil de teste do Chrome); --ouvido-teste=<.wav> (só com --simulado: o ouvido toca o
+   arquivo no lugar do microfone, servido em /teste-ouvido.wav, para provar o caminho Edge → servidor → Chrome sem abrir
+   o microfone).
    Segurança: Host tem que ser localhost:8790 ou 127.0.0.1:8790 (contra DNS rebinding); Origin, quando vem, tem que ser a
    própria página; toda rota /api/ (menos os GET de leitura do vault, eventos e saúde) exige x-cerebro-token, um valor
    aleatório gerado a cada partida e entregue só na página servida aqui (contra outro site aberto no navegador mandar o
-   Jarvis enviar e-mail). Corpo até 1 MB, só JSON. Sem CORS. A página não pode ser posta em iframe. */
+   Jarvis enviar e-mail). Corpo até 1 MB, só JSON. Sem CORS. A página não pode ser posta em iframe. A página tem uma CSP
+   que só deixa ela falar com este app e com as CDNs das bibliotecas (a câmera e o token não vão para outro lugar). A
+   trava do rosto é conferida aqui, mas com os números que a página manda: quem abre o console deste computador e tem uma
+   foto do Júlio consegue passar (a prova de vida é conferida na página). Ela é uma trava do Jarvis, não do Windows. */
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -25,10 +39,26 @@ import { criarBanco } from './banco.js';
 import { decidir, quantasPendentes, MOTIVOS_RECUSA } from './acoes.js';
 import { raizesConhecidas, raizesAcessiveis } from './ferramentas/arquivos.js';
 import { limparConversa } from './conversa.js';
+import { criarRosto } from './rosto.js';
+import { criarOuvidoChrome, acharChrome } from './ouvido.js';
 import { log } from './util.js';
 
+const ARGV = process.argv.slice(2);
+// --nome=valor (o valor pode ter espaço se vier entre aspas no comando)
+const opcao = (nome) => { const a = ARGV.find(x => x.startsWith(`--${nome}=`)); const v = a ? a.slice(nome.length + 3).trim() : ''; return v || null; };
+const TRAVA_ABERTA = ARGV.includes('--trava-aberta');
+// o simulado PEDIDO (--simulado ou JARVIS_SIMULADO=1). Não é o cfg.simulado, que também liga quando falta a chave do
+// Claude: aí o app é o de verdade (ENV, e-mail, banco) e a trava tem que valer
+const SIMULADO_PEDIDO = ARGV.includes('--simulado') || process.env.JARVIS_SIMULADO === '1';
+// as opções que mexem na trava são só de teste: no app de verdade um comando copiado ou um atalho esquecido
+// desligaria a trava (--trava-aberta) ou cairia num "primeiro cadastro" novo (--rosto-pasta). Recusa e sai.
+if ((TRAVA_ABERTA || ARGV.some(x => x.startsWith('--rosto-pasta'))) && !SIMULADO_PEDIDO) {
+  log('Recusado: --trava-aberta e --rosto-pasta só valem com --simulado (são de teste). O app não ligou.');
+  process.exit(1);
+}
 const cfg = carregarConfig();
 const PORTA = cfg.porta;
+const ORIGEM_APP = `http://localhost:${PORTA}`;   // o WebAuthn (rpID localhost) e a permissão do microfone do Chrome
 const TOKEN = crypto.randomBytes(32).toString('base64url');
 const HOSTS = new Set([`localhost:${PORTA}`, `127.0.0.1:${PORTA}`]);
 const ORIGENS = new Set([`http://localhost:${PORTA}`, `http://127.0.0.1:${PORTA}`]);
@@ -41,6 +71,25 @@ const SEG = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
+/* A CSP da página do painel (só o index). As bibliotecas do rosto, do Modo Mãos e do robô vêm do jsdelivr por import()
+   dinâmico, que não aceita SRI, e rodam com a câmera ligada e o token na página: a CSP é a barreira para um arquivo
+   trocado na CDN não mandar quadro da câmera nem o token para outro servidor (fetch, imagem, mídia, formulário).
+   A página só fala com este app, com as CDNs das bibliotecas (jsdelivr; os modelos do MediaPipe no storage.googleapis.com)
+   e com o Guardião (o Supabase do DATA WAREHOUSE, o mesmo PROJETO do web/js/saude.js, para quando o ENV não tem o banco).
+   'unsafe-inline' fica pelo importmap do three e pelos estilos montados no HTML; 'wasm-unsafe-eval' pelo WASM do MediaPipe. */
+const CDN = 'https://cdn.jsdelivr.net';
+const GUARDIAO = 'https://ivcnotrynogaljrvvyes.supabase.co';
+const CSP_PAINEL = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${CDN}`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  `connect-src 'self' ${CDN} https://storage.googleapis.com ${GUARDIAO}`,
+  "worker-src 'self' blob:",
+  "frame-src 'none'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'",
+].join('; ');
 const TIPOS = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -65,6 +114,31 @@ if (cfg.simulado) {
   const { criarCerebro } = await import('./cerebro.js');
   cerebro = criarCerebro({ cfg, vault, banco });
 }
+
+/* A trava do rosto (rosto.js): quem decide se o Jarvis está liberado hoje. Dado biométrico só em
+   %LOCALAPPDATA%\CerebroLube\rosto (com --simulado ou --trava-aberta, numa pasta temporária). */
+const rosto = criarRosto({ travaAberta: TRAVA_ABERTA, pasta: opcao('rosto-pasta') || undefined, origem: ORIGEM_APP, log });
+
+/* O ouvido (ouvido.js): um Chrome escondido, aberto só quando a interface liga o microfone; o microfone só liga com a
+   trava aberta. --ouvido-teste: o .wav no lugar do microfone (só com --simulado; nunca no app de verdade). */
+const WAV_TESTE = (() => {
+  const f = opcao('ouvido-teste');
+  if (!f) return null;
+  if (!SIMULADO_PEDIDO) { log('ouvido: --ouvido-teste só vale com --simulado; ignorado'); return null; }
+  const abs = path.resolve(f);
+  let ok = false;
+  try { ok = /\.wav$/i.test(abs) && fs.statSync(abs).isFile(); } catch (_) { ok = false; }
+  if (!ok) { log('ouvido: o arquivo do --ouvido-teste não existe ou não é .wav; ignorado'); return null; }
+  return abs;
+})();
+const ouvido = criarOuvidoChrome({
+  urlPagina: `${ORIGEM_APP}/ouvido.html${WAV_TESTE ? '?teste=1' : ''}`,
+  origem: ORIGEM_APP,
+  perfil: opcao('ouvido-perfil') || undefined,
+  podeLigar: () => rosto.liberado(),
+  permitirTeste: !!WAV_TESTE,
+  log,
+});
 
 /* ---------- Respostas ---------- */
 function json(res, status, obj, extra = {}) {
@@ -120,7 +194,7 @@ async function servirIndex(res, cabeca) {
       + '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
       + metas + '</head>\n<body>\n' + html + '\n</body>\n</html>\n';
   }
-  res.writeHead(200, { ...SEG, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(pagina) });
+  res.writeHead(200, { ...SEG, 'Content-Security-Policy': CSP_PAINEL, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(pagina) });
   res.end(cabeca ? undefined : pagina);
 }
 
@@ -153,6 +227,9 @@ function estado() {
       arquivos: raizes, internet: !cfg.simulado,
     },
     acoes_pendentes: quantasPendentes(),
+    // a trava do rosto (sem dado biométrico: só se há cadastro, quantas amostras e se o dia está liberado) e o ouvido
+    trava: rosto.estado(),
+    ouvido: ouvido.estado(),
   };
 }
 
@@ -202,7 +279,24 @@ async function tratar(req, res) {
 
     if (p === '/api/jarvis/estado' && m === 'GET') { json(res, 200, estado()); return; }
 
+    // a trava do rosto e o ouvido: o token, o Host e a Origin já foram conferidos aqui em cima
+    const ctx = { req, res, url, metodo: m, lerCorpoJson, json, erro };
+    if (p.startsWith('/api/rosto/')) { await rosto.tratar(ctx); return; }
+    if (p === '/api/ouvido' || p.startsWith('/api/ouvido/')) {
+      // --ouvido-teste: o ligar ganha o .wav no lugar do microfone (o Edge não sabe de nada)
+      if (WAV_TESTE && p === '/api/ouvido/ligar') {
+        ctx.lerCorpoJson = async (r) => {
+          const c = await lerCorpoJson(r);
+          return { ...(c && typeof c === 'object' && !Array.isArray(c) ? c : {}), teste: { arquivo: '/teste-ouvido.wav', atrasoMs: 2500 } };
+        };
+      }
+      await ouvido.tratar(ctx);
+      return;
+    }
+
     if (p === '/api/jarvis/turno' && m === 'POST') {
+      // travado (o dia ainda não foi liberado pelo rosto ou pelo Windows Hello): nada de turno
+      if (!rosto.exigirLiberado(res, erro)) return;
       let corpo;
       try { corpo = await lerCorpoJson(req); }
       catch (e) { erro(res, e.status || 400, e.status === 413 ? 'O pedido passou de 1 MB.' : e.status === 415 ? 'Mande JSON (Content-Type: application/json).' : 'JSON inválido.'); return; }
@@ -232,6 +326,8 @@ async function tratar(req, res) {
       catch (e) { erro(res, e.status || 400, 'Pedido inválido.'); return; }
       const decisao = corpo && corpo.decisao;
       if (decisao !== 'confirmar' && decisao !== 'recusar') { erro(res, 400, 'Mande {"decisao":"confirmar"} ou {"decisao":"recusar"}.', 'decisao'); return; }
+      // confirmar age (envia o e-mail): só com a trava aberta. Recusar continua valendo travado (nada sai)
+      if (decisao === 'confirmar' && !rosto.exigirLiberado(res, erro)) return;
       const motivo = decisao === 'recusar' && MOTIVOS_RECUSA.has(corpo.motivo) ? corpo.motivo : undefined;
       const r = await decidir(ma[1], decisao, motivo);
       json(res, r.status, { ok: r.ok, mensagem: r.mensagem });
@@ -243,6 +339,14 @@ async function tratar(req, res) {
 
   if (m !== 'GET' && m !== 'HEAD') { erro(res, 405, 'Método não permitido.', 'metodo'); return; }
   if (p === '/' || p === '/index.html') { await servirIndex(res, m === 'HEAD'); return; }
+  if (WAV_TESTE && p === '/teste-ouvido.wav') {
+    let st;
+    try { st = await fsp.stat(WAV_TESTE); } catch (_) { erro(res, 404, 'Não encontrado.'); return; }
+    res.writeHead(200, { ...SEG, 'Content-Type': 'audio/wav', 'Content-Length': st.size, 'Cache-Control': 'no-store' });
+    if (m === 'HEAD') { res.end(); return; }
+    fs.createReadStream(WAV_TESTE).on('error', () => res.destroy()).pipe(res);
+    return;
+  }
   await servirEstatico(req, res, url, m === 'HEAD');
 }
 
@@ -289,16 +393,28 @@ servidor.listen(PORTA, '127.0.0.1', async () => {
   log(`  cérebro: ${cfg.simulado ? `simulado (${cfg.motivoSimulado})` : 'Claude Haiku 5.5 (conversa) + Sonnet 5.5 (pesado)'}`);
   log(`  ENV: ${r.env || 'não encontrado'} · banco: ${r.banco ? 'sim' : 'não'} · e-mail: leitura ${r.email_leitura ? 'sim' : 'não'}, envio ${r.email_envio ? 'sim' : 'não'}`);
   log(`  vault: ${notas} notas · arquivos: ${cfg.raizes.join(' ; ')}`);
+  const tr = rosto.estado();
+  log(`  ouvido: ${acharChrome() ? 'Google Chrome achado (abre escondido só quando o microfone liga)' : 'Google Chrome não achado (fica o reconhecimento do Edge)'}${WAV_TESTE ? ' · TESTE: toca o .wav no lugar do microfone' : ''}`);
+  if (TRAVA_ABERTA) log('  !!! TRAVA DO ROSTO DESLIGADA (só teste): o Jarvis libera tudo sem conferir o rosto !!!');
+  else log(`  trava do rosto: ${tr.cadastro.rosto || tr.hello.cadastrado ? `cadastrada${tr.liberado ? ', liberada hoje' : ', pede o rosto na primeira conversa do dia'}` : 'sem cadastro (o Jarvis pede o cadastro na primeira vez)'}`);
   if (cfg.abrirNavegador) abrirEdge();
 });
 
+let desligando = false;
 async function desligar() {
+  if (desligando) return;
+  desligando = true;
   log('Desligando o Cérebro…');
   vault.parar();
   for (const res of clientesEventos) { try { res.end(); } catch (_) { /* nada */ } }
   servidor.close();
+  // o Chrome escondido fecha junto (Browser.close; se não sair em 3 s, taskkill na árvore). Se o Node morrer antes, o
+  // pipe fecha e ele sai sozinho
+  await Promise.race([ouvido.desligar({ final: true }).catch(() => {}), new Promise(r => setTimeout(r, 6000).unref())]);
   await banco.fechar();
   setTimeout(() => process.exit(0), 300).unref();
 }
 process.on('SIGINT', desligar);
 process.on('SIGTERM', desligar);
+// fechar a janela preta do INICIAR.bat chega como SIGHUP no Windows (há alguns segundos antes de o Windows matar)
+process.on('SIGHUP', desligar);

@@ -1,0 +1,158 @@
+/* Cérebro da Lube — css/rosto.css  (agente ROSTO, parte D do docs/OUVIDO-E-ROSTO.md §6.8)
+   O portão do Jarvis: a lente redonda com a câmera no núcleo do HUD, as leituras, a dica, as bolinhas do piscar, os
+   botões e os cartões (cadastro, apagar, Windows Hello). O js/rosto.js põe este arquivo no <head> (o index.html e o
+   artifact não mudam) e escreve na raiz --rs-cx/--rs-cy (centro do painel), --rs-lx/--rs-ly (centro da lente, que na
+   saída volta para o núcleo), --rs-rc (raio da lente), --rs-k (escala) e --rs-ka (opacidade), em px. Os anéis, a malha e
+   o ✓ são desenhados no canvas .rs-fx. Só tokens do estilo.css; prefixo .rs- em tudo, dentro de #jarvis. */
+
+/* ---------- Raiz: por cima do canvas do HUD e da barra de cima, por baixo do .jv-confirma ---------- */
+.rs-portao{--rs-cx:50%; --rs-cy:46%; --rs-lx:50%; --rs-ly:46%; --rs-rc:160px; --rs-k:0; --rs-ka:0; --rs-c:var(--holo);
+  position:absolute; inset:0; z-index:7; pointer-events:none; color:var(--ink); outline:none; transition:opacity .2s ease, background-color .2s ease}
+.rs-portao[data-tom="ok"]{--rs-c:var(--ok)}
+.rs-portao[data-tom="vermelho"]{--rs-c:var(--vermelho)}
+.rs-portao[data-tom="rever"]{--rs-c:var(--rever)}
+.rs-portao.rs-saindo{opacity:0}
+/* enquanto o portão está aberto, a legenda, a caixa de texto e os painéis do Jarvis saem (o servidor recusa tudo com
+   423 mesmo assim); a barra de cima continua, com o Sair */
+.jarvis.rs-travado .jv-pe,.jarvis.rs-travado .jv-atividade,.jarvis.rs-travado .jv-exibicao,.jarvis.rs-travado .jv-nucleo,.jarvis.rs-travado .jv-sim,
+.jarvis.rs-travado .jv-l-ie,.jarvis.rs-travado .jv-l-id{visibility:hidden}
+/* os anéis do HUD ficam mais fracos atrás da lente: o rosto e o painel aparecem na frente */
+.jarvis .jv-cena{transition:opacity .4s ease}
+.jarvis.rs-travado .jv-cena{opacity:.5}
+/* camadas: a lente (1), os anéis/malha/✓ do canvas por cima dela (2), os colchetes e leituras (3), o painel (4), o cartão (5) */
+.rs-fx{position:absolute; inset:0; z-index:2; width:100%; height:100%; display:block; pointer-events:none}
+
+/* ---------- A lente: disco --bg com o vídeo espelhado, recortado em círculo ---------- */
+.rs-lente{position:absolute; z-index:1; left:calc(var(--rs-lx) - var(--rs-rc)); top:calc(var(--rs-ly) - var(--rs-rc)); width:calc(var(--rs-rc) * 2); height:calc(var(--rs-rc) * 2);
+  border-radius:50%; overflow:hidden; clip-path:circle(50%); isolation:isolate;
+  background:radial-gradient(circle at 50% 42%, var(--surface-2) 0, var(--surface) 38%, var(--bg) 72%);
+  transform:scale(var(--rs-k)); transform-origin:50% 50%; opacity:var(--rs-ka); will-change:transform, opacity}
+.rs-video,.rs-parado{position:absolute; inset:0; width:100%; height:100%; display:block; object-fit:cover; opacity:0;
+  transition:opacity .3s cubic-bezier(.2,.8,.2,1), filter .4s ease}
+.rs-video{transform:scaleX(-1); filter:saturate(.85) contrast(1.05) brightness(.84)}
+.rs-portao.rs-com-cam .rs-video{opacity:1}
+.rs-parado.rs-vis{opacity:1}
+.rs-parado.rs-cinza{filter:saturate(.3) brightness(.82)}
+/* véu --holo a 10% (screen) e linhas de varredura de 2 px a 5% */
+.rs-holo{position:absolute; inset:0; z-index:2; pointer-events:none; mix-blend-mode:screen;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 2px, color-mix(in srgb, var(--holo) 5%, transparent) 2px 4px),
+    color-mix(in srgb, var(--holo) 10%, transparent)}
+/* vinheta da borda (por dentro do aro que o canvas desenha) */
+.rs-lente::after{content:""; position:absolute; inset:0; z-index:3; border-radius:50%; pointer-events:none;
+  box-shadow:inset 0 0 calc(var(--rs-rc) * .32) var(--bg), inset 0 0 0 1px var(--holo-fraco)}
+/* carregando: a porcentagem no meio da lente */
+.rs-carga{position:absolute; inset:0; z-index:4; display:grid; place-content:center; justify-items:center; gap:6px; opacity:0; transition:opacity .2s;
+  background:radial-gradient(circle, color-mix(in srgb, var(--bg) 55%, transparent) 0, transparent 70%); font-family:var(--mono)}
+.rs-carga b{font:800 calc(var(--rs-rc) * .26)/1 var(--mono); color:var(--branco); font-variant-numeric:tabular-nums; text-shadow:0 0 18px var(--holo-medio), 0 0 2px var(--holo)}
+.rs-carga span{font:600 10.5px/1 var(--mono); letter-spacing:.24em; color:var(--muted)}
+.rs-portao[data-rosto="carregando"] .rs-carga{opacity:1}
+/* Windows Hello: a chave no meio da lente */
+.rs-chave{position:absolute; z-index:4; left:50%; top:50%; width:calc(var(--rs-rc) * .62); height:calc(var(--rs-rc) * .62); translate:-50% -50%;
+  color:var(--holo); filter:drop-shadow(0 0 10px var(--holo-medio)); opacity:0; transition:opacity .25s, color .25s}
+.rs-portao[data-rosto="hello"] .rs-chave,.rs-portao[data-rosto="cadastro-hello"] .rs-chave{opacity:1}
+/* "Jarvis travado" (o portão aberto sem ação do Júlio): a chave, sem câmera, até o clique */
+.rs-portao[data-rosto="travado"] .rs-chave{opacity:1; color:var(--rever); filter:drop-shadow(0 0 10px var(--holo-fraco))}
+.rs-portao[data-rosto="liberado"] .rs-chave{opacity:0}
+.rs-portao[data-tom="vermelho"] .rs-chave{color:var(--vermelho); filter:drop-shadow(0 0 10px var(--vermelho-fraco))}
+
+/* ---------- Colchetes de canto: o JS põe cada um no lugar (translate) ---------- */
+.rs-mira{position:absolute; z-index:3; left:0; top:0; width:0; height:0; opacity:0; transition:opacity .2s}
+.rs-mira .canto{top:0; left:0; right:auto; bottom:auto; width:18px; height:18px; transition:border-color .2s, filter .2s; will-change:transform}
+.rs-portao.rs-com-cam .rs-mira,.rs-portao[data-rosto="analisando"] .rs-mira,.rs-portao[data-rosto="liberado"] .rs-mira,.rs-portao[data-rosto="recusado"] .rs-mira{opacity:1}
+.rs-portao.rs-encolhendo .rs-mira{opacity:0}
+.rs-mira[data-tom="rever"] .canto{border-color:var(--rever); filter:drop-shadow(0 0 5px var(--rever-fraco))}
+.rs-mira[data-tom="ok"] .canto{border-color:var(--ok); filter:drop-shadow(0 0 5px var(--ok-fraco))}
+.rs-mira[data-tom="vermelho"] .canto{border-color:var(--vermelho); filter:drop-shadow(0 0 5px var(--vermelho-fraco))}
+
+/* ---------- Leituras dos dois lados da lente (como as .jv-l do HUD) ---------- */
+.rs-leituras{position:absolute; z-index:3; inset:0; pointer-events:none; opacity:0; transition:opacity .25s}
+.rs-portao.rs-com-cam .rs-leituras,.rs-portao[data-rosto="analisando"] .rs-leituras,.rs-portao[data-rosto="liberado"] .rs-leituras,.rs-portao[data-rosto="recusado"] .rs-leituras{opacity:1}
+.rs-portao.rs-encolhendo .rs-leituras{opacity:0}
+.rs-l{position:absolute; top:calc(var(--rs-cy) - 26px); margin:0; display:grid; gap:6px; font:600 10.5px/1.2 var(--mono); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); text-shadow:0 0 6px var(--bg); white-space:nowrap}
+.rs-l i{font-style:normal}
+.rs-l b{color:var(--jv-tinta, var(--holo)); font-weight:800; font-variant-numeric:tabular-nums}
+.rs-l::before{content:""; position:absolute; top:-9px; width:9px; height:9px; border:1.5px solid var(--holo-medio)}
+.rs-l-e{right:calc(100% - var(--rs-cx) + var(--rs-rc) + 46px); text-align:right; justify-items:end}
+.rs-l-e::before{right:-15px; border-left:0; border-bottom:0}
+.rs-l-d{left:calc(var(--rs-cx) + var(--rs-rc) + 46px)}
+.rs-l-d::before{left:-15px; border-right:0; border-bottom:0}
+
+/* ---------- Painel embaixo da lente: status, dica, bolinhas, botões e a frase da câmera ---------- */
+.rs-painel{position:absolute; z-index:4; left:var(--rs-cx); top:calc(var(--rs-cy) + var(--rs-rc) + 34px); translate:-50% 0; width:min(480px, calc(100% - 32px));
+  display:grid; justify-items:center; gap:9px; padding:10px 12px 12px; text-align:center; pointer-events:auto;
+  opacity:var(--rs-ka); transition:opacity .2s; isolation:isolate}
+/* véu atrás do texto (os anéis de fora do HUD passam por aqui) */
+.rs-painel::before{content:""; position:absolute; inset:-14px -28px; z-index:-1; pointer-events:none;
+  background:radial-gradient(ellipse 50% 50% at 50% 50%, var(--veu) 0, var(--veu) 45%, transparent 100%)}
+.rs-painel > p{margin:0}
+.rs-rot{color:var(--muted)}
+.rs-status{min-height:1.3em; font:700 13px/1.3 var(--mono); letter-spacing:.22em; text-transform:uppercase; text-shadow:0 0 12px var(--bg), 0 0 18px var(--bg);
+  color:var(--rs-c); color:color-mix(in srgb, var(--rs-c) 76%, var(--branco)); overflow-wrap:anywhere}
+.rs-status b{font-weight:800}
+.rs-dica{min-height:1.45em; max-width:40ch; font:500 16px/1.45 var(--body); color:var(--ink); text-wrap:balance; text-shadow:0 0 10px var(--bg), 0 1px 3px var(--bg)}
+.rs-dica:empty{visibility:hidden}
+.rs-bolinhas{display:flex; gap:12px; min-height:14px}
+.rs-bolinhas:empty{display:none}
+.rs-bolinhas i{width:14px; height:14px; border-radius:50%; border:2px solid var(--holo-medio); background:var(--bg)}
+.rs-bolinhas i.cheia{border-color:var(--holo); background:var(--holo); box-shadow:0 0 10px var(--holo), 0 0 2px var(--branco); animation:rsPulo .18s cubic-bezier(.34,1.56,.64,1)}
+.rs-botoes{display:flex; flex-wrap:wrap; justify-content:center; gap:8px}
+.rs-botoes:empty{display:none}
+.rs-botoes .btn{min-width:132px}
+.rs-privacidade{display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:4px 12px; max-width:44ch; font:600 10.5px/1.5 var(--mono); color:var(--muted); text-shadow:0 0 8px var(--bg)}
+.rs-cam-ind{display:inline-flex; align-items:center; gap:7px; letter-spacing:.14em; white-space:nowrap}
+.rs-cam-ind b{color:var(--muted); font-weight:800}
+.rs-pt{width:8px; height:8px; border-radius:50%; background:var(--line-forte); transition:background-color .2s, box-shadow .2s}
+.rs-portao.rs-com-cam .rs-pt{background:var(--vermelho); box-shadow:0 0 10px var(--vermelho); animation:rsPt 1.6s ease-out infinite}
+.rs-portao.rs-com-cam .rs-cam-ind b{color:var(--ink)}
+.rs-priv-txt{font-family:var(--body); font-weight:500; font-size:12px; letter-spacing:0}
+/* na saída, só o "SISTEMA LIBERADO" fica (a lente encolhe até o núcleo) */
+.rs-portao.rs-encolhendo .rs-painel{opacity:1}
+.rs-portao.rs-encolhendo .rs-painel > :not(.rs-status){opacity:0; transition:opacity .2s}
+
+/* ---------- Cartões: explicação do cadastro, apagar, Windows Hello ---------- */
+.rs-portao.rs-com-cartao{background:radial-gradient(ellipse 60% 60% at 50% 50%, var(--veu), transparent 80%)}
+.rs-portao.rs-com-cartao .rs-lente,.rs-portao.rs-com-cartao .rs-fx,.rs-portao.rs-com-cartao .rs-mira,.rs-portao.rs-com-cartao .rs-leituras{opacity:.14}
+.rs-portao.rs-com-cartao .rs-painel{opacity:0; pointer-events:none}
+.rs-cartao{position:absolute; z-index:5; left:50%; top:50%; translate:-50% -50%; width:min(480px, calc(100% - 32px)); max-height:calc(100% - 32px); overflow:auto;
+  display:grid; gap:12px; padding:24px 24px 20px; pointer-events:auto;
+  background:var(--vidro-forte); border:1px solid var(--line-forte); border-radius:3px;
+  box-shadow:0 30px 90px var(--sombra), 0 0 0 1px var(--holo-tenue), 0 0 70px var(--holo-tenue); animation:rsEntra .32s cubic-bezier(.2,.8,.2,1) both}
+.rs-cartao[hidden]{display:none}
+.rs-cartao .canto{width:18px; height:18px}
+.rs-cartao > p,.rs-cartao > h2{margin:0}
+.rs-c-tit{font:800 21px/1.2 var(--display); text-wrap:balance}
+.rs-c-txt{display:grid; gap:10px; font-size:14px; line-height:1.55; color:var(--ink)}
+.rs-c-txt p{margin:0}
+.rs-c-txt b{color:var(--branco)}
+.rs-c-txt code{font:600 12px/1.5 var(--mono); color:var(--jv-tinta, var(--holo)); overflow-wrap:anywhere}
+.rs-cartao .rs-botoes{justify-content:flex-end; margin-top:4px}
+.rs-cartao[data-tom="perigo"]{border-color:var(--vermelho); box-shadow:0 30px 90px var(--sombra), 0 0 0 1px var(--vermelho-fraco), 0 0 60px var(--vermelho-fraco)}
+.rs-cartao[data-tom="perigo"] .canto{border-color:var(--vermelho); filter:drop-shadow(0 0 5px var(--vermelho-fraco))}
+.rs-cartao[data-tom="perigo"] .rs-c-rot{color:var(--vermelho); color:color-mix(in srgb, var(--vermelho) 70%, var(--branco))}
+
+/* ---------- Telas estreitas: sem as leituras dos lados; painel mais junto ---------- */
+.rs-portao.rs-estreito .rs-l{display:none}
+@media (max-width:560px){
+  /* a lente cobre o lugar das leituras de cima do HUD: saem enquanto o portão está aberto */
+  .jarvis.rs-travado .jv-l-se,.jarvis.rs-travado .jv-l-sd{visibility:hidden}
+  .rs-painel{top:calc(var(--rs-cy) + var(--rs-rc) + 28px); gap:7px}
+  .rs-dica{font-size:15px}
+  .rs-status{font-size:12px; letter-spacing:.16em}
+  .rs-botoes .btn{min-width:0; flex:1 1 auto}
+  .rs-cartao{padding:20px 18px 16px}
+  .rs-cartao .rs-botoes{justify-content:stretch}
+  .rs-priv-txt{font-size:11.5px}
+}
+
+/* ---------- Movimento ---------- */
+@keyframes rsPulo{0%{transform:scale(1)} 55%{transform:scale(1.3)} 100%{transform:scale(1)}}
+@keyframes rsEntra{from{opacity:0; transform:scale(.94)} to{opacity:1; transform:none}}
+@keyframes rsPt{0%{box-shadow:0 0 0 0 var(--vermelho)} 70%,100%{box-shadow:0 0 0 7px transparent}}
+@media (prefers-reduced-motion: reduce){
+  .rs-bolinhas i.cheia,.rs-cartao{animation:none}
+  .rs-portao.rs-com-cam .rs-pt{animation:none}
+  .rs-lente{will-change:opacity}
+  .rs-mira .canto{transition:border-color .2s}
+}

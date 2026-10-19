@@ -21,7 +21,8 @@ Limites que valem desde já (dizer na tela e na resposta final):
   estilo do filme, nas cores da Lube.
 - **O claude.ai não libera microfone** para páginas publicadas: voz só no app local.
 - **O Edge manda o áudio para o serviço de fala da Microsoft** para transcrever (Web Speech API). Dizer isso na tela de
-  ligar o microfone. O microfone só fica aberto no modo Jarvis, com indicador visível.
+  ligar o microfone. O microfone só fica aberto no modo Jarvis, com indicador visível. (Desde 2026-10-19, no app do
+  computador quem ouve é um Chrome escondido, sem internet, e a primeira conversa do dia passa pela trava do rosto: §10.)
 
 Vale tudo de `docs/CONTRATO.md`, `ROTINAS.md`, `MAOS.md`, `GUARDIAO.md` (tokens, fontes, CSP do artifact, ids,
 reduced motion, 400 px, português claro, segredos nunca em código/nota/log).
@@ -615,3 +616,62 @@ Revisão em quatro lentes (conversa, segurança, visual, regressão). O que mudo
 
 Ficaram de fora, de propósito: filtro por confiança do reconhecimento (sem como medir aqui; perder fala do Júlio é pior)
 e `script-src`/`integrity` para o three e o MediaPipe (risco de quebrar o Modo Mãos sem câmera para testar).
+
+---------------------------------------------------------------------------------------------------
+## 10. Ouvido e rosto (agente INTEGRADOR, 2026-10-19)
+
+Especificação completa: `docs/OUVIDO-E-ROSTO.md` (as quatro partes, as rotas, a conta do rosto, os textos). Aqui, o
+que mudou no Jarvis e por quê.
+
+**O ouvido: "Edge fala, Chrome ouve"** (decisão do Júlio). Desde o Edge 155.0.4283.62 (18/10) o `SpeechRecognition` do
+Edge devolve resultado vazio: a onda mexia e nada era transcrito. No app do computador, quem ouve agora é um **Google
+Chrome escondido** (`--headless=new`, por pipe), aberto pelo servidor **só quando o microfone liga**, com
+`processLocally` (sem internet). O texto chega ao Edge pelo SSE do servidor, com a mesma cara do ouvido antigo
+(`web/js/ouvido-remoto.js`); a voz continua a do Edge (Antônio Online).
+- Padrão: Chrome quando o servidor diz que ele existe; senão o do Edge, com o vigia que avisa depois de 3 resultados
+  vazios com fala no medidor. **Ajustes › Ouvido:** "Chrome (offline, neste computador)" ou "Edge (nuvem da Microsoft)".
+- O aviso de ligar o microfone tem o texto novo (sem internet, pacote de ~300 MB, o Windows mostra o Chrome usando o
+  microfone) e um aceite próprio. Sem o pacote (409 `sem-pacote`), a oferta **"Baixar o pacote de voz (cerca de 300 MB,
+  uma vez só)"**; o servidor só baixa com esse clique. Fica também nos ajustes enquanto faltar.
+- O Chrome some, o app é velho (`sem-chrome`, `sem-rota`): o Jarvis passa para o ouvido do Edge sem perder a conversa.
+- Um microfone só (o do Chrome): o Edge não abre mais o microfone; a onda vem pelo SSE. O cancelador de eco do Chrome
+  não ouve a voz do Edge: o filtro de eco por texto continua sendo a defesa (fone de ouvido recomendado).
+
+**O rosto: a trava do dia.** No app do computador, a primeira abertura do dia (America/Sao_Paulo) **começa pelo rosto**:
+o fundo do Jarvis fecha, a lente abre com a câmera (o portão, `web/js/rosto.js`), confere o rosto com o piscar (ou faz
+o cadastro, na primeira vez) e, só liberado, vem a **transição do HUD** (o núcleo nasce no centro, onde a lente
+encolheu) e a **saudação pela hora** ("Boa tarde, Júlio. …"). O portão não diz "bom dia" (`saudar: false`): a saudação
+é uma só, depois do HUD. Já liberado hoje, a abertura é a de sempre (o mergulho nos olhos do robô).
+- **Quem decide é o servidor** (`servidor/rosto.js`): travado, o turno, o confirmar e o ligar do ouvido respondem
+  **423**. Um 423 no meio da conversa (virou o dia) abre o portão **por cima do HUD** (HUD em `travado`, ×0,3;
+  leitura ESTADO RECONHECIMENTO) e, liberado, a mesma pergunta vai de novo; o confirmar de um e-mail travado não envia
+  nada e pede o clique de novo. "Agora não" ou Esc no portão fecham o Jarvis. **Sem ação do Júlio** (o vigia do
+  microfone à meia-noite, "Travar agora") o portão mostra só o cartão "Jarvis travado": a câmera liga no clique
+  "Conferir meu rosto". Sem rosto em 45 s (60 s no cadastro) a câmera desliga sozinha.
+- Com o portão na tela: microfone fechado, nada de turno, sem ajustes e sem o cartão de confirmação; Espaço e Enter são
+  dos botões do portão.
+- **Ajustes › Trava do rosto:** o estado (liberado como e quando, amostras, Hello), Travar agora, Cadastrar o rosto de
+  novo, Cadastrar o Windows Hello e Apagar meu cadastro (pergunta antes; depois de apagar, o Jarvis fecha). Trocar ou
+  apagar pede uma confirmação de até 5 min: se a do dia é mais velha, o portão confere o rosto (ou o Hello) antes.
+- **Honestidade (na tela e no README):** é uma trava do Jarvis neste computador, não do Windows; não substitui o login, e
+  quem abrir o console do navegador neste computador e tiver uma foto do Júlio consegue passar (a prova de vida é
+  conferida na página; o servidor só recebe números). Um vídeo dele também engana o piscar. Nenhuma foto é salva; os
+  números ficam em `%LOCALAPPDATA%\CerebroLube\rosto\`. Proteção de verdade para o envio de e-mail seria exigir o
+  Windows Hello no "confirmar" (decisão do Júlio, depois do PIN criado).
+
+**Link do claude.ai e arquivo único:** nada muda. `ouvido-remoto.js` e `rosto.js` só são importados no app do
+computador (localhost com a meta `cerebro-token`); no link e no `Cerebro da Lube.html` o Jarvis segue com o ouvido do
+Edge (ou sem microfone) e sem trava.
+
+**Servidor:** `--trava-aberta` (só teste: libera tudo, log em destaque) e `--rosto-pasta` (sem `--simulado` o servidor
+recusa e não liga), `--ouvido-perfil` e `--ouvido-teste=<.wav>` (só com `--simulado`: o ouvido toca o arquivo no lugar
+do microfone, para provar o caminho Edge → servidor → Chrome). O `?rosto=simular` só vale com o servidor em
+`--simulado` (o estado do rosto diz `teste: true`). A página do painel tem CSP (só o app, as CDNs e o Guardião). O Chrome escondido fecha com o servidor (Ctrl+C, SIGTERM e fechar a janela, que chega como
+SIGHUP); se o Node morre à força, o pipe fecha e ele sai sozinho.
+
+**Provado aqui (2026-10-19):** `teste:integracao` (44 de 44: 423 antes de liberar, cadastro sintético, travar de novo, e o
+`.wav` chegando como texto pelo servidor.js de verdade) e uma rodada ponta a ponta num Chrome sem janela com
+`?rosto=simular` (o cadastro antes do HUD, a saudação depois, a conversa, o 423 no meio com a pergunta refeita, o Esc, os
+ajustes, o ouvido do Chrome levando a fala do `.wav` à legenda "VOCÊ", a oferta do pacote e a regressão do painel).
+**Falta no PC do Júlio** (`OUVIDO-E-ROSTO.md` §10): o microfone de verdade com a voz dele, o eco com alto-falante, a
+câmera de verdade (distância dele para ele mesmo, o piscar com óculos e pouca luz) e o PIN do Windows Hello.

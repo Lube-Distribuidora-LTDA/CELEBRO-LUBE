@@ -1434,6 +1434,36 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jv-sim-bts{display:flex; flex-wrap:wrap; gap:5px}
 .jv-sim-bts .btn{height:28px; padding:0 9px; font-size:11.5px}
 
+/* ---------- Trava do rosto e ouvido do Chrome (só no app do computador; o portão em si está no css/rosto.css,
+   que o js/rosto.js põe no <head>) ---------- */
+/* antes do HUD (a primeira conversa do dia): o fundo do Jarvis fecha atrás da lente. A animação vence a opacidade que o
+   HUD escreve no elemento, até o HUD ficar pronto (o jarvis.js tira a classe no "pronto") */
+.jarvis.jv-portao .jv-fundo{animation:jvPortaoEntra .35s ease-out both}
+.jarvis.jv-portao .jv-grao{animation:jvPortaoEntra .35s ease-out both}
+.jarvis.jv-portao.saindo .jv-fundo,.jarvis.jv-portao.saindo .jv-grao{animation:jvPortaoSai .25s ease-in both}
+.jarvis.jv-portao .jv-moldura{opacity:1}
+.jarvis.jv-portao .jv-topo{opacity:1; transform:none; pointer-events:auto}
+/* com o portão na tela, nada se decide: sem ajustes e sem o cartão de confirmação (o servidor responde 423 mesmo assim) */
+.jarvis.rs-travado .jv-ajustes-btn,.jarvis.rs-travado .jv-confirma,.jarvis.rs-travado .jv-consent{visibility:hidden}
+/* o pacote de voz do Chrome (o mesmo cartão do aviso do microfone) */
+#jvPacTxt{display:grid; gap:10px; font-size:14px; line-height:1.55; color:var(--ink)}
+.jv-pac-st:empty{display:none}
+.jv-pac-st{padding:8px 10px; border:1px solid var(--holo-medio); border-radius:var(--raio); background:var(--holo-tenue); font-size:13px}
+.jv-pac-st[data-tom="ok"]{border-color:var(--ok); color:var(--ok); background:var(--ok-fraco)}
+.jv-pac-st[data-tom="alerta"]{border-color:var(--alerta); color:var(--alerta); background:var(--alerta-fraco)}
+.jv-pacote .acoes .btn{white-space:normal; height:auto; min-height:36px; padding-top:7px; padding-bottom:7px; text-align:left}
+/* ajustes: ouvido e trava */
+.jv-trava-bts,.jv-ouvido-acoes{justify-content:flex-start!important}
+.jv-trava-bts .btn,.jv-ouvido-acoes .btn{white-space:normal; height:auto; min-height:30px; padding-top:5px; padding-bottom:5px}
+.jv-apagar{border-color:var(--vermelho-fraco)}
+.jv-apagar:hover,.jv-apagar:focus-visible{border-color:var(--vermelho); color:var(--ink)}
+@keyframes jvPortaoEntra{from{opacity:0} to{opacity:1}}
+@keyframes jvPortaoSai{from{opacity:1} to{opacity:0}}
+@media (prefers-reduced-motion: reduce){
+  .jarvis.jv-portao .jv-fundo,.jarvis.jv-portao .jv-grao{animation-duration:.2s}
+  .jarvis.jv-portao.saindo .jv-fundo,.jarvis.jv-portao.saindo .jv-grao{animation-duration:.01s}
+}
+
 /* ---------- Estados ---------- */
 .jarvis[data-estado="confirmando"] .jv-pe .jv-legenda{opacity:.8}
 .jarvis[data-estado="sem-conexao"] .jv-chip i{box-shadow:none}

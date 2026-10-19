@@ -7,3 +7,5 @@ ENV
 /servidor/conversas/
 dist/
 __pycache__/
+# áudio nenhum vai para o repositório (docs/OUVIDO-E-ROSTO.md §3.4): os testes do ouvido geram o .wav se faltar
+/servidor/teste/*.wav

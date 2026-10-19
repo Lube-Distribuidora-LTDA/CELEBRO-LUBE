@@ -6,9 +6,10 @@
    Uso (js/jarvis.js):
      const hud = criarHud({ raiz, canvas, reduzido, robo, cena, onFase });
      await hud.entrar();             // 1,4 s; onFase('paineis') ~1050 ms e onFase('pronto') ~1300 ms
-     hud.estado('ouvindo'|'pensando'|'falando'|'interrompido'|'confirmando'|'sem-conexao'|'repouso');
+     hud.estado('ouvindo'|'pensando'|'falando'|'interrompido'|'confirmando'|'sem-conexao'|'travado'|'repouso');
      hud.modelo('haiku'|'sonnet'); hud.nivel(bandas64, db) (microfone); hud.palavra(0..1) (cada palavra falada)
-     hud.hexagono() (ferramenta); hud.centro() -> {x, y, r}; await hud.sair() (1,0 s); hud.destruir()
+     hud.hexagono() (ferramenta); hud.centro() -> {x, y, r}; hud.previsto() -> {x, y, r} (onde o núcleo vai nascer,
+     com o HUD fechado: o portão do rosto); await hud.sair() (1,0 s); hud.destruir()
    Cores: só tokens do CSS (lidos uma vez com getComputedStyle, como o efeitos-maos.js); nada de cor literal fora da reserva.
    Movimento reduzido: sem giro nem voo; só opacidade e cor mudam; a onda vira uma barra de nível. */
 
@@ -83,7 +84,9 @@ const ESTADOS = {
   falando: { vel: 1.2, estica: 0, varre: 0, regua: 0, respira: 0.5, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
   interrompido: { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0, verm: 0, cinza: 0, nucleo: 1, pulso: 0 },
   confirmando: { vel: 0.3, estica: 0, varre: 0, regua: 0, respira: 1, verm: 1, cinza: 0, nucleo: 0.3, pulso: 0 },
-  'sem-conexao': { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0, verm: 0, cinza: 1, nucleo: 0.4, pulso: 0 }
+  'sem-conexao': { vel: 0, estica: 0, varre: 0, regua: 0, respira: 0, verm: 0, cinza: 1, nucleo: 0.4, pulso: 0 },
+  // a trava do rosto aberta por cima do HUD (OUVIDO-E-ROSTO.md §6.7): o repouso a ×0,3, núcleo fraco atrás da lente
+  travado: { vel: 0.15, estica: 0, varre: 0, regua: 0, respira: 0.6, verm: 0, cinza: 0, nucleo: 0.5, pulso: 0 }
 };
 const CHAVES_P = ['estica', 'varre', 'regua', 'respira', 'verm', 'cinza', 'nucleo'];
 const V_ABERTO = { veu: 0, fundo: 1, ponto: 0, flash: 0, raias: 0, nucleo: 1, anelN: 1, onda: 1, seg: 1, regua: 1, arcos: 1, trac: 1, ext: 1, extEsc: 1, fundoCamadas: 1, micro: 1, leituras: 1 };
@@ -1051,6 +1054,8 @@ export function criarHud(opts = {}) {
     for (let i = 0; i < 2; i++) { const h = hexCentros[Math.floor(Math.random() * hexCentros.length)]; if (h) hexAcesos.push({ x: h.x, y: h.y, t0: now, forte: true }); }
   }
   function centro() { return { x: T.modo === 'aberto' ? hx : V.cx, y: T.modo === 'aberto' ? hy : V.cy, r: R }; }
+  // onde o núcleo VAI ficar (mede a tela agora): o portão do rosto abre a lente ali antes de o HUD entrar
+  function previsto() { if (T.modo === 'fechado') medir(); return { x: hx, y: hy, r: R }; }
   function redimensionar() { if (T.modo === 'fechado') return; medir(); if (T.modo === 'aberto') { V.cx = hx; V.cy = hy; } }
   function destruir() {
     destruido = true; desligar();
@@ -1061,5 +1066,5 @@ export function criarHud(opts = {}) {
   // fontes chegando depois: refaz a régua com a JetBrains Mono
   try { if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (!destruido) { chaveCache = ''; if (T.modo !== 'fechado') medir(); } }).catch(() => {}); } catch { /* nada */ }
 
-  return { entrar, sair, estado, modelo, nivel, palavra, hexagono, centro, redimensionar, destruir, get modo() { return T.modo; }, get nivelDb() { return nivelDb; } };
+  return { entrar, sair, estado, modelo, nivel, palavra, hexagono, centro, previsto, redimensionar, destruir, get modo() { return T.modo; }, get nivelDb() { return nivelDb; } };
 }

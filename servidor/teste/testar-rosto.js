@@ -211,8 +211,9 @@ try {
 
   await rota(rA, 'POST', 'travar', {});
   t = await tentar(rA, consultasDe(parecida));
-  ok(t.x.st === 403 && t.x.c.erro === 'nao-confere' && t.x.c.tentativas_restantes === 2 && t.x.c.distancia > LIMIAR,
-    `a parecida não libera: 403 nao-confere (distância ${t.x.c.distancia}, restam ${t.x.c.tentativas_restantes})`);
+  ok(t.x.st === 403 && t.x.c.erro === 'nao-confere' && t.x.c.tentativas_restantes === 2 && t.x.c.distancia === undefined,
+    `a parecida não libera: 403 nao-confere, SEM a distância na resposta (restam ${t.x.c.tentativas_restantes})`);
+  ok(rA.estado().teste === undefined, 'fora do modo de teste o estado não diz teste (a página recusa o simulador)');
   t = await tentar(rA, consultasDe(outra));
   ok(t.x.st === 403 && t.x.c.erro === 'nao-confere' && t.x.c.tentativas_restantes === 1, 'outra pessoa não libera (resta 1)');
   ok(!rA.liberado(), 'continua travado');
@@ -330,6 +331,123 @@ try {
   ok(!rA4.liberado() && rA4.estado().cadastro.rosto && fs.readdirSync(pastaA).some(n => n.startsWith('estado.json.ilegivel-')),
     'estado.json estragado: travado, cadastro mantido, o arquivo ruim guardado à parte');
 
+  /* ================================================================ revisão de 2026-10-19 */
+  titulo('modo de teste: só ele diz teste e mostra a distância da recusa');
+  const rE = criarRosto({ simulado: true, pasta: path.join(RAIZ, 'e'), agora, webauthn: helloFalso, log });
+  ok(rE.estado().teste === true && rE.pasta === path.resolve(RAIZ, 'e'), 'com --simulado (pasta de teste): estado.teste = true');
+  ok((await rota(rE, 'POST', 'cadastro', { descritores: amostras })).st === 200, 'cadastro no modo de teste');
+  await rota(rE, 'POST', 'travar', {});
+  t = await tentar(rE, consultasDe(parecida));
+  ok(t.x.st === 403 && t.x.c.erro === 'nao-confere' && t.x.c.distancia > LIMIAR, `no modo de teste a recusa traz a distância (${t.x.c.distancia})`);
+
+  titulo('trocar ou apagar o cadastro pede confirmação de até 5 min');
+  relogio = Date.parse('2026-10-21T08:00:00-03:00');
+  const pastaD = path.join(RAIZ, 'd');
+  const rD = criarRosto({ pasta: pastaD, agora, webauthn: helloFalso, log });
+  x = await rota(rD, 'POST', 'cadastro', { descritores: amostras });
+  ok(x.st === 200 && rD.estado().recente === true, 'primeiro cadastro: liberado e recente');
+  t = await tentar(rD, consultasDe(parecida));
+  ok(t.x.st === 403 && t.x.c.tentativas_restantes === 3 && rD.estado().tentativas_restantes === 3,
+    'o teste logo depois do cadastro que não confere não gasta tentativa (restam 3)');
+  t = await tentar(rD, consultasDe(pessoa));
+  ok(t.x.st === 200 && rD.estado().metodo === 'rosto' && rD.estado().recente, 'conferiu pelo rosto: recente');
+  passar(4 * 60_000);
+  x = await rota(rD, 'POST', 'hello/opcoes', { tipo: 'cadastro' });
+  ok(x.st === 200, '4 min depois: ainda dá para cadastrar o Hello');
+  x = await rota(rD, 'POST', 'hello/cadastrar', { resposta: { ok: true, challenge: x.c.challenge } });
+  ok(x.st === 200 && rD.estado().hello.cadastrado, 'Hello cadastrado dentro dos 5 min');
+  passar(2 * 60_000);
+  e = rD.estado();
+  ok(e.liberado && e.recente === false, '6 min depois: continua liberado, mas não é mais recente');
+  const cadAntes = fs.readFileSync(path.join(pastaD, 'cadastro.json'), 'utf8');
+  x = await rota(rD, 'POST', 'cadastro', { descritores: Array.from({ length: 8 }, () => perto(outra, 0.15, 0.30)) });
+  ok(x.st === 423 && x.c.erro === 'reconfirme' && fs.readFileSync(path.join(pastaD, 'cadastro.json'), 'utf8') === cadAntes,
+    'o colega na mesa com o Jarvis aberto: "Cadastrar o rosto de novo" dá 423 reconfirme e o cadastro não muda');
+  x = await rota(rD, 'POST', 'apagar', { confirmar: true });
+  ok(x.st === 423 && x.c.erro === 'reconfirme' && existe(path.join(pastaD, 'cadastro.json')) && existe(path.join(pastaD, 'hello.json')),
+    'apagar sem confirmação recente: 423 reconfirme (nada apagado)');
+  x = await rota(rD, 'POST', 'hello/opcoes', { tipo: 'cadastro' });
+  ok(x.st === 423 && x.c.erro === 'reconfirme', 'cadastrar outro Hello sem confirmação recente: 423 reconfirme');
+  t = await tentar(rD, consultasDe(parecida));
+  ok(t.x.st === 403 && t.x.c.tentativas_restantes === 2, 'fora do teste do cadastro, a recusa conta (restam 2)');
+  x = await rota(rD, 'POST', 'hello/opcoes', { tipo: 'entrada' });
+  x = await rota(rD, 'POST', 'hello/conferir', { resposta: { ok: true, id: 'credencial-falsa', challenge: x.c.challenge } });
+  ok(x.st === 200 && rD.estado().recente, 'confirmou pelo Hello: recente de novo');
+  x = await rota(rD, 'POST', 'cadastro', { descritores: amostras });
+  ok(x.st === 200, 'agora o recadastro passa');
+
+  titulo('bloqueios: o 2º do dia vale até a meia-noite; falha de ontem não conta hoje');
+  relogio = Date.parse('2026-10-22T09:00:00-03:00');
+  const pastaF = path.join(RAIZ, 'f');
+  const rF = criarRosto({ pasta: pastaF, agora, webauthn: helloFalso, log });
+  await rota(rF, 'POST', 'cadastro', { descritores: amostras });
+  x = await rota(rF, 'POST', 'hello/opcoes', { tipo: 'cadastro' });
+  await rota(rF, 'POST', 'hello/cadastrar', { resposta: { ok: true, challenge: x.c.challenge } });
+  await rota(rF, 'POST', 'travar', {});
+  for (let i = 0; i < 3; i++) await tentar(rF, consultasDe(outra));
+  x = await rota(rF, 'POST', 'desafio', {});
+  ok(x.st === 429 && x.c.bloqueio === '10min' && /10 minutos/.test(x.c.mensagem), '1º bloqueio do dia: 10 min');
+  passar(11 * 60_000);
+  ok((await rota(rF, 'POST', 'desafio', {})).st === 200 && rF.estado().tentativas_restantes === 3, 'depois de 10 min: 3 tentativas de novo');
+  for (let i = 0; i < 3; i++) t = await tentar(rF, consultasDe(outra));
+  ok(t.x.st === 403 && t.x.c.bloqueio === 'dia' && t.x.c.bloqueado_ate === new Date('2026-10-23T00:00:00-03:00').toISOString(),
+    `2º bloqueio do dia: até a meia-noite de Brasília (${t.x.c.bloqueado_ate})`);
+  passar(3 * 60 * 60_000);
+  x = await rota(rF, 'POST', 'desafio', {});
+  ok(x.st === 429 && x.c.bloqueio === 'dia' && /amanhã/.test(x.c.mensagem) && rF.estado().bloqueio === 'dia', '3 h depois: continua bloqueado ("tente amanhã")');
+  const rF2 = criarRosto({ pasta: pastaF, agora, webauthn: helloFalso, log });
+  ok(rF2.estado().bloqueio === 'dia' && (await rota(rF2, 'POST', 'desafio', {})).st === 429, 'reiniciar o app não tira o bloqueio do dia');
+  x = await rota(rF2, 'POST', 'hello/opcoes', { tipo: 'entrada' });
+  x = await rota(rF2, 'POST', 'hello/conferir', { resposta: { ok: true, id: 'credencial-falsa', challenge: x.c.challenge } });
+  e = rF2.estado();
+  ok(x.st === 200 && e.liberado && !e.bloqueado_ate && e.tentativas_restantes === 3, 'o Windows Hello libera e zera o bloqueio do dia');
+  await rota(rF2, 'POST', 'travar', {});
+  for (let i = 0; i < 3; i++) await tentar(rF2, consultasDe(outra));
+  passar(11 * 60_000);
+  for (let i = 0; i < 3; i++) await tentar(rF2, consultasDe(outra));
+  ok(rF2.estado().bloqueio === 'dia', 'dois bloqueios de novo no mesmo dia: bloqueado até a meia-noite');
+  relogio = Date.parse('2026-10-23T00:00:05-03:00');
+  ok((await rota(rF2, 'POST', 'desafio', {})).st === 200 && rF2.estado().tentativas_restantes === 3 && !rF2.estado().bloqueado_ate,
+    'virou o dia: o rosto volta, com 3 tentativas');
+  relogio = Date.parse('2026-10-23T23:50:00-03:00');
+  for (let i = 0; i < 2; i++) await tentar(rF2, consultasDe(outra));
+  ok(rF2.estado().tentativas_restantes === 1, '2 falhas às 23:50: resta 1');
+  relogio = Date.parse('2026-10-24T08:00:00-03:00');
+  ok(rF2.estado().tentativas_restantes === 3 && criarRosto({ pasta: pastaF, agora, webauthn: helloFalso, log }).estado().tentativas_restantes === 3,
+    'no dia seguinte: 3 tentativas (a falha de ontem não conta, nem depois de reiniciar)');
+
+  titulo('cadastro que existe mas não dá para ler: a trava fica fechada');
+  const pastaG = path.join(RAIZ, 'g'), cadG = path.join(pastaG, 'cadastro.json');
+  const rG = criarRosto({ pasta: pastaG, agora, webauthn: helloFalso, log });
+  await rota(rG, 'POST', 'cadastro', { descritores: amostras });
+  await rota(rG, 'POST', 'travar', {});
+  const cadBom = fs.readFileSync(cadG, 'utf8');
+  fs.writeFileSync(cadG, JSON.stringify({ ...JSON.parse(cadBom), dimensao: 512 }));   // formato de outra versão
+  const rG2 = criarRosto({ pasta: pastaG, agora, webauthn: helloFalso, log });
+  e = rG2.estado();
+  ok(!e.liberado && e.precisa_cadastro === false && e.erro === 'ilegivel' && !e.cadastro.rosto,
+    'formato de outra versão: travado, NÃO pede "primeiro cadastro" e o estado diz ilegivel');
+  const outraPessoa = Array.from({ length: 8 }, () => perto(outra, 0.15, 0.30));
+  x = await rota(rG2, 'POST', 'cadastro', { descritores: outraPessoa });
+  ok(x.st === 409 && x.c.erro === 'ilegivel' && JSON.parse(fs.readFileSync(cadG, 'utf8')).dimensao === 512,
+    'quem chega primeiro não ganha o cadastro: 409 ilegivel e o arquivo fica como estava');
+  x = await rota(rG2, 'POST', 'hello/opcoes', { tipo: 'cadastro' });
+  ok(x.st === 409 && x.c.erro === 'ilegivel', 'cadastrar o Hello por cima: 409 ilegivel');
+  ok((await rota(rG2, 'POST', 'desafio', {})).c.erro === 'ilegivel', 'desafio: 409 ilegivel (não "sem cadastro")');
+  fs.writeFileSync(cadG, '{ quebr');
+  const rG3 = criarRosto({ pasta: pastaG, agora, webauthn: helloFalso, log });
+  ok(rG3.estado().erro === 'ilegivel' && (await rota(rG3, 'POST', 'cadastro', { descritores: outraPessoa })).st === 409
+    && fs.readFileSync(cadG, 'utf8') === '{ quebr' && !fs.readdirSync(pastaG).some(n => n.startsWith('cadastro.json.')),
+    'JSON estragado: o mesmo (409, o arquivo não é movido nem trocado)');
+  fs.rmSync(cadG); fs.mkdirSync(cadG);   // "existe mas não abre" (como o antivírus segurando: EISDIR no lugar de EBUSY)
+  const rG4 = criarRosto({ pasta: pastaG, agora, webauthn: helloFalso, log });
+  ok(rG4.estado().erro === 'ilegivel' && !rG4.estado().precisa_cadastro && (await rota(rG4, 'POST', 'cadastro', { descritores: outraPessoa })).st === 409,
+    'erro de leitura (não é "não existe"): travado e 409');
+  fs.rmSync(cadG, { recursive: true }); fs.writeFileSync(cadG, cadBom);
+  x = await rota(rG4, 'GET', 'estado');
+  ok(x.st === 200 && x.c.cadastro.rosto && !x.c.erro && !x.c.precisa_cadastro, 'o arquivo voltou: o próximo pedido lê de novo e o cadastro aparece');
+  ok((await tentar(rG4, consultasDe(pessoa))).x.st === 200, 'e o rosto confere com ele');
+
   /* ================================================================ Windows Hello de verdade (biblioteca real) */
   titulo('Windows Hello com o @simplewebauthn/server de verdade (autenticador de software)');
   const pastaB = path.join(RAIZ, 'b');
@@ -437,6 +555,15 @@ try {
     `pasta de verdade: ${PASTA_PADRAO}`);
   ok(criarRosto({ simulado: true, agora, log }).pasta === path.resolve(PASTA_SIMULADO), `--simulado: pasta temporária própria (${PASTA_SIMULADO})`);
   ok(criarRosto({ simulado: true, pasta: PASTA_PADRAO, agora, log }).pasta === path.resolve(PASTA_SIMULADO), '--simulado com a pasta de verdade pedida: vai para a temporária');
+  ok(criarRosto({ simulado: true, pasta: PASTA_PADRAO.toUpperCase() + path.sep, agora, log }).pasta === path.resolve(PASTA_SIMULADO),
+    '--simulado com a pasta de verdade em maiúsculas e barra no fim: vai para a temporária');
+  // o %TEMP% desta máquina vem com o nome curto do Windows (C:\Users\GTIJUL~1.ALV\...): o mesmo lugar escrito de outro jeito
+  const localCurto = path.dirname(os.tmpdir());
+  if (/~\d/.test(localCurto) && fs.existsSync(localCurto)) {
+    const curta = path.join(localCurto, 'CerebroLube', 'rosto');
+    ok(curta.toLowerCase() !== PASTA_PADRAO.toLowerCase() && criarRosto({ simulado: true, pasta: curta, agora, log }).pasta === path.resolve(PASTA_SIMULADO),
+      `--simulado com a pasta de verdade em nome curto (${curta}): vai para a temporária`);
+  } else console.log('     (pulado: o %TEMP% não tem nome curto nesta máquina)');
   const nLog = linhasLog.length;
   const rT = criarRosto({ travaAberta: true, pasta: PASTA_PADRAO, agora, log });
   ok(rT.pasta === path.resolve(PASTA_SIMULADO) && rT.liberado() && rT.estado().trava_aberta && linhasLog.slice(nLog).some(l => /TRAVA DO ROSTO DESLIGADA/.test(l)),
@@ -461,7 +588,7 @@ try {
     'os descritores ficam só no cadastro.json (o estado.json não tem)');
   const todos = [];
   (function andar(p) { for (const n of fs.readdirSync(p)) { const q = path.join(p, n); if (fs.statSync(q).isDirectory()) andar(q); else todos.push(path.relative(RAIZ, q)); } })(RAIZ);
-  const estranhos = todos.filter(f => !/^(a|b|c)[\\/](cadastro|hello|estado)\.json$/.test(f) && f !== 'arquivo.txt' && !/^a[\\/]estado\.json\.ilegivel-\d+$/.test(f));
+  const estranhos = todos.filter(f => !/^[a-g][\\/](cadastro|hello|estado)\.json$/.test(f) && f !== 'arquivo.txt' && !/^a[\\/]estado\.json\.ilegivel-\d+$/.test(f));
   ok(estranhos.length === 0, `na pasta de teste só os arquivos esperados (${todos.length}; estranhos: ${estranhos.join(', ') || 'nenhum'}; nenhum .tmp)`);
   ok(fotoPasta(PASTA_PADRAO) === padraoAntes, 'a pasta de verdade do rosto não mudou');
 } finally {

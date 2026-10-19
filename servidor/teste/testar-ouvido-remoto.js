@@ -68,6 +68,9 @@ const servidor = http.createServer(async (req, res) => {
   if (p === '/api/ouvido/estado' && req.method === 'GET') { json(200, estadoServidor()); return; }
   if (p === '/api/ouvido/preparar' && req.method === 'POST') {
     if (S.modo === 'sem-chrome') { json(503, { erro: 'sem-chrome', mensagem: 'Sem Chrome.' }); return; }
+    // como o servidor/ouvido.js: 'unavailable' não baixa (409 pacote-indisponivel); o Chrome sem SR.install, 503 sem-suporte
+    if (S.pacote === 'unavailable' && corpo && corpo.instalar === true) { json(409, { erro: 'pacote-indisponivel', mensagem: 'Este Chrome não tem o pacote.' }); return; }
+    if (S.modo === 'sem-suporte' && corpo && corpo.instalar === true) { json(503, { erro: 'sem-suporte', mensagem: 'Atualize o Google Chrome.' }); return; }
     // como o servidor/ouvido.js: o pacote só baixa por pedido explícito ({instalar: true})
     if (S.pacote !== 'available' && corpo && corpo.instalar === true) {
       S.estado = 'instalando'; S.pacote = 'downloading';
@@ -82,6 +85,7 @@ const servidor = http.createServer(async (req, res) => {
     if (S.modo === 'trava') { json(423, { erro: 'trava', mensagem: 'O Jarvis está travado. Faça o reconhecimento do rosto.' }); return; }
     if (S.modo === 'sem-chrome') { json(503, { erro: 'sem-chrome', mensagem: 'Sem Chrome.' }); return; }
     if (S.modo === 'negado') { json(409, { erro: 'negado', mensagem: 'O Windows bloqueou o microfone.' }); return; }
+    if (S.pacote === 'unavailable') { json(409, { erro: 'pacote-indisponivel', mensagem: 'Este Chrome não tem o pacote.' }); return; }
     if (S.pacote !== 'available') { json(409, { erro: 'sem-pacote', mensagem: 'Falta baixar o pacote de voz.' }); return; }
     if (S.modo === 'mudo') return;   // nunca responde (o prazo do cliente vence)
     if (S.modo === 'instalando') {   // um servidor que baixa o pacote dentro do ligar (a especificação permite)
@@ -361,6 +365,17 @@ titulo('o SSE cai e volta');
   ok(!c.de('erro').length, 'nenhum h.erro na queda e volta');
   O.pausar(); await esperar(50);
 }
+{
+  // o SSE cai e, enquanto está fora, outra janela do Jarvis liga: ela venceu; não tomo o microfone de volta
+  zerarServidor();
+  const { c, O } = novo();
+  await O.ligar();
+  derrubar(ABA);
+  S.dono = 'outraAba03';
+  ok(await ate(() => c.de('erro').includes('outra-aba'), 4000), 'SSE volta e outra aba é a dona → h.erro("outra-aba")');
+  ok(O.ativo === false && rotas('POST /api/ouvido/ligar').length === 1 && S.dono === 'outraAba03', 'sem ligar de novo: a outra continua dona');
+  ok(!rotas('POST /api/ouvido/pausar').length, 'e não manda pausar (a dona é a outra)');
+}
 titulo('o SSE não volta: 401 (app reiniciado) e app fora por muito tempo');
 {
   zerarServidor();
@@ -435,15 +450,50 @@ titulo('queda do Chrome (caiu), outra aba, erro da página e instalação');
   await O.ligar();
   enviar(ABA, 'erro', { codigo: 'no-speech', ger: S.ger });
   enviar(ABA, 'erro', { codigo: 'network', ger: S.ger });
-  ok(await ate(() => c.de('erro').includes('network')), 'erro network → h.erro("network") sem parar');
-  ok(O.ativo === true && !c.de('erro').includes('no-speech'), 'no-speech é ignorado');
+  ok(await ate(() => c.log.some((x) => x[0] === 'aviso' && x[1] === 'erro-remoto' && x[2].codigo === 'network')), 'erro que a página segue tentando (network) → h.aviso("erro-remoto"), sem h.erro');
+  ok(O.ativo === true && !c.de('erro').length, 'no-speech é ignorado e nada para');
   enviar(ABA, 'erro', { codigo: 'negado', ger: S.ger - 1 });
   await esperar(80);
   ok(!c.de('erro').includes('negado'), 'erro de ger velho é ignorado');
-  enviar(ABA, 'erro', { codigo: 'audio-capture', ger: S.ger });
-  ok(await ate(() => c.de('erro').includes('audio-capture')), 'erro audio-capture → h.erro');
+  enviar(ABA, 'erro', { codigo: 'audio-capture', mensagem: 'O microfone não respondeu.', ger: S.ger });
+  ok(await ate(() => c.de('erro').includes('audio-capture')), 'erro sem volta (audio-capture) → h.erro');
+  ok(c.log.find((x) => x[0] === 'erro' && x[1] === 'audio-capture')[2] === 'O microfone não respondeu.', 'h.erro recebe a mensagem do servidor');
   ok(O.ativo === false, 'e para');
   ok(await ate(() => rotas('POST /api/ouvido/pausar').length >= 1), 'e avisa o servidor (pausar)');
+}
+{
+  // a página do Chrome manda um erro qualquer e logo depois 'parado' (o parar() dela): era sem volta
+  zerarServidor();
+  const { c, O } = novo();
+  await O.ligar();
+  enviar(ABA, 'estado', { estado: 'ouvindo', ger: S.ger });
+  await ate(() => O.ouvindo);
+  enviar(ABA, 'erro', { codigo: 'bad-grammar', ger: S.ger });
+  enviar(ABA, 'estado', { estado: 'parado', ger: S.ger });
+  ok(await ate(() => c.de('erro').includes('bad-grammar')), 'erro seguido de parado → h.erro com o código do erro');
+  ok(O.ativo === false && rotas('POST /api/ouvido/ligar').length === 1, 'e para (sem religar)');
+  for (const motivo of ['trava', 'desligado']) {
+    zerarServidor();
+    const x = novo();
+    await x.O.ligar();
+    enviar(ABA, 'estado', { estado: 'parado', ger: S.ger, motivo });
+    ok(await ate(() => x.c.de('erro').includes(motivo)), `parado com motivo ${motivo} → h.erro("${motivo}")`);
+    ok(x.O.ativo === false && rotas('POST /api/ouvido/ligar').length === 1, `${motivo}: para sem religar`);
+  }
+  // 'abrindo' no meio da conversa: o Chrome caiu e o servidor religa na mesma sessão (mesmo ger)
+  zerarServidor();
+  const y = novo();
+  await y.O.ligar();
+  enviar(ABA, 'estado', { estado: 'ouvindo', ger: S.ger });
+  await ate(() => y.O.ouvindo);
+  enviar(ABA, 'estado', { estado: 'abrindo', ger: S.ger });
+  ok(await ate(() => y.c.de('aviso').includes('caiu') && !y.O.ouvindo), '"abrindo" sem eu ligar → h.aviso("caiu") e parado');
+  enviar(ABA, 'estado', { estado: 'pronto', ger: S.ger });
+  enviar(ABA, 'estado', { estado: 'ouvindo', ger: S.ger });
+  enviar(ABA, 'resultado', { final: 'mesma sessao', parcial: '', ger: S.ger });
+  ok(await ate(() => y.c.de('final').includes('mesma sessao') && y.O.ouvindo), 'a religada na mesma geração volta a ouvindo');
+  ok(!y.c.de('erro').length && rotas('POST /api/ouvido/ligar').length === 1, 'sem erro e sem ligar de novo');
+  y.O.pausar(); await esperar(50);
 }
 {
   zerarServidor(); S.modo = 'instalando';
@@ -454,17 +504,41 @@ titulo('queda do Chrome (caiu), outra aba, erro da página e instalação');
   O.pausar(); await esperar(50);
 }
 {
+  // sem o pacote: o ligar dá 409 sem-pacote; a interface oferece "Baixar o pacote de voz" (instalar) e liga de novo
   zerarServidor(); S.prepararMs = 1800; S.pacote = 'downloadable';
   const { c, O } = novo();
   const e0 = await O.consultar();
   ok(e0 && O.precisaBaixar() === true && O.estadoRemoto() === 'pronto', 'consultar: pacote downloadable → precisaBaixar()');
-  const e = await O.preparar();
-  ok(e && e.pacote === 'available' && O.precisaBaixar() === false, 'preparar: devolve o estado com o pacote instalado');
-  ok(c.de('aviso').includes('instalando'), 'preparar demorado: h.aviso("instalando") pelo estado');
-  ok(rotas('GET /api/ouvido/estado').length >= 2, 'preparar confere o estado enquanto espera');
+  let cod = '';
+  try { await O.ligar(); } catch (err) { cod = err.codigo; }
+  ok(cod === 'sem-pacote' && O.precisaBaixar() === true && O.ativo === false, `ligar sem o pacote: sem-pacote e precisaBaixar() (${cod})`);
+  ok(O.suportado === true, 'sem-pacote não desliga o suporte');
+  const p0 = await O.preparar();
+  ok(p0 && p0.pacote === 'downloadable', 'preparar() não baixa sozinho');
+  const e = await O.instalar();
+  const pi = rotas('POST /api/ouvido/preparar').at(-1);
+  ok(pi && pi.corpo && pi.corpo.instalar === true, 'instalar() pede {instalar: true}');
+  ok(e && e.pacote === 'available' && O.precisaBaixar() === false, 'instalar(): devolve o estado com o pacote instalado');
+  ok(c.de('aviso').includes('instalando'), 'instalar demorado: h.aviso("instalando") pelo estado');
+  ok(rotas('GET /api/ouvido/estado').length >= 2, 'instalar confere o estado enquanto espera');
+  await O.ligar();
+  ok(O.ativo === true && S.dono === ABA, 'depois de instalar, o ligar funciona');
+  O.pausar(); await esperar(50);
   zerarServidor(); S.modo = 'sem-chrome';
   const z = novo();
   ok((await z.O.preparar()) === null && z.O.suportado === false && z.O.motivo === 'sem-chrome', 'preparar sem Chrome: null, não suportado, motivo sem-chrome');
+  // este Chrome não tem o pacote (unavailable): nada de oferecer o download; o ouvido sai de cena (fica o Edge)
+  zerarServidor(); S.pacote = 'unavailable';
+  const u = novo();
+  let cu = '';
+  try { await u.O.ligar(); } catch (err) { cu = err.codigo; }
+  ok(cu === 'pacote-indisponivel' && u.O.precisaBaixar() === false && u.O.suportado === false,
+    `ligar com o pacote unavailable: pacote-indisponivel, sem oferta de baixar, não suportado (${cu})`);
+  ok((await u.O.instalar()) === null && u.O.motivo === 'pacote-indisponivel', 'instalar com o pacote unavailable: null, motivo pacote-indisponivel');
+  // o Chrome sem SR.install: 503 sem-suporte ("Atualize o Google Chrome") repassado
+  zerarServidor(); S.pacote = 'downloadable'; S.modo = 'sem-suporte';
+  const s2 = novo();
+  ok((await s2.O.instalar()) === null && s2.O.motivo === 'sem-suporte' && s2.O.suportado === false, 'instalar num Chrome sem SR.install: motivo sem-suporte');
 }
 
 /* ---------------------------------------------------------------- o vigia do ouvido antigo do Edge */

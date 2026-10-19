@@ -24,7 +24,20 @@
    computador quem responde continua sendo o servidor; sem ele, um cérebro de mentira da própria página.
    disponivel() do LOCAL lê GET /api/jarvis/estado (cérebro de teste ou de verdade, banco, e-mail; 401 = app reiniciado).
    Regras: o modelo nunca confirma nada (só o clique ou a frase curta reconhecida aqui chamam decidirAcao); nada de
-   segredo em tela ou log; o microfone só fica aberto neste modo, com o ponto vermelho aceso. */
+   segredo em tela ou log; o microfone só fica aberto neste modo, com o ponto vermelho aceso.
+
+   OUVIDO E ROSTO (docs/OUVIDO-E-ROSTO.md, 2026-10-19), só no app do computador (localhost + meta cerebro-token; o link e
+   o arquivo único não carregam nada disso):
+   - Ouvido: o reconhecimento do Edge 155 devolve texto vazio. Quem ouve agora é um Chrome escondido, ligado pelo servidor
+     (js/ouvido-remoto.js, mesma cara do criarOuvido daqui). Padrão: Chrome quando o servidor diz que ele existe; senão o
+     do Edge, com o vigia de resultados vazios. Ajustes › Ouvido: "Chrome (offline)" ou "Edge". Sem o pacote de voz
+     (409 sem-pacote), a oferta "Baixar o pacote de voz (cerca de 300 MB, uma vez só)".
+   - Rosto: na primeira conversa do dia (America/Sao_Paulo), antes do HUD, o portão (js/rosto.js) abre a câmera e
+     confere o rosto (ou faz o cadastro, na primeira vez); só depois vem a transição do HUD e a saudação pela hora. Quem
+     decide é o servidor: travado, o turno, o confirmar e o ligar do ouvido respondem 423 — e um 423 no meio da conversa
+     (virou o dia) abre o portão por cima do HUD e refaz o pedido. Sem ação do Júlio (o vigia do ouvido à meia-noite,
+     "Travar agora") o portão mostra só o cartão "Jarvis travado": a câmera liga no clique. Ajustes › Trava do rosto:
+     travar, cadastrar de novo, Windows Hello e "Apagar meu cadastro" (trocar ou apagar pede a confirmação de até 5 min). */
 
 import { criarHud, criarSons } from './jarvis-hud.js';
 import { limparFala } from './fala.js';
@@ -54,6 +67,9 @@ const ABA = (() => {
   try { if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID().replace(/-/g, '').slice(0, 20); } catch { /* sem crypto */ }
   return `${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
 })();
+// o vigia do reconhecimento do Edge (vigiarEdge do js/ouvido-remoto.js) troca o construtor da página: um só por página;
+// cada Jarvis criado aponta o aviso e o medidor para si
+const VIGIA_EDGE = { w: null, aviso: null, nivel: null };
 const fmtNum = (n) => { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(v) < 10 ? 2 : Math.abs(v) < 1000 ? 1 : 0 }) : String(n ?? ''); };
 const doisDig = (n) => String(n).padStart(2, '0');
 
@@ -107,7 +123,7 @@ const ROTULO_FERR = {
 };
 const ESTADO_ROT = {
   repouso: 'Pronto', ouvindo: 'Ouvindo', pensando: 'Processando', falando: 'Falando', interrompido: 'Interrompido',
-  confirmando: 'Aguardando confirmação', 'sem-conexao': 'Sem conexão'
+  confirmando: 'Aguardando confirmação', 'sem-conexao': 'Sem conexão', travado: 'Travado'
 };
 
 /* =============================================================================
@@ -366,7 +382,8 @@ function criarCerebroLocal(token) {
       const motivo = simulado
         ? 'Estou com o cérebro de teste: respondo com frases prontas, mas as notas e a saúde são de verdade.'
         : faltam.length ? `${faltam.join(' e ').replace(/^./, (c) => c.toUpperCase())} ainda não ${faltam.length > 1 ? 'estão' : 'está'} no ENV deste computador.` : undefined;
-      return { ok: true, voz: true, simulado, motivo, conexoes: cx };
+      // a trava do rosto e o ouvido (o Chrome escondido): o que o servidor sabe agora
+      return { ok: true, voz: true, simulado, motivo, conexoes: cx, trava: e.trava || null, ouvido: e.ouvido || null };
     },
     turno(conversa, contexto, h) {
       const ctl = new AbortController();
@@ -413,6 +430,8 @@ function criarCerebroLocal(token) {
         }
         clearTimeout(tPrazo);
         if (resp.status === 401) { falhar(REINICIADO); return; }
+        // 423: a trava do rosto fechou (virou o dia, "Travar agora"): quem chamou abre o portão e refaz o pedido
+        if (resp.status === 423 && typeof h.trava === 'function') { if (!acabou) { acabou = true; h.trava(); } return; }
         if (!resp.ok || !resp.body) {
           let msg = '';
           try { const j = await resp.json(); msg = j && (j.mensagem || j.erro) ? String(j.mensagem || j.erro) : ''; } catch { /* sem corpo */ }
@@ -448,6 +467,7 @@ function criarCerebroLocal(token) {
         if (r.status === 401) return { ok: false, mensagem: REINICIADO };
         let j = {};
         try { j = await r.json(); } catch { j = {}; }
+        if (r.status === 423) return { ok: false, trava: true, mensagem: String(j.mensagem || 'O Jarvis está travado. Faça o reconhecimento do rosto.') };
         return { ok: r.ok && j.ok !== false, mensagem: String(j.mensagem || (r.ok ? '' : r.status === 404 ? 'Esse pedido já expirou.' : `O app do cérebro respondeu ${r.status}.`)) };
       } catch { return { ok: false, mensagem: 'Não consegui falar com o app do cérebro.' }; }
     }
@@ -607,6 +627,13 @@ const ICO = {
   logo: '<svg class="logo" viewBox="40 20 790 575" aria-hidden="true"><g class="logo-g"><path class="logo-l" d="M165 30L400 30L295 435L740 435L705 580L230 580Q48 580 72 410Z"/><path class="logo-r" d="M430 30L650 30Q822 34 795 188L748 410L335 410Z"/></g></svg>'
 };
 const CANTOS = '<span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>';
+// o que dizer na tela de ligar o microfone e nos ajustes, conforme quem ouve (OUVIDO-E-ROSTO.md §8)
+const CONSENT_EDGE = `<p>Para conversar por voz eu uso o reconhecimento de fala do navegador. No Edge, o áudio do microfone vai para o serviço de fala da Microsoft e volta como texto. As vozes “Online” também mandam o texto que eu falo.</p>
+        <p>O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. <b>Use fone de ouvido</b>: com alto-falante eu posso me ouvir.</p>`;
+const CONSENT_CHROME = `<p>O reconhecimento de voz agora roda neste computador, no Google Chrome, sem internet. A primeira vez ele baixa um pacote de voz (cerca de 300 MB). O Windows vai mostrar que o Chrome está usando o microfone.</p>
+        <p>A voz do Jarvis (Edge) manda o texto para a Microsoft virar áudio, e o que você fala vai para a API do Claude virar resposta. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. <b>Use fone de ouvido</b>: com alto-falante eu posso me ouvir.</p>`;
+const PRIV_EDGE = 'No Edge, o reconhecimento de voz manda o áudio do microfone para o serviço de fala da Microsoft e recebe o texto de volta. As vozes “Online” também mandam o texto que eu falo. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso.';
+const PRIV_CHROME = 'Quem ouve é um Google Chrome escondido, neste computador, sem internet: o áudio do microfone não sai daqui. O texto que você fala vai para a API do Claude virar resposta, e as vozes “Online” do Edge mandam o texto que eu falo para a Microsoft. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso.';
 function marcacao() {
   return `
   <div class="jv-veu" aria-hidden="true"></div>
@@ -678,6 +705,22 @@ function marcacao() {
       <label class="chave"><span>Sons do HUD</span><input class="jv-sons" type="checkbox" checked></label>
       <label class="chave"><span>Estou de fone de ouvido <small class="jv-obs">sem eco: uma palavra já me interrompe</small></span><input class="jv-fone" type="checkbox"></label>
     </section>
+    <section class="jv-sec-ouvido" hidden><h3 class="hud-rot">Ouvido</h3>
+      <label class="jv-campo"><span>Quem reconhece a sua fala</span><select class="jv-ouvido-sel">
+        <option value="chrome">Chrome (offline, neste computador)</option><option value="edge">Edge (nuvem da Microsoft)</option></select></label>
+      <p class="jv-obs jv-ouvido-nota"></p>
+      <div class="acoes jv-ouvido-acoes"><button class="btn pequeno jv-pacote-btn" type="button" hidden></button></div>
+    </section>
+    <section class="jv-sec-trava" hidden><h3 class="hud-rot">Trava do rosto</h3>
+      <p class="jv-obs jv-trava-nota"></p>
+      <div class="acoes jv-trava-bts">
+        <button class="btn pequeno jv-travar" type="button">Travar agora</button>
+        <button class="btn pequeno jv-recadastrar" type="button">Cadastrar o rosto de novo</button>
+        <button class="btn pequeno jv-hello" type="button">Cadastrar o Windows Hello</button>
+        <button class="btn pequeno jv-apagar" type="button">Apagar meu cadastro</button>
+      </div>
+      <p class="jv-obs">É uma trava do Jarvis neste computador, não do Windows. Não substitui o login: quem entra na sua conta do Windows consegue apagar a trava. Quem abrir o console do navegador aqui e tiver uma foto sua consegue passar, porque a prova de vida (o piscar) é conferida na página; um vídeo seu também poderia enganar o piscar. Trocar ou apagar o cadastro pede uma confirmação de até 5 minutos. Nenhuma foto é salva: só números do rosto, em %LOCALAPPDATA%\\CerebroLube\\rosto.</p>
+    </section>
     <section><h3 class="hud-rot">Como falar comigo</h3>
       <ul class="jv-ajuda">
         <li>Fale normalmente. Quando você para, eu respondo.</li>
@@ -689,7 +732,7 @@ function marcacao() {
       </ul>
     </section>
     <section><h3 class="hud-rot">Privacidade</h3>
-      <p class="jv-obs">No Edge, o reconhecimento de voz manda o áudio do microfone para o serviço de fala da Microsoft e recebe o texto de volta. As vozes “Online” também mandam o texto que eu falo. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso.</p>
+      <p class="jv-obs jv-priv-txt">${PRIV_EDGE}</p>
     </section>
     <div class="acoes"><button class="btn pequeno jv-ajustes-ok" type="button">Fechar</button></div>
   </div>
@@ -697,11 +740,19 @@ function marcacao() {
     <div class="jv-cons-cartao">${CANTOS}
       <p class="hud-rot">Microfone</p>
       <h2 id="jvConsTit">Ligar o microfone?</h2>
-      <div id="jvConsTxt">
-        <p>Para conversar por voz eu uso o reconhecimento de fala do navegador. No Edge, o áudio do microfone vai para o serviço de fala da Microsoft e volta como texto. As vozes “Online” também mandam o texto que eu falo.</p>
-        <p>O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. <b>Use fone de ouvido</b>: com alto-falante eu posso me ouvir.</p>
-      </div>
+      <div id="jvConsTxt">${CONSENT_EDGE}</div>
       <div class="acoes"><button class="btn principal jv-cons-sim" type="button">${ICO.mic}Ligar microfone</button><button class="btn jv-cons-nao" type="button">Só digitar</button></div>
+    </div>
+  </div>
+  <div class="jv-consent jv-pacote" role="dialog" aria-labelledby="jvPacTit" aria-describedby="jvPacTxt" hidden>
+    <div class="jv-cons-cartao">${CANTOS}
+      <p class="hud-rot">Ouvido · Chrome</p>
+      <h2 id="jvPacTit">Baixar o pacote de voz?</h2>
+      <div id="jvPacTxt">
+        <p>Para me ouvir sem internet, o Chrome precisa do pacote de voz em português (junto vai o de inglês, que ele exige). São cerca de 300 MB, baixados uma vez só. Depois disso o reconhecimento roda neste computador.</p>
+        <p class="jv-pac-st" role="status"></p>
+      </div>
+      <div class="acoes"><button class="btn principal jv-pac-sim" type="button"></button><button class="btn jv-pac-nao" type="button">Agora não</button></div>
     </div>
   </div>
   <div class="jv-aviso" role="status" hidden></div>`;
@@ -737,12 +788,16 @@ export function criarJarvis(opts = {}) {
     entrada: $('.jv-entrada'), parar: $('.jv-parar'), enviar: $('.jv-enviar'), dicaVoz: $('.jv-dica-voz'),
     ajustes: $('.jv-ajustes'), vozSel: $('.jv-voz-sel'), notaVoz: $('.jv-nota-voz'), vel: $('.jv-vel'), velV: $('.jv-vel-v'), tom: $('.jv-tom'), tomV: $('.jv-tom-v'),
     sonsChk: $('.jv-sons'), foneChk: $('.jv-fone'), ajustesOk: $('.jv-ajustes-ok'), confVozTxt: $('.jv-conf-voz-txt'),
-    consent: $('.jv-consent'), consSim: $('.jv-cons-sim'), consNao: $('.jv-cons-nao'), aviso: $('.jv-aviso'),
+    consent: $('.jv-consent:not(.jv-pacote)'), consTxt: $('#jvConsTxt'), consSim: $('.jv-cons-sim'), consNao: $('.jv-cons-nao'), aviso: $('.jv-aviso'),
+    pacote: $('.jv-pacote'), pacSim: $('.jv-pac-sim'), pacNao: $('.jv-pac-nao'), pacSt: $('.jv-pac-st'), privTxt: $('.jv-priv-txt'),
+    secOuvido: $('.jv-sec-ouvido'), ouvidoSel: $('.jv-ouvido-sel'), ouvidoNota: $('.jv-ouvido-nota'), pacoteBtn: $('.jv-pacote-btn'),
+    secTrava: $('.jv-sec-trava'), travaNota: $('.jv-trava-nota'), travar: $('.jv-travar'), recadastrar: $('.jv-recadastrar'), hello: $('.jv-hello'), apagar: $('.jv-apagar'),
     leituras: Object.fromEntries([...raiz.querySelectorAll('[data-l]')].map((e) => [e.dataset.l, e]))
   };
 
   const hud = criarHud({
-    raiz, canvas: el.canvas, reduzido, robo, cena: opts.cena, qualidadeBaixa: opts.qualidadeBaixa,
+    // depois do portão do rosto, o HUD nasce no centro (onde a lente encolheu), sem o mergulho nos olhos do robô
+    raiz, canvas: el.canvas, reduzido, robo: () => (J.semMergulho ? null : robo()), cena: opts.cena, qualidadeBaixa: opts.qualidadeBaixa,
     onFase: (f) => { if (f === 'paineis') aoPaineis(); if (f === 'pronto') aoPronto(); }
   });
 
@@ -761,12 +816,26 @@ export function criarJarvis(opts = {}) {
     // reconhecimento que já foi usado (o resultado final dele ainda chega), a confirmação por voz esperando 1,2 s
     fone: lerPref('jarvis-fone', '0') === '1', ecoT: [], prefixo: null, confVoz: null, nFalas: 0, pttSemResposta: false,
     // turno: ferramentas abertas e a hora do último evento (vigia de demora), e a voz que falhou (tenta de novo)
-    ferrAbertas: new Set(), tEvento: 0, avisouDemora: false, vozRetentou: false, vozRuim: false, primeiraFrase: true
+    ferrAbertas: new Set(), tEvento: 0, avisouDemora: false, vozRetentou: false, vozRuim: false, primeiraFrase: true,
+    // a trava do rosto: o portão na tela (o tipo do fluxo, o estado dele e se a câmera está ligada) e o HUD que nasce
+    // no centro depois de liberar; baixando = o pacote de voz do Chrome
+    portao: false, portaoTipo: null, portaoEstado: null, portaoCamera: false, portaoP: null, portaoDono: null, semMergulho: false, baixando: false,
+    // cada abertura do Jarvis tem um número: a resposta atrasada de um portão velho não fecha o Jarvis novo
+    nAbrir: 0
   };
   J.rate = Math.min(1.4, Math.max(0.8, J.rate)); J.pitch = Math.min(1.3, Math.max(0.6, J.pitch));
-  const ouvidoReal = criarOuvido({ parcial: (t) => aoParcial(t), final: (t) => aoFinal(t), estado: () => atualizarMic(), erro: (c) => aoErroMic(c) }, sons);
+  // ouvido: o do Edge (SpeechRecognition daqui) ou, no app do computador, o Chrome escondido (js/ouvido-remoto.js); os
+  // dois com a mesma cara. No app, o escolhido vem depois de o servidor dizer se há Chrome (escolherOuvido)
+  const H_OUVIDO = {
+    parcial: (t) => aoParcial(t), final: (t) => aoFinal(t), estado: () => atualizarMic(),
+    erro: (c, msg) => aoErroMic(c, msg), aviso: (c, d) => aoAvisoOuvido(c, d)
+  };
   const SIM_MODO = simular();
-  const ouvido = SIM_MODO ? criarOuvidoSimulado() : ouvidoReal;
+  const LOCAL_APP = ehLocal() && !!tokenLocal();
+  // M = os módulos só do app do computador (ouvido remoto e portão do rosto), importados na primeira abertura
+  let M = null, pModulos = null, portao = null, ouvidoEdge = null, ouvidoChrome = null;
+  const OUVIDO_NADA = { suportado: false, ativo: false, ouvindo: false, async ligar() { throw Object.assign(new Error('sem ouvido'), { codigo: 'sem-suporte' }); }, pausar() {}, nivel: () => null, destruir() {} };
+  let ouvido = SIM_MODO ? criarOuvidoSimulado() : LOCAL_APP ? OUVIDO_NADA : (ouvidoEdge = criarOuvido(H_OUVIDO, sons));
 
   /* ---------- voz de falar ---------- */
   let voz = criarVozRelogio();
@@ -1007,7 +1076,7 @@ export function criarJarvis(opts = {}) {
   const conversaParaEnviar = () => J.conversa.map((m) => (m.interrompido ? { papel: m.papel, texto: m.texto, interrompido: true } : { papel: m.papel, texto: m.texto }));
   async function enviar(texto, { origem = 'texto', jaFiltrada = false } = {}) {
     texto = String(texto || '').replace(/\s+/g, ' ').trim();
-    if (!texto) return;
+    if (!texto || J.portao) return;   // com o portão do rosto na tela, nada vai para o cérebro
     if (J.acao && !jaFiltrada) {
       // digitado com o cartão aberto: "pode enviar" / "cancela" seguem as mesmas regras da voz (menos a do eco)
       const k = curto(texto), dec = SIM.has(k) ? 'confirmar' : NAO.has(k) ? 'recusar' : null;
@@ -1115,6 +1184,17 @@ export function criarJarvis(opts = {}) {
         falarLocal(msg.length <= 140 ? msg : J.msgTurno ? 'A conexão caiu no meio. Pode repetir?' : 'Não consegui responder agora. Pode repetir daqui a pouco?');
         leitura('resposta', 'ERRO');
         J.retirado = true;   // o fim que vem depois do erro não fala de novo
+      },
+      // 423: a trava do rosto fechou (virou o dia, "Travar agora"). O servidor não viu a pergunta: ela sai do histórico,
+      // o portão abre por cima do HUD e, liberado, a mesma pergunta vai de novo
+      trava: () => {
+        if (!vivo()) return;
+        J.turno = null; J.ferrAbertas.clear();
+        encerrarFerramentas('travado');
+        const ult2 = J.conversa[J.conversa.length - 1];
+        const pergunta = !J.msgTurno && ult2 && ult2.papel === 'julio' ? J.conversa.pop().texto : null;
+        leitura('resposta', '—');
+        pedirPortao({ refazer: pergunta, religarMic: J.mic.querLigado && !J.mic.temporario });
       }
     };
     const ctxTurno = contexto();
@@ -1366,17 +1446,24 @@ export function criarJarvis(opts = {}) {
   /* ---------- microfone ---------- */
   function micDisponivel() { return J.disp.voz !== false && ouvido.suportado; }
   async function ligarMic({ temporario = false } = {}) {
-    // o microfone só abre com o modo Jarvis aberto (e não saindo): nunca fica ligado fora dele
-    if (!micDisponivel() || !J.aberto || J.saindo) return false;
+    // o microfone só abre com o modo Jarvis aberto (e não saindo), e nunca com o portão do rosto na tela
+    if (!micDisponivel() || !J.aberto || J.saindo || J.portao) return false;
     J.mic.querLigado = true; J.mic.temporario = temporario; J.mic.erro = null;
     atualizarMic();
+    const este = ouvido;
     try {
-      await ouvido.ligar();
-      if (!J.aberto || J.saindo) { J.mic.querLigado = false; ouvido.pausar(); atualizarMic(); return false; }
+      await este.ligar();
+      if (!J.aberto || J.saindo || J.portao || este !== ouvido) { J.mic.querLigado = false; este.pausar(); atualizarMic(); return false; }
       if (!temporario) gravarPref('jarvis-mic', 'ligado');
     } catch (err) {
       J.mic.querLigado = false;
-      aoErroMic((err && err.codigo) || 'erro');
+      const c = (err && err.codigo) || 'erro';
+      if (este !== ouvido || !J.aberto || J.saindo) { atualizarMic(); return false; }
+      // 423: a trava do rosto fechou (virou o dia): o portão e, liberado, o microfone de novo
+      if (c === 'trava') { atualizarMic(); pedirPortao({ religarMic: !temporario }); return false; }
+      // falta o pacote de voz do Chrome: a oferta de baixar (com o tamanho)
+      if (c === 'sem-pacote') { atualizarMic(); abrirPacote(); return false; }
+      aoErroMic(c, err && err.message !== c ? err.message : undefined);
     }
     atualizarMic();
     return J.mic.querLigado;
@@ -1389,9 +1476,13 @@ export function criarJarvis(opts = {}) {
     hud.nivel(null);
     atualizarMic();
   }
+  // a janela do app (Edge com --app) não tem barra de endereço nem cadeado: o caminho é o menu … da janela
+  const MIC_NEGADO = LOCAL_APP
+    ? 'Você não liberou o microfone. No menu … da janela, abra as permissões do site e permita o microfone. Se foi o Windows: Configurações › Privacidade › Microfone.'
+    : 'Você não liberou o microfone. Clique no cadeado da barra de endereço e permita o microfone.';
   const ERRO_MIC = {
-    negado: 'Você não liberou o microfone. Clique no cadeado da barra de endereço e permita o microfone.',
-    'not-allowed': 'Você não liberou o microfone. Clique no cadeado da barra de endereço e permita o microfone.',
+    negado: MIC_NEGADO,
+    'not-allowed': MIC_NEGADO,
     'service-not-allowed': 'O reconhecimento de voz está bloqueado neste navegador (política da máquina). Siga pela caixa de texto.',
     'sem-microfone': 'Não encontrei nenhum microfone. Conecte um e tente de novo; enquanto isso, digite.',
     'audio-capture': 'O microfone não respondeu. Confira se ele está conectado.',
@@ -1400,13 +1491,38 @@ export function criarJarvis(opts = {}) {
     network: 'O reconhecimento de voz precisa de internet e a conexão falhou. Vou tentando; enquanto isso, digite.',
     erro: 'O microfone não ligou. Tente de novo ou digite.'
   };
-  function aoErroMic(codigo) {
-    const msg = ERRO_MIC[codigo] || ERRO_MIC.erro;
-    if (codigo === 'network') { avisar(msg, 5000, 'rever'); return; }
+  // textos do ouvido do Chrome (js/ouvido-remoto.js): valem quando ele é o ouvido da vez (o "negado" de lá é o do Windows
+  // bloqueando o Chrome, não o cadeado do Edge)
+  const textoMic = (codigo) => (ouvido.remoto && M && M.o.TEXTOS_OUVIDO[codigo]) || ERRO_MIC[codigo] || (M && M.o.TEXTOS_OUVIDO[codigo]) || ERRO_MIC.erro;
+  function aoErroMic(codigo, mensagem) {
+    if (codigo === 'network') { avisar(ERRO_MIC.network, 5000, 'rever'); return; }
     J.mic.erro = codigo; J.mic.querLigado = false;
     try { ouvido.pausar(); } catch { /* nada */ }
-    avisar(msg, 6500, 'alerta');
+    // a trava fechou com o microfone ligado (o vigia do servidor: virou o dia) — sem ação do Júlio, que pode nem estar na
+    // mesa: o portão mostra só o cartão "Jarvis travado" e a câmera liga no clique
+    if (codigo === 'trava') { atualizarMic(); pedirPortao({ religarMic: true, pedirClique: true }); return; }
+    if (codigo === 'sem-pacote') { J.mic.erro = null; atualizarMic(); abrirPacote(); return; }
+    // o Chrome sumiu, este Chrome não tem o pacote de voz em português ou o app não tem o ouvido novo: fica o ouvido do
+    // Edge, sem perder a conversa
+    if (ouvido.remoto && (codigo === 'sem-chrome' || codigo === 'sem-rota' || codigo === 'pacote-indisponivel')) {
+      J.mic.erro = null;
+      avisar(`${textoMic(codigo)} Vou pelo ouvido do Edge.`, 7000, 'rever');
+      usarOuvido('edge', { religar: true });
+      return;
+    }
+    // outra janela do Jarvis pegou o microfone: não é erro
+    if (codigo === 'outra-aba') { J.mic.erro = null; avisar(textoMic(codigo), 4000); atualizarMic(); return; }
+    avisar(ouvido.remoto ? textoMic(codigo) : (ERRO_MIC[codigo] || mensagem || ERRO_MIC.erro), 6500, 'alerta');
     atualizarMic();
+  }
+  // avisos do ouvido do Chrome que não param nada
+  function aoAvisoOuvido(codigo, dados) {
+    if (!M) return;
+    const T = M.o.TEXTOS_OUVIDO;
+    if (codigo === 'instalando') { avisar(T.instalando, 30000); leitura('mic', 'BAIXANDO'); }
+    else if (codigo === 'caiu') avisar(T.religando, 4500, 'rever');
+    else if (codigo === 'reconectando') avisar(T.reconectando, 3000, 'rever');
+    else if (codigo === 'erro-remoto') { try { console.warn('[Jarvis] o ouvido do Chrome avisou:', dados && dados.codigo); } catch { /* nada */ } }
   }
   function atualizarMic() {
     const ligado = !!(J.mic.querLigado && ouvido.ativo);
@@ -1418,16 +1534,219 @@ export function criarJarvis(opts = {}) {
     el.micRot.textContent = J.mic.ptt ? 'Falando…' : ligado ? 'Ouvindo' : 'Microfone';
     el.mic.hidden = !micDisponivel();
     el.dicaVoz.hidden = !micDisponivel();
-    leitura('mic', ligado ? 'LIGADO' : J.mic.erro ? 'BLOQUEADO' : micDisponivel() ? 'PAUSADO' : '—');
+    if (!J.portao) leitura('mic', ligado ? 'LIGADO' : J.mic.erro ? 'BLOQUEADO' : micDisponivel() ? 'PAUSADO' : '—');
     atualizarEstado();
   }
+  // o aceite do microfone vale para o ouvido da vez: o do Chrome tem o seu (o texto e o pacote de voz são outros)
+  const chaveAceite = () => (ouvido.remoto ? 'jarvis-mic-aceito-chrome' : 'jarvis-mic-aceito');
+  const aceitouMic = () => SIM_MODO || lerPref(chaveAceite(), '0') === '1';
   function aoBotaoMic() {
     if (J.mic.querLigado) { pausarMic(); return; }
-    if (lerPref('jarvis-mic-aceito', '0') !== '1' && !SIM_MODO) { abrirConsent(); return; }
+    if (!aceitouMic()) { abrirConsent(); return; }
     ligarMic();
   }
-  function abrirConsent() { el.consent.hidden = false; try { el.consSim.focus({ preventScroll: true }); } catch { /* nada */ } }
+  function abrirConsent() {
+    el.consTxt.innerHTML = ouvido.remoto ? CONSENT_CHROME : CONSENT_EDGE;
+    el.consent.hidden = false; try { el.consSim.focus({ preventScroll: true }); } catch { /* nada */ }
+  }
   function fecharConsent() { el.consent.hidden = true; }
+
+  /* ---------- o pacote de voz do Chrome (só uma vez, ~300 MB; o servidor só baixa por pedido explícito) ---------- */
+  function abrirPacote() {
+    if (!ouvido.remoto || !J.aberto || J.saindo) return;
+    fecharConsent();
+    el.pacSim.textContent = M ? M.o.TEXTOS_OUVIDO.baixar : 'Baixar o pacote de voz';
+    el.pacSim.disabled = false; el.pacNao.disabled = false; el.pacSim.hidden = false;
+    el.pacSt.textContent = ''; delete el.pacSt.dataset.tom;
+    el.pacote.hidden = false;
+    try { el.pacSim.focus({ preventScroll: true }); } catch { /* nada */ }
+  }
+  function fecharPacote() { el.pacote.hidden = true; }
+  async function baixarPacote() {
+    if (!ouvido.remoto || J.baixando) return;
+    const este = ouvido;
+    J.baixando = true;
+    el.pacSim.disabled = true; el.pacNao.disabled = true;
+    el.pacSt.textContent = M.o.TEXTOS_OUVIDO.instalando; delete el.pacSt.dataset.tom;
+    leitura('mic', 'BAIXANDO');
+    const t0 = agora();
+    // numa internet mais lenta os ~300 MB levam minutos: o servidor continua esperando o Chrome (até 10 min), e a tela diz
+    const tAinda = setTimeout(() => { if (J.baixando && este === ouvido) el.pacSt.textContent = M.o.TEXTOS_OUVIDO.ainda || M.o.TEXTOS_OUVIDO.instalando; }, 90000);
+    let e = null;
+    try { e = await este.instalar(); } catch { e = null; }
+    clearTimeout(tAinda);
+    J.baixando = false;
+    if (este !== ouvido || !J.aberto) return;
+    if (e && e.pacote === 'available') {
+      el.pacSt.textContent = `Pacote de voz baixado em ${Math.max(1, Math.round((agora() - t0) / 1000))} s.`; el.pacSt.dataset.tom = 'ok';
+      atualizarAjustes();
+      setTimeout(() => { fecharPacote(); if (J.aberto && !J.saindo) ligarMic(); }, 700);
+      return;
+    }
+    const c = ouvido.motivo || 'pacote-falhou';
+    el.pacSt.textContent = M.o.TEXTOS_OUVIDO[c] || M.o.TEXTOS_OUVIDO['pacote-falhou']; el.pacSt.dataset.tom = 'alerta';
+    // este Chrome não tem o pacote (ou não reconhece voz): baixar de novo não adianta; fica o Edge
+    const semJeito = c === 'pacote-indisponivel' || c === 'sem-suporte';
+    el.pacSim.disabled = semJeito; el.pacNao.disabled = false;
+    if (semJeito) el.pacSim.hidden = true;
+    atualizarMic();
+    if (semJeito) setTimeout(() => { fecharPacote(); el.pacSim.hidden = false; if (J.aberto && !J.saindo) usarOuvido('edge', { religar: true }); }, 4500);
+  }
+
+  /* ---------- qual ouvido: Chrome (offline) ou Edge ---------- */
+  function criarOuvidoEdge() {
+    // o vigia do Edge vazio (js/ouvido-remoto.js) precisa entrar ANTES do criarOuvido: ele troca o construtor
+    if (M && !VIGIA_EDGE.w) {
+      try {
+        VIGIA_EDGE.w = M.o.vigiarEdge({ aoVazio: () => VIGIA_EDGE.aviso && VIGIA_EDGE.aviso(), nivel: () => VIGIA_EDGE.nivel && VIGIA_EDGE.nivel() });
+      } catch { /* sem vigia */ }
+    }
+    VIGIA_EDGE.aviso = () => {
+      if (!J.aberto || ouvido !== ouvidoEdge) return;
+      // "use o Chrome" só quando ele existe e serve; sem ele, o caminho que existe (instalar o Chrome, ou digitar)
+      const T = M.o.TEXTOS_OUVIDO;
+      const txt = chromeExiste() ? `${T['edge-vazio']} Troque em Ajustes › Ouvido: Chrome.`
+        : `${T['edge-vazio-so']} ${ouvidoChrome && ouvidoChrome.motivo === 'pacote-indisponivel' ? T['pacote-indisponivel'] : T['sem-chrome']}`;
+      avisar(txt, 9000, 'alerta');
+    };
+    VIGIA_EDGE.nivel = () => { const n = ouvidoEdge && ouvidoEdge.ativo ? ouvidoEdge.nivel() : null; return n ? n.db : null; };
+    return criarOuvido(H_OUVIDO, sons);
+  }
+  const chromeExiste = () => !!(J.disp.ouvido && J.disp.ouvido.estado && J.disp.ouvido.estado !== 'sem-chrome' && (!ouvidoChrome || ouvidoChrome.suportado));
+  // a preferência (Ajustes › Ouvido): 'chrome' | 'edge'; sem ela, o Chrome quando o servidor diz que ele existe
+  function ouvidoPreferido() {
+    const p = lerPref('jarvis-ouvido', '');
+    if (p === 'edge') return 'edge';
+    return chromeExiste() ? 'chrome' : 'edge';
+  }
+  function usarOuvido(tipo, { religar = false } = {}) {
+    if (SIM_MODO) return;
+    let novo;
+    if (tipo === 'chrome' && LOCAL_APP && M && chromeExiste()) {
+      if (!ouvidoChrome) ouvidoChrome = M.o.criarOuvidoRemoto(H_OUVIDO, sons, { token: tokenLocal(), aba: ABA });
+      novo = ouvidoChrome;
+    } else {
+      if (!ouvidoEdge) ouvidoEdge = criarOuvidoEdge();
+      novo = ouvidoEdge;
+    }
+    if (novo === ouvido) { atualizarAjustes(); return; }
+    const estava = J.mic.querLigado && !J.mic.temporario;
+    if (J.mic.querLigado) pausarMic({ lembrar: false });
+    ouvido = novo;
+    J.mic.erro = null;
+    atualizarAjustes(); atualizarMic();
+    if ((estava || religar) && J.aberto && !J.saindo && !J.portao) {
+      if (aceitouMic()) ligarMic(); else abrirConsent();
+    }
+  }
+  function escolherOuvido() {
+    if (SIM_MODO || !LOCAL_APP) return;
+    if (M) { usarOuvido(ouvidoPreferido()); return; }
+    // os módulos do app não carregaram: fica o ouvido do Edge, como antes
+    if (ouvido === OUVIDO_NADA) { ouvidoEdge = ouvidoEdge || criarOuvido(H_OUVIDO, sons); ouvido = ouvidoEdge; }
+  }
+
+  /* ---------- a trava do rosto: o portão (js/rosto.js); quem decide é o servidor ---------- */
+  // os módulos só do app do computador (no link e no arquivo único nunca carregam)
+  function carregarModulos() {
+    if (!LOCAL_APP) return Promise.resolve(null);
+    if (M) return Promise.resolve(M);
+    return (pModulos ||= Promise.all([import('./ouvido-remoto.js'), import('./rosto.js')])
+      .then(([o, r]) => { M = { o, r }; return M; })
+      .catch((err) => { pModulos = null; try { console.warn('[Jarvis] o ouvido e a trava do rosto não carregaram.', err); } catch { /* nada */ } return null; }));
+  }
+  function garantirPortao() {
+    if (portao || !M) return portao;
+    try {
+      portao = M.r.criarPortao({
+        raiz, token: tokenLocal(), sons: { tocar: (n) => tocar(n) }, falar: (f) => falarLocal(f), reduzido,
+        // antes do HUD entrar, a lente abre onde o núcleo vai nascer
+        hud: { centro: () => (hud.modo === 'fechado' ? hud.previsto() : hud.centro()) }, saudar: false,
+        onEstado: (nome, info) => { J.portaoEstado = nome; J.portaoCamera = !!(info && info.camera); atualizarEstado(); }
+      });
+    } catch (err) { portao = null; try { console.warn('[Jarvis] o portão do rosto não abriu.', err); } catch { /* nada */ } }
+    return portao;
+  }
+  // um fluxo do portão (conferir, cadastrar, Windows Hello, apagar) com o Jarvis parado: microfone fechado, voz e turno
+  // cortados, ajustes fechados; o microfone volta no fim se estava ligado (menos depois de "não liberou")
+  async function comPortao(fn, tipo = 'outro') {
+    if (J.portaoP) return J.portaoP;
+    // dono: o fechar() do Jarvis solta o portão na hora; o fluxo velho, quando enfim terminar, não mexe no estado do novo
+    const dono = {};
+    J.portaoDono = dono;
+    const meu = () => J.portaoDono === dono;
+    const p = (async () => {
+      const voltarMic = J.mic.querLigado && !J.mic.temporario;
+      J.portao = true; J.portaoTipo = tipo;
+      fecharAjustes(); fecharConsent(); fecharPacote();
+      J.mic.ptt = false;
+      if (J.mic.querLigado) pausarMic({ lembrar: false });
+      if (falandoAgora() || J.turno) interromper({ motivo: 'comando', silencioso: true });
+      atualizarEstado();
+      let r;
+      try { r = await fn(); } finally {
+        if (meu()) {
+          J.portao = false; J.portaoTipo = null; J.portaoEstado = null; J.portaoCamera = false;
+          // o que o portão ainda dizia ("Pisque duas vezes.") não vale mais: sai da voz e da legenda
+          if (F.frases.length) { voz.parar(); limparFila({ manterDitas: false }); }
+          atualizarEstado();
+        }
+      }
+      if (meu() && voltarMic && tipo !== 'abrir' && J.aberto && !J.saindo && aceitouMic()) ligarMic();
+      return r;
+    })();
+    J.portaoP = p;
+    try { return await p; } finally { if (J.portaoP === p) J.portaoP = null; if (meu()) J.portaoDono = null; }
+  }
+  // 423 no meio da conversa (virou o dia, "Travar agora"): o portão por cima do HUD; liberado, refaz o que parou;
+  // "Agora não" fecha o Jarvis. pedirClique: aberto sem ação do Júlio (o vigia, "Travar agora") — só o cartão
+  // "Jarvis travado", a câmera liga no clique
+  async function pedirPortao({ refazer = null, religarMic = false, pedirClique = false } = {}) {
+    if (J.portaoP) return J.portaoP;
+    if (!garantirPortao() || !J.aberto || J.saindo) return { liberado: false };
+    const ab = J.nAbrir;
+    const r = await comPortao(() => portao.abrir({ pedirClique }), 'abrir');
+    // o Jarvis fechou (ou fechou e abriu de novo) enquanto o portão estava na tela: nada daqui vale mais
+    if (!J.aberto || J.saindo || ab !== J.nAbrir) return r;
+    if (!r || !r.liberado) { fechar(); return r || { liberado: false }; }
+    if (refazer) enviar(refazer, { origem: 'voz', jaFiltrada: true });
+    else falarLocal('Liberado. Pode seguir.');
+    if (religarMic && micDisponivel() && aceitouMic()) ligarMic();
+    return r;
+  }
+
+  /* ---------- ajustes do app do computador: ouvido e trava ---------- */
+  function atualizarAjustes() {
+    el.privTxt.textContent = ouvido.remoto ? PRIV_CHROME : PRIV_EDGE;
+    el.secOuvido.hidden = !(LOCAL_APP && M && !SIM_MODO);
+    el.secTrava.hidden = !(LOCAL_APP && portao);
+    if (!el.secOuvido.hidden) {
+      const tem = chromeExiste();
+      el.ouvidoSel.value = ouvido.remoto ? 'chrome' : 'edge';
+      el.ouvidoSel.querySelector('option[value="chrome"]').disabled = !tem;
+      el.ouvidoNota.textContent = !tem ? (ouvidoChrome && ouvidoChrome.motivo === 'pacote-indisponivel' ? 'Este Chrome não tem o pacote de voz em português: fica o Edge.' : 'Não achei o Google Chrome neste computador: fica o Edge.')
+        : ouvido.remoto ? 'O Chrome ouve aqui mesmo, escondido: o áudio não sai deste computador.'
+          : 'O reconhecimento do Edge está devolvendo vazio desde a atualização de 18/10. Prefira o Chrome.';
+      const baixar = !!(ouvido.remoto && ouvido.precisaBaixar && ouvido.precisaBaixar());
+      el.pacoteBtn.hidden = !baixar;
+      el.pacoteBtn.textContent = M.o.TEXTOS_OUVIDO.baixar;
+    }
+  }
+  async function atualizarTrava() {
+    if (el.secTrava.hidden || !portao) return;
+    const st = await portao.consultar();
+    if (!st) { el.travaNota.textContent = 'O app do cérebro não respondeu.'; return; }
+    const hora = st.em ? new Date(st.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
+    const como = { rosto: 'pelo rosto', hello: 'pelo Windows Hello', cadastro: 'pelo cadastro' }[st.metodo] || '';
+    el.travaNota.textContent = [
+      st.trava_aberta ? 'Trava desligada (modo de teste).' : st.liberado ? `Liberado hoje${como ? ` ${como}` : ''}${hora ? ` às ${hora}` : ''}.` : 'Travado.',
+      st.cadastro && st.cadastro.rosto ? `Rosto cadastrado (${st.cadastro.amostras} amostras).` : 'Sem rosto cadastrado.',
+      st.hello && st.hello.cadastrado ? 'Windows Hello cadastrado.' : 'Windows Hello não cadastrado.'
+    ].join(' ');
+    el.hello.hidden = !!(st.hello && st.hello.cadastrado);
+    el.recadastrar.textContent = st.cadastro && st.cadastro.rosto ? 'Cadastrar o rosto de novo' : 'Cadastrar o rosto';
+    el.apagar.hidden = !(st.cadastro && st.cadastro.rosto) && !(st.hello && st.hello.cadastrado);
+  }
 
   /* ---------- Espaço = falar (push-to-talk), e interrompe na hora ---------- */
   function emCampoTexto(a) {
@@ -1437,7 +1756,7 @@ export function criarJarvis(opts = {}) {
     return false;
   }
   async function pttInicio() {
-    if (J.mic.ptt || !micDisponivel() || !J.aberto || J.saindo) return;
+    if (J.mic.ptt || !micDisponivel() || !J.aberto || J.saindo || J.portao) return;
     J.mic.ptt = true;
     J.pttSemResposta = !!J.turno && !J.msgTurno;   // apertou com a pergunta ainda sem nada dito da resposta
     interromper({ motivo: 'ptt' });
@@ -1451,7 +1770,7 @@ export function criarJarvis(opts = {}) {
     }
     J.falaJulio = nova;
     if (!J.mic.querLigado) {
-      if (lerPref('jarvis-mic-aceito', '0') !== '1' && !SIM_MODO) { J.mic.ptt = false; J.falaJulio = null; abrirConsent(); return; }
+      if (!aceitouMic()) { J.mic.ptt = false; J.falaJulio = null; abrirConsent(); return; }
       await ligarMic({ temporario: true });
     }
     atualizarMic();
@@ -1586,7 +1905,7 @@ export function criarJarvis(opts = {}) {
   }
   async function decidir(decisao) {
     const a = J.acao;
-    if (!a || J.decidindo || !J.cerebro) return;
+    if (!a || J.decidindo || !J.cerebro || J.portao) return;
     J.decidindo = true;
     clearTimeout(J.confVoz?.timer); J.confVoz = null;
     // a decisão encerra o que eu estava dizendo ou ainda pensando sobre o rascunho
@@ -1596,6 +1915,14 @@ export function criarJarvis(opts = {}) {
     let r;
     try { r = await J.cerebro.decidirAcao(a.id, decisao); } catch { r = { ok: false, mensagem: 'Não consegui falar com o cérebro.' }; }
     if (J.acao !== a) return;
+    if (r && r.trava) {
+      // a trava do rosto fechou antes do envio: nada saiu. O portão abre; liberado, o Júlio confirma de novo (no botão)
+      J.decidindo = false; el.confSim.disabled = false; el.confNao.disabled = false;
+      el.confRes.textContent = 'Nada foi enviado: o Jarvis travou. Confira o rosto e confirme de novo.'; el.confRes.dataset.tom = 'alerta';
+      const lib = await pedirPortao({});
+      if (lib && lib.liberado && J.acao === a) dicaAcao('Liberado. Confira o rascunho e confirme de novo.');
+      return;
+    }
     const ok = !!(r && r.ok);
     const msg = String((r && r.mensagem) || (ok ? (decisao === 'confirmar' ? 'Pronto, enviado.' : 'Cancelado. Nada foi enviado.') : 'Não deu certo.'));
     el.confRes.textContent = msg;
@@ -1709,6 +2036,7 @@ export function criarJarvis(opts = {}) {
 
   /* ---------- estado, leituras, avisos ---------- */
   function estadoAtual() {
+    if (J.portao) return 'travado';   // o portão do rosto na tela: nada de turno, microfone ou confirmação
     if (!J.disp.ok && !J.carregandoCerebro) return 'sem-conexao';
     if (J.acao) return 'confirmando';
     if (agora() < J.interrompidoAte) return 'interrompido';
@@ -1727,7 +2055,9 @@ export function criarJarvis(opts = {}) {
       el.chip.dataset.estado = e;
       el.chipTxt.textContent = ESTADO_ROT[e] || e;
     }
-    if (agora() >= J.rotuloInterrompidoAte) leitura('estado', e === 'pensando' && J.modelo === 'sonnet' ? 'ANÁLISE' : (ESTADO_ROT[e] || e).toUpperCase());
+    // com o portão: ESTADO RECONHECIMENTO (ou CADASTRO); a câmera ligada aparece embaixo da lente, com o ponto vermelho
+    if (e === 'travado') leitura('estado', /^cadastro/.test(J.portaoEstado || '') ? 'CADASTRO' : 'RECONHECIMENTO');
+    else if (agora() >= J.rotuloInterrompidoAte) leitura('estado', e === 'pensando' && J.modelo === 'sonnet' ? 'ANÁLISE' : (ESTADO_ROT[e] || e).toUpperCase());
     else leitura('estado', 'INTERROMPIDO');
     el.parar.hidden = !(falandoAgora() || J.turno);
   }
@@ -1819,7 +2149,12 @@ export function criarJarvis(opts = {}) {
     }
     if (!resta) J.digitando = null;
   }
-  function aoPronto() { raiz.classList.add('pronto'); tocar('pronto'); }
+  function aoPronto() {
+    raiz.classList.add('pronto'); tocar('pronto');
+    // o fundo do HUD já fechou: o fundo do portão (a entrada depois da trava do rosto) sai sem a página de trás aparecer
+    raiz.classList.remove('jv-portao');
+    J.semMergulho = false;   // a saída volta para os olhos do robô, como sempre
+  }
 
   /* ---------- escolher o cérebro ---------- */
   async function escolherCerebro() {
@@ -1861,6 +2196,7 @@ export function criarJarvis(opts = {}) {
   async function abrir() {
     if (J.aberto || J.saindo) return;
     J.aberto = true; J.entrando = true;
+    const ab = ++J.nAbrir;   // esta abertura (o portão de uma abertura velha não fecha esta)
     J.focoAntes = document.activeElement;
     raiz.classList.remove('paineis', 'pronto', 'saindo');
     raiz.hidden = false;
@@ -1884,6 +2220,25 @@ export function criarJarvis(opts = {}) {
     J.carregandoCerebro = escolherCerebro().finally(() => { J.carregandoCerebro = null; leitura('modelo', rotuloModelo(J.modelo)); atualizarMic(); atualizarEstado(); });
     const pVozes = esperarVozes(1500);
     if (!J.raf) J.raf = requestAnimationFrame(laco);
+    // app do computador: a trava do rosto vem ANTES do HUD (a primeira conversa do dia). O fundo do Jarvis fecha, a lente
+    // abre com a câmera e, só liberado, o HUD entra (nascendo no centro, onde a lente encolheu) e o Jarvis saúda
+    if (LOCAL_APP) {
+      await carregarModulos();
+      if (!J.aberto || J.saindo) return;
+      const st = garantirPortao() ? await portao.consultar() : null;   // null = servidor fora: o cérebro avisa
+      if (!J.aberto || J.saindo) return;
+      if (st && !st.liberado) {
+        raiz.classList.add('jv-portao');
+        await pVozes;
+        if (!J.aberto || J.saindo) return;
+        montarVoz();
+        const r = await comPortao(() => portao.abrir(), 'abrir');
+        if (!J.aberto || J.saindo || ab !== J.nAbrir) return;
+        if (!r || !r.liberado) { fechar(); return; }
+        J.saudou = false;   // liberou agora: a saudação pela hora vem depois do HUD
+        J.semMergulho = true;
+      }
+    }
     await hud.entrar();
     // Esc, Ctrl+J ou "Sair" durante a entrada: o hud.sair() resolve a entrada, mas J.aberto só vira false no fim da
     // saída. Nada de cobrir o robô, ligar o microfone ou saudar com o HUD fechando
@@ -1896,13 +2251,14 @@ export function criarJarvis(opts = {}) {
     montarVoz();
     await (J.carregandoCerebro || Promise.resolve());
     if (!J.aberto || J.saindo) return;
+    escolherOuvido();   // Chrome (offline) quando o servidor diz que ele existe; senão o Edge
     atualizarMic();
     // o reconhecimento só liga depois do "pronto" (~150 ms)
     setTimeout(() => {
-      if (!J.aberto || J.saindo) return;
+      if (!J.aberto || J.saindo || J.portao) return;
       if (micDisponivel()) {
-        if (SIM_MODO || (lerPref('jarvis-mic-aceito', '0') === '1' && lerPref('jarvis-mic', 'ligado') === 'ligado')) ligarMic();
-        else if (lerPref('jarvis-mic-aceito', '0') !== '1') abrirConsent();
+        if (aceitouMic() && (SIM_MODO || lerPref('jarvis-mic', 'ligado') === 'ligado')) ligarMic();
+        else if (!aceitouMic()) abrirConsent();
       }
       saudar();
     }, 150);
@@ -1912,9 +2268,13 @@ export function criarJarvis(opts = {}) {
     if (!J.disp.ok) { falarLocal(J.disp.motivo || 'Estou sem conexão com o cérebro agora.'); return; }
     if (J.saudou) return;
     J.saudou = true;
-    // o Júlio já começou a falar ou a digitar (ou já conversamos): nada de "bom dia" atrasado por cima
-    if (J.turno || J.falaJulio || falandoAgora() || J.conversa.some((m) => m.papel === 'julio') || el.entrada.value) return;
-    const h = new Date().getHours(), periodo = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    // o Júlio já começou a falar ou a digitar (ou já conversamos): nada de "bom dia" atrasado por cima. As frases do
+    // próprio portão do rosto (msg null) não contam: a saudação entra na fila depois delas
+    const falandoConversa = F.frases.some((f) => f.estado !== 'dita' && f.msg);
+    if (J.turno || J.falaJulio || falandoConversa || J.conversa.some((m) => m.papel === 'julio') || el.entrada.value) return;
+    let h = new Date().getHours();
+    try { h = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(new Date())); } catch { /* hora do computador */ }
+    const periodo = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const ouvindo = J.mic.querLigado;
     const opcoes = ouvindo ? [`${periodo}, Júlio. Estou ouvindo.`, `${periodo}, Júlio. Em que posso ajudar?`] : [`${periodo}, Júlio. Em que posso ajudar?`, `${periodo}, Júlio. Às ordens.`];
     falarLocal(opcoes[Math.floor(Math.random() * opcoes.length)]);
@@ -1931,13 +2291,22 @@ export function criarJarvis(opts = {}) {
     if (J.acao) { const id = J.acao.id; fecharAcao(); J.cerebro?.decidirAcao(id, 'recusar', 'saiu').catch(() => {}); }
     clearTimeout(J.confVoz?.timer); J.confVoz = null; J.ferrAbertas.clear();
     pausarMic({ lembrar: false });
-    fecharConsent(); fecharAjustes();
+    fecharConsent(); fecharAjustes(); fecharPacote();
+    // o portão do rosto aberto: cancela (a câmera desliga na hora; o abrir() dele resolve "não liberado") e o Jarvis
+    // solta o portão já: a próxima abertura não herda a promessa nem o estado do fluxo velho
+    try { portao && portao.fechar(); } catch { /* nada */ }
+    J.portaoP = null; J.portaoDono = null;
+    J.portao = false; J.portaoTipo = null; J.portaoEstado = null; J.portaoCamera = false;
     J.mic.ptt = false; J.mic.voltar = false;
     try { opts.onCoberto && opts.onCoberto(false); } catch { /* nada */ }
     digitar(true);
+    const soPortao = raiz.classList.contains('jv-portao') && hud.modo === 'fechado';
     raiz.classList.remove('pronto', 'paineis'); raiz.classList.add('saindo');
     tocar('sair');
     await hud.sair();
+    // saiu do portão antes de o HUD entrar: o fundo escuro some em 250 ms (sem o corte seco para o robô)
+    if (soPortao && !reduzido()) await esperar(260);
+    raiz.classList.remove('jv-portao'); J.semMergulho = false;
     // garantia: nada do que a entrada interrompida possa ter ligado continua depois da saída
     J.mic.querLigado = false; J.mic.ptt = false; J.falaJulio = null;
     try { ouvido.pausar(); } catch { /* nada */ }
@@ -1954,7 +2323,11 @@ export function criarJarvis(opts = {}) {
   }
 
   /* ---------- ajustes ---------- */
-  function abrirAjustes() { el.ajustes.hidden = false; el.ajustesBtn.setAttribute('aria-expanded', 'true'); try { el.vozSel.focus({ preventScroll: true }); } catch { /* nada */ } }
+  function abrirAjustes() {
+    if (J.portao) return;
+    atualizarAjustes(); atualizarTrava();
+    el.ajustes.hidden = false; el.ajustesBtn.setAttribute('aria-expanded', 'true'); try { el.vozSel.focus({ preventScroll: true }); } catch { /* nada */ }
+  }
   function fecharAjustes() { if (el.ajustes.hidden) return; el.ajustes.hidden = true; el.ajustesBtn.setAttribute('aria-expanded', 'false'); }
   function alternarMudo() {
     J.mudo = !J.mudo; gravarPref('jarvis-mudo', J.mudo ? '1' : '0');
@@ -2004,7 +2377,35 @@ export function criarJarvis(opts = {}) {
     decidir('confirmar');
   });
   el.confNao.addEventListener('click', () => decidir('recusar'));
-  el.consSim.addEventListener('click', () => { gravarPref('jarvis-mic-aceito', '1'); fecharConsent(); ligarMic(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
+  el.consSim.addEventListener('click', () => { gravarPref(chaveAceite(), '1'); fecharConsent(); ligarMic(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
+  // o pacote de voz do Chrome: só com o clique (o servidor só baixa por pedido explícito)
+  el.pacSim.addEventListener('click', () => baixarPacote());
+  el.pacNao.addEventListener('click', () => { fecharPacote(); avisar('Sem o pacote de voz eu não ouço pelo Chrome. Enquanto isso, digite.', 5000); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
+  el.pacoteBtn.addEventListener('click', () => { fecharAjustes(); abrirPacote(); });
+  el.ouvidoSel.addEventListener('change', () => {
+    const v = el.ouvidoSel.value === 'chrome' ? 'chrome' : 'edge';
+    gravarPref('jarvis-ouvido', v);
+    usarOuvido(v);
+    avisar(ouvido.remoto ? 'Ouvido: Chrome, neste computador.' : 'Ouvido: Edge, na nuvem da Microsoft.', 2600);
+  });
+  // a trava do rosto pelos ajustes (o portão pergunta antes de apagar; recadastrar e apagar só com o dia liberado)
+  // travar = o Júlio vai sair da mesa: o portão fica no cartão "Jarvis travado", SEM câmera (com ela ligada, as piscadas
+  // naturais de quem ficou na frente poderiam destravar sozinhas); a câmera só liga no clique "Conferir meu rosto"
+  el.travar.addEventListener('click', async () => {
+    fecharAjustes();
+    if (!portao) return;
+    const voltar = J.mic.querLigado && !J.mic.temporario;
+    if (await portao.travar()) pedirPortao({ religarMic: voltar, pedirClique: true });
+    else avisar('Não consegui travar agora. O app do cérebro respondeu?', 5000, 'alerta');
+  });
+  el.recadastrar.addEventListener('click', () => { if (portao) comPortao(() => portao.recadastrar(), 'recadastrar'); });
+  el.hello.addEventListener('click', () => { if (portao) comPortao(() => portao.cadastrarHello(), 'hello'); });
+  el.apagar.addEventListener('click', async () => {
+    if (!portao) return;
+    const apagou = await comPortao(() => portao.apagarCadastro(), 'apagar');
+    // sem cadastro, o Jarvis fica travado: sai (a próxima abertura pede o cadastro novo)
+    if (apagou && J.aberto) fechar();
+  });
   el.consNao.addEventListener('click', () => { gravarPref('jarvis-mic', 'pausado'); fecharConsent(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
   el.vozSel.addEventListener('change', () => { J.vozUri = el.vozSel.value; gravarPref('jarvis-voz', J.vozUri); const falando = falandoAgora(); montarVoz({ ja: true }); if (!falando) falarLocal(J.vozUri === 'nenhuma' ? 'Certo, sigo só na legenda.' : 'Esta é a minha voz agora.'); });
   el.vel.addEventListener('input', () => { J.rate = Number(el.vel.value) || 1.05; el.velV.textContent = J.rate.toLocaleString('pt-BR', { minimumFractionDigits: 2 }); gravarPref('jarvis-velocidade', String(J.rate)); voz.configurar({ rate: J.rate }); });
@@ -2019,16 +2420,22 @@ export function criarJarvis(opts = {}) {
     if (!J.aberto) return;
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation();
+      // o portão do rosto: na trava do dia, Esc = "Agora não" (fecha o Jarvis, nada liberado); nos fluxos dos ajustes
+      // (cadastrar de novo, Hello, apagar) só cancela o fluxo — o próprio portão também ouve o Esc
+      if (J.portao) { if (J.portaoTipo === 'abrir') fechar(); else if (portao) portao.fechar(); return; }
       if (!el.ajustes.hidden) { fecharAjustes(); try { el.ajustesBtn.focus({ preventScroll: true }); } catch { /* nada */ } return; }
       if (!el.consent.hidden) { el.consNao.click(); return; }
+      if (!el.pacote.hidden) { if (!el.pacNao.disabled) el.pacNao.click(); return; }
       fechar();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); e.stopPropagation(); fechar(); return; }
+    // portão na tela: as teclas são dos botões dele (Espaço e Enter clicam); o painel de trás continua sem reagir
+    if (J.portao) { e.stopPropagation(); return; }
     if (e.code === 'Space' || e.key === ' ') {
       // na caixa de texto vazia, o Espaço também é "segure para falar" (o foco fica nela ao abrir e depois de cada envio)
       const a = document.activeElement, caixaVazia = a === el.entrada && !el.entrada.value.trim() && micDisponivel();
-      if ((emCampoTexto(a) && !caixaVazia && !J.mic.ptt) || !el.consent.hidden || !el.ajustes.hidden) return;
+      if ((emCampoTexto(a) && !caixaVazia && !J.mic.ptt) || !el.consent.hidden || !el.ajustes.hidden || !el.pacote.hidden) return;
       e.preventDefault(); e.stopPropagation();
       if (!e.repeat) pttInicio();
       return;
@@ -2116,12 +2523,19 @@ export function criarJarvis(opts = {}) {
       window.removeEventListener('keydown', aoTecla, true); window.removeEventListener('keyup', aoSoltar, true);
       window.removeEventListener('resize', aoRedimensionar); document.removeEventListener('visibilitychange', aoOculto);
       try { window.speechSynthesis && speechSynthesis.removeEventListener('voiceschanged', aoMudarVozes); } catch { /* nada */ }
-      hud.destruir(); sons.destruir(); ouvidoReal.destruir();
+      hud.destruir(); sons.destruir();
+      for (const o of [ouvidoEdge, ouvidoChrome]) { try { o && o.destruir(); } catch { /* nada */ } }
+      try { portao && portao.destruir(); } catch { /* nada */ }
     }
   };
   // teste local (localhost com ?debug): o estado cru em window.__jarvis (no Artifact e no app normal nunca liga)
   if (ehLocal() && /[?&]debug\b/.test(location.search)) {
-    api._teste = { J, F, enviar, interromper, ouvido, hud, mostrarCartao, abrirAcao, aoFerramenta, aoParcial, aoFinal, concluirFala, conversa: () => conversaParaEnviar() };
+    api._teste = {
+      J, F, enviar, interromper, hud, mostrarCartao, abrirAcao, aoFerramenta, aoParcial, aoFinal, concluirFala, conversa: () => conversaParaEnviar(),
+      // o ouvido da vez (Edge, Chrome ou o simulado), o portão do rosto e os atalhos da integração
+      get ouvido() { return ouvido; }, get portao() { return portao; }, get modulos() { return M; },
+      usarOuvido, pedirPortao, abrirPacote, abrirAjustes
+    };
     try { window.__jarvis = api._teste; } catch { /* nada */ }
   }
   return api;

@@ -8,7 +8,9 @@
      trilha ao SpeechRecognition (processLocally) e manda parciais, finais, nível e estado pelo binding cerebroOuvido;
      aqui os eventos vão para o SSE da aba dona (/api/ouvido/eventos).
    - O pacote de voz (pt-BR + en-US juntos, ~296 MB, uma vez só) só baixa por pedido explícito: POST /api/ouvido/instalar,
-     ou {instalar: true} no preparar ou no ligar. Sem o pacote, o ligar responde 409 sem-pacote.
+     ou {instalar: true} no preparar ou no ligar. Sem o pacote, o ligar responde 409 sem-pacote; com o pacote
+     'unavailable' (este Chrome não tem o português nem para baixar), 409 pacote-indisponivel (a interface fica no Edge).
+     Numa internet lenta o download passa dos 120 s do evaluate: o servidor segue conferindo até 10 min.
    - O Chrome sai junto com o servidor: no exit do Node, taskkill /T /F na árvore; se o Node morre à força, o pipe fecha e
      o Chrome sai sozinho em ~0,3 s (medido). Sem uso por ociosoMs, fecha (libera ~250 MB).
    - O perfil do Chrome fica em %LOCALAPPDATA%\CerebroLube\ouvido-chrome (fora do repositório e do OneDrive).
@@ -35,6 +37,7 @@ export const TEXTOS = Object.freeze({
   'sem-pacote': 'Falta baixar o pacote de voz em português, só desta vez (cerca de 300 MB). Peça para baixar e eu ligo o ouvido.',
   instalando: 'Baixando o pacote de voz em português, só desta vez (cerca de 300 MB)…',
   'pacote-falhou': 'Não consegui baixar o pacote de voz. Confira a internet e tente de novo. Enquanto isso, digite.',
+  'pacote-indisponivel': 'Este Chrome não tem o pacote de voz em português. Fico com o ouvido do Edge.',
   negado: 'O Windows bloqueou o microfone para o Chrome. Abra Configurações › Privacidade › Microfone e permita os aplicativos da área de trabalho.',
   'sem-microfone': 'Não encontrei nenhum microfone. Conecte um e tente de novo; enquanto isso, digite.',
   'em-uso': 'O microfone está sendo usado por outro programa (Teams, Zoom…). Feche e tente de novo.',
@@ -75,6 +78,9 @@ const SEG = {
   'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin',
 };
 const ORDEM_PACOTE = { unavailable: 0, downloadable: 1, downloading: 2, available: 3 };
+// a instalação do pacote (~300 MB): o Runtime.evaluate espera até 120 s; numa internet lenta o Chrome continua baixando
+// depois disso, e o servidor segue conferindo de 3 em 3 s até 10 min
+const PRAZO_INSTALAR_MS = 120_000, ESPERA_INSTALAR_MS = 10 * 60_000, PASSO_INSTALAR_MS = 3000;
 const CODIGOS_PAGINA = new Set(['negado', 'sem-microfone', 'em-uso', 'pacote-falhou', 'sem-suporte', 'audio-capture', 'arquivo', 'teste', 'cancelado', 'erro']);
 const TIPOS_PAGINA = new Set(['nivel', 'resultado', 'estado', 'fala', 'erro']);
 
@@ -266,6 +272,7 @@ export function criarOuvidoChrome({
   log = () => {},
   _semPreTrava = false,                        // só o teste: pula a conferência do lockfile (para provocar o código 21)
   _flagsExtras = [],                           // só o teste (com permitirTeste): o microfone FALSO do Chrome
+  _prazoInstalarMs = PRAZO_INSTALAR_MS,        // só o teste: um prazo curto prova o "ainda baixando" sem internet lenta
 } = {}) {
   perfil = path.resolve(perfil);
   idiomas = Array.isArray(idiomas) && idiomas.length ? [...idiomas] : [...IDIOMAS_PADRAO];
@@ -273,7 +280,7 @@ export function criarOuvidoChrome({
   const extras = permitirTeste && Array.isArray(_flagsExtras) ? _flagsExtras.filter((f) => typeof f === 'string' && FLAGS_TESTE(f)) : [];
   let exe = chrome || null;
 
-  let filho = null, cdp = null, sessao = null, pagina = false;
+  let filho = null, cdp = null, sessao = null, alvoId = null, pagina = false;
   let estadoAtual = exe ? 'desligado' : 'sem-chrome', pacote = null, ger = 0, gerAtivo = null, dono = null, ultimoErro = null;
   let pedido = null;                     // {lang, teste} do ligar em curso (para religar depois de uma queda)
   let fechando = false, encerrado = false;
@@ -373,7 +380,7 @@ export function criarOuvidoChrome({
       log(`ouvido: o Chrome não abriu (${r.saiu != null ? `código ${r.saiu}` : r.erro || 'sem resposta no pipe'})`);
       throw new ErroOuvido(r.erro === 'ENOENT' ? 'sem-chrome' : 'caiu', 503);
     }
-    filho = r.f; cdp = r.t; pagina = false; sessao = null;
+    filho = r.f; cdp = r.t; pagina = false; sessao = null; alvoId = null;
     guardarVivo(filho);
     const este = filho;
     filho.on('exit', (c) => aoSairFilho(este, c));
@@ -403,11 +410,20 @@ export function criarOuvidoChrome({
       tirarFim = t.aoFechar(() => { clearTimeout(tm); tirar(); rej(new ErroOuvido('caiu', 503)); });
     });
   }
-  async function carregarPagina() {
+  // novaAba: a aba velha caiu (processo da página morto) — nela o Page.enable nunca responde (medido): abre outra e fecha
+  // a velha
+  async function carregarPagina({ novaAba = false } = {}) {
     pagina = false; sessao = null;
-    const { targetInfos = [] } = await cdp.enviar('Target.getTargets');
-    const alvo = targetInfos.find((x) => x.type === 'page');
-    const targetId = alvo ? alvo.targetId : (await cdp.enviar('Target.createTarget', { url: 'about:blank' })).targetId;
+    const velha = alvoId; alvoId = null;
+    let targetId = null;
+    if (!novaAba) {
+      const { targetInfos = [] } = await cdp.enviar('Target.getTargets');
+      const alvo = targetInfos.find((x) => x.type === 'page');
+      if (alvo) targetId = alvo.targetId;
+    }
+    if (!targetId) targetId = (await cdp.enviar('Target.createTarget', { url: 'about:blank' })).targetId;
+    if (velha && velha !== targetId) cdp.enviar('Target.closeTarget', { targetId: velha }).catch(() => {});
+    alvoId = targetId;
     const { sessionId } = await cdp.enviar('Target.attachToTarget', { targetId, flatten: true });
     sessao = sessionId;
     await cdp.enviar('Page.enable', {}, { sessao });
@@ -422,6 +438,14 @@ export function criarOuvidoChrome({
     const tem = await avaliar('typeof window.ouvido === "object" && typeof window.cerebroOuvido === "function"');
     if (tem !== true) throw new ErroOuvido('pagina', 503, undefined, 'a página não tem window.ouvido');
     pagina = true;
+  }
+  // a página caiu ou não responde: aba nova; se nem assim, o Chrome inteiro de novo
+  async function refazerPagina() {
+    try { await carregarPagina({ novaAba: true }); return; }
+    catch (e) { log('ouvido: a página não abriu numa aba nova; abrindo o Chrome de novo', codigoDe(e)); }
+    fechando = true;
+    try { await fecharChrome(); } finally { fechando = false; }
+    await partir();
   }
   async function avaliar(expr, { gesto = false, prazo = 10000 } = {}) {
     if (!cdp || !sessao) throw new ErroOuvido('caiu', 503);
@@ -519,18 +543,20 @@ export function criarOuvidoChrome({
       enviarSse(aba, 'estado', { estado: 'caiu', ger: g });
       enviarSse(aba, 'erro', { codigo, mensagem: TEXTOS[codigo] || TEXTOS.erro, ger: g });
     }
+    if (filho && (estadoAtual === 'ouvindo' || estadoAtual === 'iniciando')) estadoAtual = 'pronto';
     if (filho && pagina) emSerie(() => avaliar('ouvido.pausar()', { prazo: 5000 })).catch(() => {});
   }
   function aoPaginaCaiu(motivo) {
     if (fechando || !filho) return;
     const s = sessao;
     pagina = false; sessao = null;
+    if (estadoAtual === 'ouvindo' || estadoAtual === 'iniciando') estadoAtual = 'pronto';
     log(`ouvido: ${motivo}; carregando de novo`);
     if (dono && !contarQueda()) return;
     emSerie(async () => {
       if (!filho || fechando) return;
-      if (s) await cdp.enviar('Target.detachFromTarget', { sessionId: s }).catch(() => {});
-      await carregarPagina();
+      if (s) await cdp.enviar('Target.detachFromTarget', { sessionId: s }, { prazo: 3000 }).catch(() => {});
+      await refazerPagina();
       if (dono && gerAtivo != null) {
         const r = await ligarPagina(gerAtivo);
         if (!r || r.ok !== true) throw new ErroOuvido((r && r.codigo) || 'erro', 409);
@@ -539,7 +565,7 @@ export function criarOuvidoChrome({
   }
   function aoSairFilho(f, codigo) {
     if (f !== filho) return;
-    filho = null; sessao = null; pagina = false;
+    filho = null; sessao = null; alvoId = null; pagina = false;
     const t = cdp; cdp = null;
     if (t) t.fechar(new ErroOuvido('caiu', 503));
     if (fechando) { estadoAtual = 'desligado'; return; }
@@ -575,18 +601,46 @@ export function criarOuvidoChrome({
     if (encerrado) throw new ErroOuvido('desligado', 503);
     ultimoUso = Date.now();
     if (!filho) await partir();
-    else if (!pagina) await carregarPagina();
+    else if (!pagina) await refazerPagina();
     // confere a cada vez: o Chrome pode apagar o pacote sem uso
     await conferirPacote();
+    if (pacote === 'unavailable' && (instalar || instalarSemPedir)) {
+      // este Chrome não tem o pacote para o português (nem para baixar): baixar de novo não adianta, fica o Edge
+      ultimoErro = 'pacote-indisponivel';
+      log('ouvido: este Chrome não tem o pacote de voz em português (unavailable)');
+      throw new ErroOuvido('pacote-indisponivel', 409);
+    }
     if (pacote !== 'available' && (instalar || instalarSemPedir)) {
       estadoAtual = 'instalando';
       enviarTodos('estado', { estado: 'instalando', ger });
       log(`ouvido: baixando o pacote de voz (${idiomas.join(' e ')}, cerca de 300 MB, só uma vez)`);
       const t0 = Date.now();
-      let r = null;
-      try { r = await avaliar(`ouvido.instalar(${JSON.stringify(idiomas)})`, { gesto: true, prazo: 120000 }); }
-      catch (e) { log('ouvido: a instalação não respondeu', codigoDe(e)); }
+      let r = null, semResposta = false;
+      try { r = await avaliar(`ouvido.instalar(${JSON.stringify(idiomas)})`, { gesto: true, prazo: _prazoInstalarMs }); }
+      catch (e) { semResposta = true; log('ouvido: a instalação ainda não respondeu; sigo conferindo', codigoDe(e)); }
+      if (r && r.codigo === 'sem-suporte') {
+        ultimoErro = 'sem-suporte';
+        estadoAtual = filho ? 'pronto' : 'caiu';
+        enviarTodos('estado', { estado: 'pronto', ger });
+        log('ouvido: este Chrome não instala o pacote de voz (sem-suporte)');
+        throw new ErroOuvido('sem-suporte', 503);
+      }
       if (filho && pagina) await conferirPacote().catch(() => {});
+      // passou do prazo do evaluate com o Chrome ainda baixando (internet lenta): segue conferindo até 10 min, com o
+      // estado "instalando" (a interface diz "ainda baixando")
+      if (pacote !== 'available' && (semResposta || pacote === 'downloading')) {
+        while (Date.now() - t0 < ESPERA_INSTALAR_MS && filho && pagina && !encerrado) {
+          await esperar(PASSO_INSTALAR_MS);
+          ultimoUso = Date.now();   // não fecha por ocioso no meio do download
+          let st = null;
+          try { st = await avaliar('typeof ouvido.estadoInstalacao === "function" ? ouvido.estadoInstalacao() : null', { prazo: 5000 }); }
+          catch (_) { st = null; }
+          await conferirPacote().catch(() => {});
+          if (pacote === 'available') break;
+          if (st && st.andamento === false) { r = st.resultado || r; break; }   // terminou (sem o pacote)
+          if (!st && pacote !== 'downloading') break;                          // página sem o estado: só enquanto "downloading"
+        }
+      }
       if (pacote !== 'available') {
         ultimoErro = 'pacote-falhou';
         estadoAtual = filho ? 'pronto' : 'caiu';
@@ -623,7 +677,8 @@ export function criarOuvidoChrome({
     if (pedidoFila && pedidoFila.cancelado) throw new ErroOuvido('cancelado', 409);
     ultimoUso = Date.now();
     await prepararInterno({ instalar });   // pode levar o tempo da instalação (o SSE mostra "instalando")
-    if (pacote !== 'available') throw new ErroOuvido('sem-pacote', 409);
+    // 'unavailable' = este Chrome não tem o pacote (nem para baixar): a interface não oferece o download, fica o Edge
+    if (pacote !== 'available') throw new ErroOuvido(pacote === 'unavailable' ? 'pacote-indisponivel' : 'sem-pacote', 409);
     if (!pode()) throw new ErroOuvido('trava', 423);   // travou enquanto abria
     if (pedidoFila && pedidoFila.cancelado) throw new ErroOuvido('cancelado', 409);
     const velho = dono, gVelho = gerAtivo;

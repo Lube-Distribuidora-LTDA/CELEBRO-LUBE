@@ -20,7 +20,8 @@ Decisões:
   falha 3 vezes, a câmera não existe ou é negada; o Hello é cadastrado junto com o rosto. Dado biométrico só em
   `%LOCALAPPDATA%\CerebroLube\rosto\`; nenhum quadro de vídeo é salvo nem sai do computador; a câmera desliga ao
   terminar; botão **"Apagar meu cadastro"**. Ser honesto na tela e no README: é uma trava do Jarvis neste computador, não
-  substitui o login do Windows, e um vídeo do Júlio poderia enganar a prova de vida.
+  substitui o login do Windows, e quem abre o console do navegador neste computador com uma foto do Júlio consegue passar
+  (a prova de vida é conferida na página; ver §12).
 
 Vale tudo de `JARVIS.md`, `CONTRATO.md` e `MAOS.md` (tokens, português claro, reduced motion, 400 px, nada de segredo em
 código, nota ou log). Marcas: **[medido]** = conferido nesta máquina hoje (i5-10400, 12 threads, 7,8 GB, Windows 11,
@@ -175,9 +176,10 @@ export function criarOuvidoChrome({
   frases = FRASES_PADRAO,                      // [['Jarvis', 3], ['Lube', 2], …]
   ociosoMs = 10 * 60_000,                      // fecha o Chrome depois de 10 min sem uso
   permitirTeste = false,                       // só o testar-ouvido.js liga: aceita {teste:{arquivo}} no ligar
+  instalarSemPedir = false,                    // (integração, 2026-10-19) o pacote só baixa por pedido explícito
   log = () => {},
 }) → {
-  preparar(): Promise<EstadoOuvido>,          // abre o Chrome, carrega a página, instala o pacote se faltar; NÃO abre o microfone
+  preparar({instalar}): Promise<EstadoOuvido>, // abre o Chrome, carrega a página, confere o pacote; baixa SÓ com {instalar: true}; NÃO abre o microfone
   ligar({ aba, lang = 'pt-BR', teste }): Promise<{ ok: true, ger }>,   // lança ErroOuvido
   pausar({ aba }): Promise<{ ok: true, ignorado?: true }>,
   estado(): EstadoOuvido,
@@ -222,7 +224,8 @@ Guardar o resultado; refazer se o arquivo sumir (o Chrome atualizou ou foi desin
 **Transporte CDP:** `ler.setEncoding('utf8')` (para não partir caractere ao meio), acumular e cortar no `\0`; `id`
 crescente; mapa de pendentes com prazo por comando (10 s; `instalar` 120 s; `ligar` 15 s); erro de comando rejeita com a
 `message` do CDP (só para o log, nunca para a tela). Eventos: `Runtime.bindingCalled` com `name === 'cerebroOuvido'`
-(§3.2); `Inspector.targetCrashed` / `Target.targetCrashed` → recarregar a página (`Page.reload`) e religar se havia
+(§3.2); `Inspector.targetCrashed` / `Target.targetCrashed` → carregar a página numa **aba nova** (na aba caída o
+`Page.enable` nunca responde: medido pela parte A; o `Page.reload` desta especificação não serve) e religar se havia
 dono; `Target.detachedFromTarget` → anexar de novo; `exit` do processo → estado `caiu`, rejeitar os pendentes, e, se
 havia dono, partir de novo com recuo 1 s → 5 s → 30 s; 3 quedas em 5 min = para e manda `erro {codigo: 'caiu'}`.
 
@@ -280,8 +283,9 @@ descartar `ger` velho. **Nunca logar texto falado**: o log só leva estado e có
 ### 3.3 Rotas (todas com `x-cerebro-token`, JSON, mesmas travas de Host/Origin do servidor)
 | Rota | Entrada | Saída | Códigos |
 |---|---|---|---|
-| `POST /api/ouvido/preparar` | `{}` | `EstadoOuvido` | 200; 503 `sem-chrome` |
-| `POST /api/ouvido/ligar` | `{aba, lang?: 'pt-BR'}` | `{ok: true, ger}` | 200; **423 `trava`**; 503 `sem-chrome`; 409 `<codigo da página>` (`negado`, `sem-microfone`, `em-uso`, `pacote-falhou`); 504 `prazo` |
+| `POST /api/ouvido/preparar` | `{instalar?: true}` | `EstadoOuvido` | 200; 503 `sem-chrome`; 409 `pacote-falhou` |
+| `POST /api/ouvido/instalar` | `{}` | `EstadoOuvido` (baixa o pacote pt-BR + en-US: o botão "Baixar o pacote de voz") | 200; 409 `pacote-falhou`; 503 |
+| `POST /api/ouvido/ligar` | `{aba, lang?: 'pt-BR', instalar?: true}` | `{ok: true, ger}` | 200; **423 `trava`**; 503 `sem-chrome`; **409 `sem-pacote`** (falta baixar); 409 `<codigo da página>` (`negado`, `sem-microfone`, `em-uso`, `pacote-falhou`); 504 `prazo` |
 | `POST /api/ouvido/pausar` | `{aba}` | `{ok: true, ignorado?: true}` | 200 |
 | `GET /api/ouvido/estado` | — | `EstadoOuvido` | 200 |
 | `GET /api/ouvido/eventos?aba=<id>` | — | SSE (abaixo) | 200; 400 sem `aba` |
@@ -432,7 +436,8 @@ decisão         = mediana( melhor(q1), melhor(q2), melhor(q3) ) ≤ LIMIAR   �
 | `POST /api/rosto/hello/cadastrar` | `{resposta}` | `{ok: true}` | 200; 400 `hello-falhou`; 410 `desafio-expirou` |
 | `POST /api/rosto/hello/conferir` | `{resposta}` | `{ok: true, liberado: true, metodo: 'hello'}` | 200; 403 `hello-falhou`; 410 |
 
-`distancia` na resposta é número (3 casas), não é o descritor; a interface só mostra com `?debug`.
+`distancia` na resposta é número (3 casas), não é o descritor; a interface só mostra com `?debug`. **Desde a revisão (§12):
+só no 200** (o acerto); a recusa 403 não leva distância, a não ser no modo de teste (`--simulado`).
 
 ### 5.5 Windows Hello (WebAuthn) com `@simplewebauthn/server` 14.0.3 [fonte: os `.d.ts` do pacote]
 - Cadastro: `generateRegistrationOptions({ rpName: 'Cérebro da Lube', rpID: 'localhost', userName: 'julio',
@@ -619,6 +624,21 @@ O contexto das rotas é o mesmo nas duas partes do servidor: `ctx = { req, res, 
 - `docs/JARVIS.md`: um §10 curto apontando para este arquivo.
 - `.claude/launch.json` do vault: a entrada `jarvis` ganha `--trava-aberta` (o preview não tem câmera).
 
+**Como a integração ficou (2026-10-19), onde ela muda o que está acima:**
+- **Ordem da abertura:** o pedido da integração foi "primeiro o rosto, depois a transição do HUD e a saudação pela
+  hora". Travado, o `abrir()` do Jarvis fecha o fundo (classe `.jv-portao`), abre o portão **antes** do `hud.entrar()`
+  (a lente abre em `hud.previsto()`, onde o núcleo vai nascer), e só liberado entra o HUD — sem o mergulho nos olhos do
+  robô — e vem a saudação. O portão é criado com `saudar: false` (sem "Bom dia" na primeira frase dele). O roteiro do
+  §6.7 (HUD a ×0,3 por baixo da lente) vale para o portão aberto **no meio da conversa** (423), por cima do HUD
+  (estado `travado` no `jarvis-hud.js`).
+- **O Chrome escondido** só abre no `ligar` (nada de `preparar` ao abrir o Jarvis: "só abre quando a interface liga o
+  ouvido"). Sem o pacote, 409 `sem-pacote` → a oferta com o tamanho; o `instalar()` só com o clique.
+- **O medidor** ficou `remoto` (um microfone só; a onda vem do SSE).
+- **O `.claude/launch.json`** não foi mexido: com `--simulado` o rosto já usa uma pasta temporária, e `?rosto=simular`
+  testa o portão sem câmera. O `--trava-aberta` fica para quando a trava atrapalhar um teste.
+- **Teste novo:** `servidor/teste/testar-integracao.js` (o servidor.js de verdade num processo filho) e a opção
+  `--ouvido-teste=<.wav>` do servidor (só com `--simulado`) para provar Edge → servidor → Chrome sem microfone.
+
 ---------------------------------------------------------------------------------------------------
 ## 8. O que dizer na tela e no README (honesto, frases curtas)
 
@@ -631,7 +651,8 @@ O contexto das rotas é o mesmo nas duas partes do servidor: `ctx = { req, res, 
 > Vou guardar só números que descrevem o seu rosto, neste computador (`%LOCALAPPDATA%\CerebroLube\rosto`). Nenhuma
 > foto é salva e nada sai daqui. A câmera desliga ao terminar.
 > Isto é uma trava do Jarvis neste computador. Não substitui o login do Windows: quem entra na sua conta do Windows
-> consegue apagar a trava, e um vídeo seu poderia enganar a prova de vida (o piscar).
+> consegue apagar a trava. E quem abrir o console do navegador neste computador e tiver uma foto sua consegue passar,
+> porque a prova de vida (o piscar) é conferida na página. Um vídeo seu também poderia enganar o piscar.
 > Faça o cadastro você mesmo, sozinho na frente da câmera.
 
 **Apagar:** "Apagar o cadastro do rosto e do Windows Hello deste computador? O Jarvis vai pedir um cadastro novo."
@@ -651,7 +672,7 @@ já tem a sessão do Windows.)
 | `caiu` | O ouvido do Jarvis parou. Feche e abra o Jarvis de novo. |
 | `trava` | O Jarvis está travado. Faça o reconhecimento do rosto. |
 | `sem-camera` (portão) | Não encontrei câmera. Use o Windows Hello. |
-| `negado` (câmera) | Você não liberou a câmera. Clique no cadeado da barra de endereço, ou use o Windows Hello. |
+| `negado` (câmera) | Você não liberou a câmera. No menu … da janela, abra as permissões do site e permita a câmera. Se foi o Windows: Configurações › Privacidade › Câmera. (A janela do app não tem barra de endereço.) |
 | `sem-hello` | O Windows Hello não está ligado neste computador. Crie um PIN em Configurações › Contas › Opções de entrada. |
 
 `sem-microfone`, `em-uso`, `audio-capture` e `reiniciado` continuam com os textos de hoje.
@@ -678,3 +699,62 @@ já tem a sessão do Windows.)
   (Human), `rosto-comparar.html` (face-api × Human × MediaPipe), `hello-teste.html` (WebAuthn sem cerimônia).
 - `edge-probe\calibrar.mjs` + `baixados-human\faces.json` (base de amostra do Human).
 - `edge-probe\fala.wav`, `fala-en.wav` (voz do Windows) — não vão para o repositório.
+
+---------------------------------------------------------------------------------------------------
+## 12. Depois das revisões (2026-10-19, fase "Corrigir")
+
+O que mudou em relação às seções acima (o código é a verdade; aqui o resumo):
+
+**Trava (servidor/rosto.js)**
+- **Modo de teste explícito:** `estado()` diz `teste: true` só com `--simulado`/`--trava-aberta` (pasta temporária). A
+  página só liga o simulador `?rosto=simular` e os ganchos do `?debug` (`window.__rosto`) quando vê `teste: true`; no app
+  de verdade ignora e avisa no console. Antes, o simulador funcionava no app de verdade e a pessoa de mentira podia
+  virar o cadastro.
+- **Sem bússola:** a recusa 403 `nao-confere` não traz a distância (só no modo de teste). O acerto 200 continua trazendo,
+  para a calibragem no `?debug`.
+- **Bloqueio que sobe:** 3 falhas = 10 min; o **2º bloqueio do mesmo dia vale até a meia-noite** de Brasília
+  (`bloqueio: 'dia'`, "tente amanhã"); só o Windows Hello libera antes. Falha de outro dia não conta (`falhas_dia`).
+  O teste logo depois do cadastro (liberado pelo próprio cadastro há até 5 min) não gasta tentativa.
+- **Confirmação recente para trocar a credencial:** cadastrar o rosto de novo, cadastrar o Hello e apagar pedem
+  liberado **e** confirmação de até 5 min (método rosto, Hello ou o próprio cadastro); senão 423 `reconfirme`. O estado
+  diz `recente`. A página confere o rosto (ou o Hello) antes, com o cartão "Confirme que é você".
+- **Cadastro ilegível fecha a trava:** "não existe" (ENOENT) é diferente de "existe mas não li" (EBUSY, EPERM, formato de
+  outra versão, JSON estragado). No segundo caso o arquivo fica como está, o estado diz `erro: 'ilegivel'`,
+  `precisa_cadastro: false`, e cadastro, Hello e desafio respondem 409 `ilegivel`; a cada pedido tenta ler de novo.
+- **Opções de teste só com `--simulado`:** `--trava-aberta` e `--rosto-pasta` sem ele = o servidor recusa e sai (código 1).
+
+**Portão (web/js/rosto.js)**
+- **Câmera com prazo:** sem rosto bom em 45 s (60 s no cadastro), a câmera desliga ("Não vi seu rosto. A câmera
+  desligou.") e ficam "Tentar de novo" / "Agora não".
+- **`abrir({ pedirClique: true })`:** quando o portão abre sem ação do Júlio (o vigia do ouvido manda `trava` à
+  meia-noite; "Travar agora"), aparece só o cartão "Jarvis travado" (estado `travado`), sem câmera e sem voz; a câmera
+  liga no clique "Conferir meu rosto". Antes, "Travar agora" abria a câmera na hora e as piscadas naturais podiam
+  destravar sozinhas.
+- **Fechar com a câmera abrindo:** o `prepararCamera` não espera o `getUserMedia` quando a sessão é cancelada; a trilha
+  que chega atrasada é parada (comparada com a sessão daquela chamada); depois de 8 s sem resposta, a dica "Responda ao
+  pedido da câmera na janela do navegador". A sessão nasce no `rodar()`; um `rodar()` com a sessão anterior cancelada
+  espera ela sair e abre um portão novo (nunca o "morto"). No `jarvis.js`, o `fechar()` solta o portão na hora e cada
+  abertura tem um número (`J.nAbrir`): a resposta atrasada de um portão velho não fecha o Jarvis novo.
+- **Desafio depois do alinhamento:** o desafio (60 s) é pedido depois do "rosto bom", logo antes do piscar, e renovado
+  se faltar menos de 35 s. Desafio vencido duas vezes: "Demorou demais. Vamos de novo." (não mais "Recarregue (F5)").
+- **Piscar:** o texto não pede mais "piscar devagar" (acima de 600 ms não conta); piscada longa mostra na hora "Pisque
+  mais rápido, como sempre" e, no fim, "As piscadas foram longas demais".
+- **Câmera negada:** o texto fala do menu … da janela do app (sem barra de endereço) e do bloqueio do Windows.
+
+**Ouvido**
+- **Instalação lenta:** o evaluate do `install()` continua com 120 s, mas, vencido o prazo, o servidor segue conferindo
+  (`ouvido.estadoInstalacao()` e `available()`) de 3 em 3 s até 10 min; a tela diz "Ainda baixando…" e o pedido do
+  botão espera até 11 min. Provado com um perfil novo e prazo de 1,5 s: terminou `available` em 20 s.
+- **`unavailable`** = 409 `pacote-indisponivel`: a interface não oferece o download e fica no ouvido do Edge.
+  `sem-suporte` do `install()` = 503 ("Atualize o Google Chrome").
+- O aviso do Edge vazio só manda "use o Chrome" quando o Chrome existe e serve.
+
+**Página (servidor.js)**
+- CSP no `index.html`: `connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com <Guardião>`,
+  `img-src 'self' data: blob:`, `media-src 'self' blob:`, `form-action 'self'`, `frame-ancestors 'none'`. Com ela, as
+  bibliotecas de verdade (MediaPipe + face-api) carregaram e rodaram num quadro vazio sem violação. **Pendente:** copiar
+  as bibliotecas e os modelos para `web/vendor/` com hash conferido (o `import()` dinâmico não aceita SRI).
+
+**Ainda é assim (honesto):** a prova de vida é conferida na página; quem tem o console deste computador e uma foto do
+Júlio passa. Proteção de verdade no envio de e-mail seria exigir o Windows Hello no "confirmar" (decisão do Júlio,
+depois de criar o PIN).

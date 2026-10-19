@@ -43,6 +43,8 @@ const RECUO_SSE = [500, 1000, 2000, 5000];   // reconexão do SSE enquanto ligad
 const NIVEL_VELHO_MS = 300;                  // sem nível novo há mais que isso = sem nível
 const PRAZO_LIGAR_MS = 150000;               // a primeira vez o servidor baixa o pacote de voz (17 a 30 s medidos)
 const PRAZO_PREPARAR_MS = 150000;
+// baixar o pacote (~300 MB): numa internet lenta são minutos; o servidor espera o Chrome até 10 min
+const PRAZO_INSTALAR_MS = 11 * 60_000;
 const PRAZO_CURTO_MS = 8000;
 const SEM_APP_MS = 30000;                    // SSE fora por 30 s seguidos = o app caiu
 const CAIU_MS = 45000;                       // 'caiu' sem voltar a ouvir em 45 s (o servidor tenta 1, 5 e 30 s)
@@ -52,7 +54,7 @@ const MAX_TEXTO = 2000;
 const ESTADOS = new Set(['desligado', 'abrindo', 'instalando', 'pronto', 'iniciando', 'ouvindo', 'parado', 'caiu', 'sem-chrome']);
 // erro sem volta: para tudo. Os outros a página do Chrome manda e segue tentando (viram h.aviso('erro-remoto'));
 // se um 'parado' vier logo depois de um deles, era sem volta também
-const FATAIS = new Set(['negado', 'sem-microfone', 'em-uso', 'audio-capture', 'pacote-falhou', 'sem-pacote', 'caiu', 'trava', 'sem-suporte', 'desligado']);
+const FATAIS = new Set(['negado', 'sem-microfone', 'em-uso', 'audio-capture', 'pacote-falhou', 'sem-pacote', 'pacote-indisponivel', 'caiu', 'trava', 'sem-suporte', 'desligado']);
 const TAMANHO_PACOTE_MB = 300;               // pt-BR + en-US: 296 MB medidos (só o pt-BR não funciona)
 
 // os textos para a tela (o jarvis.js junta no ERRO_MIC quando usa este ouvido); frases curtas, palavras simples. Os
@@ -62,7 +64,9 @@ export const TEXTOS_OUVIDO = {
   'sem-pacote': `Falta baixar o pacote de voz em português, só desta vez (cerca de ${TAMANHO_PACOTE_MB} MB). Peça para baixar e eu ligo o ouvido.`,
   instalando: `Baixando o pacote de voz em português, só desta vez (cerca de ${TAMANHO_PACOTE_MB} MB)…`,
   baixar: `Baixar o pacote de voz (cerca de ${TAMANHO_PACOTE_MB} MB, uma vez só)`,
+  ainda: `Ainda baixando o pacote de voz (cerca de ${TAMANHO_PACOTE_MB} MB). Numa internet mais lenta leva alguns minutos…`,
   'pacote-falhou': 'Não consegui baixar o pacote de voz. Confira a internet e tente de novo. Enquanto isso, digite.',
+  'pacote-indisponivel': 'Este Chrome não tem o pacote de voz em português. Fico com o ouvido do Edge.',
   negado: 'O Windows bloqueou o microfone para o Chrome. Abra Configurações › Privacidade › Microfone e permita os aplicativos da área de trabalho.',
   caiu: 'O ouvido do Jarvis parou. Feche e abra o Jarvis de novo.',
   religando: 'O ouvido do Jarvis caiu. Estou religando…',
@@ -78,6 +82,8 @@ export const TEXTOS_OUVIDO = {
   'sem-suporte': 'Este Chrome não reconhece voz no computador. Atualize o Google Chrome.',
   'sem-rota': 'Este app do cérebro ainda não tem o ouvido do Chrome. Feche e abra de novo pelo INICIAR.bat.',
   'edge-vazio': 'O reconhecimento do Edge está devolvendo vazio; use o ouvido do Chrome.',
+  // sem Chrome que sirva, o aviso não manda usar o Chrome: junta o 'sem-chrome' (ou o 'pacote-indisponivel')
+  'edge-vazio-so': 'O reconhecimento do Edge está devolvendo vazio.',
 };
 
 const erroCod = (codigo, mensagem) => Object.assign(new Error(mensagem || codigo), { codigo });
@@ -192,7 +198,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     if (remoto === 'sem-chrome') { O.suportado = false; O.motivo = 'sem-chrome'; }
   }
   function semSuporte(codigo) {
-    if (codigo === 'sem-chrome' || codigo === 'sem-rota' || codigo === 'sem-suporte') { O.suportado = false; O.motivo = codigo; }
+    if (codigo === 'sem-chrome' || codigo === 'sem-rota' || codigo === 'sem-suporte' || codigo === 'pacote-indisponivel') { O.suportado = false; O.motivo = codigo; }
   }
   const mensagemDe = (corpo) => (corpo && typeof corpo.mensagem === 'string' ? corpo.mensagem.slice(0, 300) : undefined);
 
@@ -225,7 +231,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     avisouInstalando = false;
     const vigia = vigiarInstalacao();
     try {
-      const r = await pedir('POST', '/api/ouvido/preparar', corpo, PRAZO_PREPARAR_MS);
+      const r = await pedir('POST', '/api/ouvido/preparar', corpo, corpo && corpo.instalar ? PRAZO_INSTALAR_MS : PRAZO_PREPARAR_MS);
       if (!r.ok) { const c = codigoHttp(r.status, r.corpo); O.motivo = c; semSuporte(c); return null; }
       anotarEstado(r.corpo);
       O.motivo = null;
@@ -324,6 +330,8 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     const e = await consultar();
     if (!querLigado || ligando) return;
     if (!e) { if (O.motivo === 'reiniciado' || O.motivo === 'sem-rota') pararTudo(O.motivo, { avisarServidor: false }); return; }
+    // outra janela do Jarvis ligou enquanto o SSE estava fora: ela venceu (a última vence); não tomo o microfone de volta
+    if (e.dono && e.dono !== aba) { pararTudo('outra-aba', { avisarServidor: false }); return; }
     if (e.dono !== aba) { religar(); return; }
     if (e.estado === 'ouvindo') { if (Number.isFinite(e.ger)) gerVale(e.ger); marcarOuvindo(); }
     else if (e.estado === 'caiu') armarCaiu();
@@ -431,7 +439,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     if (falhou) pararTudo((falhou && falhou.codigo) || 'erro', { avisarServidor: falhou.codigo !== 'reiniciado' });
   }
   async function ligar() {
-    if (!O.suportado) throw erroCod(O.motivo === 'sem-chrome' || O.motivo === 'sem-rota' ? O.motivo : 'sem-suporte');
+    if (!O.suportado) throw erroCod(['sem-chrome', 'sem-rota', 'pacote-indisponivel'].includes(O.motivo) ? O.motivo : 'sem-suporte');
     if (querLigado) { if (ligando) return ligando.then(() => {}, () => {}); return; }   // já ligado (ou ligando)
     const minha = ++nLigar;
     querLigado = true; O.ativo = true; O.motivo = null; foraDesde = 0; falhasSse = 0; religadas = [];

@@ -301,14 +301,26 @@
     }
     return out;
   }
-  // precisa de gesto do usuário (o Node manda com userGesture: true); pt-BR sozinho não basta: vai junto o en-US
-  async function instalar(langs) {
-    if (!SR || typeof SR.install !== 'function') return { ok: false, codigo: 'sem-suporte' };
-    try {
-      const v = await SR.install({ langs: Array.isArray(langs) && langs.length ? langs : ['pt-BR', 'en-US'], processLocally: true });
-      return v ? { ok: true } : { ok: false, codigo: 'pacote-falhou' };
-    } catch (_) { return { ok: false, codigo: 'pacote-falhou' }; }
+  // precisa de gesto do usuário (o Node manda com userGesture: true); pt-BR sozinho não basta: vai junto o en-US.
+  // Numa internet lenta o download passa do prazo do Node: a instalação segue aqui e o Node confere pelo
+  // estadoInstalacao() (o mesmo pedido de novo espera a mesma instalação, não começa outra)
+  let instalacao = null;   // { andamento, resultado, promessa }
+  function instalar(langs) {
+    if (!SR || typeof SR.install !== 'function') return Promise.resolve({ ok: false, codigo: 'sem-suporte' });
+    if (instalacao && instalacao.andamento) return instalacao.promessa;
+    const reg = { andamento: true, resultado: null, promessa: null };
+    reg.promessa = (async () => {
+      try {
+        const v = await SR.install({ langs: Array.isArray(langs) && langs.length ? langs : ['pt-BR', 'en-US'], processLocally: true });
+        reg.resultado = v ? { ok: true } : { ok: false, codigo: 'pacote-falhou' };
+      } catch (_) { reg.resultado = { ok: false, codigo: 'pacote-falhou' }; }
+      reg.andamento = false;
+      return reg.resultado;
+    })();
+    instalacao = reg;
+    return reg.promessa;
   }
+  function estadoInstalacao() { return instalacao ? { andamento: instalacao.andamento, resultado: instalacao.resultado } : { andamento: false, resultado: null }; }
   async function ligar(op) {
     op = op && typeof op === 'object' ? op : {};
     if (!SR) return { ok: false, codigo: 'sem-suporte' };
@@ -355,7 +367,7 @@
   function estado() {
     return { ligado, ouvindo, modo, lang, ger, fonte: comArquivo() ? 'arquivo' : teste ? 'microfone-falso' : 'microfone', suportado: !!SR };
   }
-  window.ouvido = Object.freeze({ disponivel, instalar, ligar, pausar, estado });
+  window.ouvido = Object.freeze({ disponivel, instalar, estadoInstalacao, ligar, pausar, estado });
 })();
 </script>
 </body>

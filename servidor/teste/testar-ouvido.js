@@ -5,7 +5,7 @@
    - Perfil de teste: %LOCALAPPDATA%\CerebroLube\ouvido-chrome-teste. Fica, para não baixar o pacote de voz (~300 MB) toda
      vez; OUVIDO_PERFIL_LIMPO=1 apaga antes. A primeira vez o teste PEDE a instalação (POST /api/ouvido/instalar).
    - Nunca abre o microfone de verdade: todo ligar vai com {teste: {arquivo}} (e o ouvido sem permitirTeste recusa o teste).
-   - Sem Chrome: avisa e sai com 0. OUVIDO_LOG=1 mostra o log do ouvido.
+   - Sem Chrome: avisa e sai com 0. OUVIDO_LOG=1 mostra o log do ouvido; OUVIDO_WAV_GERAR=1 gera o áudio mesmo com o arquivo.
    Modo filho (o próprio teste usa): node teste/testar-ouvido.js --filho <porta> <exit|vivo> */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -42,6 +42,12 @@ async function lerCorpoJson(req) {
   for await (const p of req) partes.push(p);
   try { return JSON.parse(Buffer.concat(partes).toString('utf8') || '{}'); } catch (_) { const e = new Error('json'); e.status = 400; throw e; }
 }
+// os mesmos cabeçalhos de segurança do servidor.js (SEG): a página roda aqui com as regras que vai ter no app
+const SEG = {
+  'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
+  'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin',
+};
 // servidor HTTP do teste: serve a página e o .wav, e passa /api/ouvido/* para o ouvido da vez (como o servidor.js fará)
 function criarServidorTeste(wav) {
   let ouvido = null;
@@ -55,13 +61,13 @@ function criarServidorTeste(wav) {
       }
       if (url.pathname === '/ouvido.html') {
         const html = await fsp.readFile(path.join(WEB, 'ouvido.html'));
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.writeHead(200, { ...SEG, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Length': html.length });
         res.end(html);
         return;
       }
       if (url.pathname === TESTE_WAV.arquivo && wav) {
         const dados = await fsp.readFile(wav);
-        res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': dados.length, 'Cache-Control': 'no-store' });
+        res.writeHead(200, { ...SEG, 'Content-Type': 'audio/wav', 'Content-Length': dados.length, 'Cache-Control': 'no-cache' });
         res.end(dados);
         return;
       }
@@ -165,6 +171,15 @@ function gerarWav() {
       () => { try { res(fs.statSync(saida).size > 10000 ? saida : null); } catch (_) { res(null); } });
   });
 }
+// mata só os processos de página (--type=renderer) do perfil: simula a página do ouvido caindo
+function matarRenderizadores(perfil) {
+  const script = String.raw`$p = $env:OUVIDO_PERFIL_TESTE; $l = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) -and $_.CommandLine.Contains('--type=renderer') }); foreach ($x in $l) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }; $l.Count`;
+  return new Promise((res) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { windowsHide: true, timeout: 20000, env: { ...process.env, OUVIDO_PERFIL_TESTE: perfil } },
+      (err, out) => res(err ? 0 : Number(String(out || '').trim()) || 0));
+  });
+}
 // linhas de comando dos chrome.exe do perfil (para conferir as flags)
 function linhasDeComando(perfil) {
   const script = String.raw`$p = $env:OUVIDO_PERFIL_TESTE; Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) } | ForEach-Object { $_.CommandLine }`;
@@ -208,7 +223,7 @@ async function principal() {
 
   titulo('áudio do teste');
   let wav = path.join(AQUI, 'fala-pt.wav'), wavTemp = null;
-  if (!fs.existsSync(wav)) { wav = await gerarWav(); wavTemp = wav; }
+  if (!fs.existsSync(wav) || process.env.OUVIDO_WAV_GERAR === '1') { wav = await gerarWav(); wavTemp = wav; }
   const temFala = ok(!!wav, wav ? `áudio: ${wavTemp ? 'gerado com a voz pt-BR do Windows (temporário)' : 'teste/fala-pt.wav'} (${Math.round(fs.statSync(wav).size / 1024)} KB)` : 'sem áudio (sem voz pt-BR no Windows): a transcrição fica de fora');
 
   const servidor = criarServidorTeste(wav);
@@ -219,7 +234,7 @@ async function principal() {
   if (sobras) console.log(`   (fechei ${sobras} processo(s) do Chrome de teste que tinham sobrado)`);
   if (process.env.OUVIDO_PERFIL_LIMPO === '1') { await apagarPasta(PERFIL_TESTE); console.log('   (perfil de teste apagado: vai baixar o pacote de novo)'); }
 
-  let ouvido = null, outro = null;
+  let ouvido = null, outro = null, perfilVazio = null;
   const instancias = [];
   try {
     titulo('trava e entradas (o Chrome nem abre)');
@@ -257,7 +272,7 @@ async function principal() {
     ok(await contarProcessos(PERFIL_TESTE) === 0, 'nenhum Chrome com o perfil de teste até aqui');
 
     titulo('consentimento: sem pedido, o pacote não baixa');
-    const perfilVazio = await fsp.mkdtemp(path.join(os.tmpdir(), 'ouvido-vazio-'));
+    perfilVazio = await fsp.mkdtemp(path.join(os.tmpdir(), 'ouvido-vazio-'));
     const vazio = criarOuvidoChrome({ ...base, perfil: perfilVazio, permitirTeste: true, log: registrar });
     instancias.push(vazio);
     servidor.usar(vazio);
@@ -271,7 +286,8 @@ async function principal() {
     ok(soda < 1024 * 1024, `nada baixado no perfil novo (pastas SODA: ${(soda / 1048576).toFixed(1)} MB)`);
     await vazio.desligar({ final: true });
     ok(await contarProcessos(perfilVazio) === 0, 'o Chrome do perfil novo fechou');
-    await apagarPasta(perfilVazio);
+    ok(await apagarPasta(perfilVazio) && !fs.existsSync(perfilVazio), 'o perfil novo (temporário) foi apagado');
+    perfilVazio = null;
 
     titulo('preparar e baixar o pacote (pedido explícito)');
     const logsOuvido = [];
@@ -354,6 +370,15 @@ async function principal() {
       const volta = await sseB.esperar((x) => x.t > tQueda && x.evento === 'resultado' && x.dados.ger === g3 && norm(x.dados.final).includes('rodando'), 30000);
       ok(!!volta, volta ? `voltou e transcreveu de novo em ${seg(tQueda)} s (mesma geração ${g3})` : 'não voltou em 30 s');
       ok(logsOuvido.some((l) => l.includes('saiu sozinho')) && logsOuvido.some((l) => l.includes('voltou depois da queda')), 'o log conta a queda e a volta');
+
+      titulo('só a página cai (processo da página morto): carrega de novo e religa');
+      await esperar(1500);
+      const tPag = Date.now();
+      const renders = await matarRenderizadores(PERFIL_TESTE);
+      ok(renders > 0, `derrubei ${renders} processo(s) de página do Chrome de teste`);
+      const voltaPag = await sseB.esperar((x) => x.t > tPag && x.evento === 'resultado' && x.dados.ger === g3 && norm(x.dados.final).includes('rodando'), 25000);
+      ok(!!voltaPag, voltaPag ? `a página voltou e transcreveu de novo em ${seg(tPag)} s` : 'a página não voltou em 25 s');
+      ok(logsOuvido.some((l) => /a página do ouvido (caiu|se soltou)/.test(l)), 'o log conta a queda da página');
 
       titulo('a aba dona some (SSE fecha): o microfone fecha');
       const tSome = Date.now();
@@ -444,9 +469,15 @@ async function principal() {
     for (const o of instancias) { try { await o.desligar({ final: true }); } catch (_) { /* nada */ } }
     const sobrou = await matarPerfil(PERFIL_TESTE);
     if (sobrou) console.log(`   (fechei ${sobrou} processo(s) que sobraram)`);
+    if (perfilVazio) {
+      // o teste parou no meio do bloco do perfil novo: fecha o Chrome dele e apaga a pasta temporária
+      await matarPerfil(perfilVazio);
+      if (!(await apagarPasta(perfilVazio))) console.log(`   (não consegui apagar ${perfilVazio})`);
+    }
     servidor.srv.closeAllConnections?.();
     servidor.srv.close();
     if (wavTemp) { try { fs.unlinkSync(wavTemp); } catch (_) { /* nada */ } }
+    try { fs.unlinkSync(path.join(os.tmpdir(), `ouvido-falso-${process.pid}.wav`)); } catch (_) { /* já apagado */ }
   }
 
   console.log(`\n${total - falhas} de ${total} passaram${falhas ? ` — ${falhas} FALHARAM` : ''} (${seg(t00)} s)`);

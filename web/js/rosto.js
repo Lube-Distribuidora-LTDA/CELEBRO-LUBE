@@ -4,12 +4,20 @@
    esta página manda só o descritor (128 números), nunca a imagem. Reserva: o Windows Hello (WebAuthn).
 
    Uso (js/jarvis.js, só no app local):
-     const portao = criarPortao({ raiz, token, sons, falar, reduzido, hud, onEstado });
+     const portao = criarPortao({ raiz, token, sons, falar, reduzido, hud, onEstado, saudar });   // saudar: false = sem "Bom dia"
      const st = await portao.consultar();                 // EstadoRosto do servidor, ou null (servidor fora)
      if (st && !st.liberado) { const r = await portao.abrir(); if (!r.liberado) fechar(); }
      portao.recadastrar(); portao.apagarCadastro(); portao.cadastrarHello(); portao.travar(); portao.fechar(); portao.destruir()
-   ?rosto=simular (só local): câmera desenhada num canvas, pontos e descritores de mentira (e o Windows Hello de mentira).
-   Com ?debug: window.__rosto = { quadro(simulado), descritor(semente), estado(), … } para testar sem câmera.
+   portao.abrir({ pedirClique: true }): quando o portão abre sem ação do Júlio (a trava do vigia à meia-noite, "Travar
+   agora"), mostra só o cartão "Jarvis travado" e a câmera liga no clique.
+   onEstado(nome, { camera }) a cada troca (os nomes do §6.6, mais 'travado', 'apagar' e 'fechado' quando o portão sai da
+   tela); enquanto o portão está aberto, a raiz ganha a classe .rs-travado (a legenda, a caixa de texto e os painéis saem).
+   ?rosto=simular: câmera desenhada num canvas, pontos e descritores de mentira (e o Windows Hello de mentira). Só vale
+   quando o SERVIDOR diz que está em modo de teste (estado.teste, com --simulado: pasta temporária); no app de verdade é
+   ignorado (senão a pessoa de mentira viraria o cadastro, ou liberaria o dia de qualquer um).
+   Com ?debug, também só no modo de teste: window.__rosto = { quadro(simulado), descritor(semente), estado(), … }.
+   Trocar ou apagar o cadastro pede uma confirmação de até 5 min (o servidor confere): se a do dia é mais velha, o portão
+   confere o rosto (ou o Hello) antes.
    Privacidade: nenhum quadro é guardado nem sai do computador (o quadro do descritor é desenhado num canvas fora da tela,
    usado e apagado); a câmera desliga ao terminar, ao cancelar (Esc) e quando a janela sai da frente.
    Cores: só tokens do CSS (lidos uma vez com getComputedStyle, como o jarvis-hud.js); nada de cor literal fora da reserva.
@@ -41,6 +49,12 @@ const Q = { largMin: 0.28, angMax: 20, angMaxCadastro: 25, luzMin: 50, luzMax: 2
 const PISCAR = { minAbs: 0.45, sobe: 0.30, desce: 0.15, durMin: 50, durMax: 600, baseIni: 10, baseN: 30, janelaMs: 8000 };
 const CAPTURA = { quadros: 3, intervalo: 150, tentativas: 8, depoisPiscar: 300 };
 const CADASTRO = { amostras: 8, intervalo: 600 };
+// a câmera nunca fica ligada esperando um rosto que não vem (o Júlio saiu da mesa): depois disso ela desliga
+const PRAZO_ROSTO = { conferir: 45000, cadastro: 60000 };
+// o desafio vale 60 s no servidor: com menos que isso de folga, pede outro antes de mandar piscar
+const FOLGA_DESAFIO_MS = 35000;
+// o pedido de permissão da câmera sem resposta: a dica aparece depois disso
+const DICA_PERMISSAO_MS = 8000;
 // laços de pontos da malha do MediaPipe (índices do FaceLandmarker): olhos, boca, sobrancelhas, nariz e contorno
 const LACO = {
   olhoD: [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246],
@@ -58,7 +72,8 @@ const EAR_D = [33, 160, 158, 133, 153, 144], EAR_E = [362, 385, 387, 263, 373, 3
 /* ---------- textos (§8 e §9) ---------- */
 const TXT = {
   'sem-camera': 'Não encontrei câmera neste computador.',
-  negado: 'Você não liberou a câmera. Clique no cadeado da barra de endereço e permita a câmera.',
+  // a janela do app (Edge com --app) não tem barra de endereço nem cadeado
+  negado: 'Você não liberou a câmera. No menu … da janela, abra as permissões do site e permita a câmera. Se foi o Windows: Configurações › Privacidade › Câmera.',
   'em-uso': 'A câmera está aberta em outro programa. Feche o outro programa e tente de novo.',
   'sem-suporte': 'Este navegador não abre a câmera aqui. Abra o Jarvis pelo atalho do app.',
   'sem-hello': 'O Windows Hello não está ligado neste computador. Crie um PIN em Configurações › Contas › Opções de entrada.',
@@ -71,12 +86,19 @@ const TXT = {
   oculto: 'A câmera desligou porque a janela saiu da frente.',
   'camera-caiu': 'A câmera parou no meio. Confira o cabo e tente de novo.',
   quadros: 'Os quadros da câmera vieram estranhos. Tente de novo.',
-  'prova-de-vida': 'Não consegui confirmar as piscadas. Tente de novo, piscando devagar.',
+  // piscada acima de 600 ms não conta (PISCAR.durMax e o servidor): nada de pedir para piscar devagar
+  'prova-de-vida': 'Não consegui confirmar as piscadas. Pisque normal, uma de cada vez.',
+  'piscada-longa': 'As piscadas foram longas demais. Pisque normal, uma de cada vez, como sempre.',
+  'sem-rosto': 'Não vi seu rosto. A câmera desligou.',
+  desafio: 'Demorou demais. Vamos de novo.',
+  reconfirme: 'Passou tempo demais desde a última confirmação. Confirme de novo que é você.',
+  ilegivel: 'Não consegui ler o cadastro do rosto neste computador, então o Jarvis fica travado. Feche o app e abra de novo. Se continuar, o README explica como recomeçar.',
   'sem-cadastro': 'O cadastro do rosto sumiu deste computador. Feche e abra o Jarvis para cadastrar de novo.',
   trava: 'O Jarvis está travado. Faça o reconhecimento do rosto.'
 };
+// honesto (pedido do Júlio): o que a trava é e o que ela não segura
 const HTML_PRIVACIDADE = `<p>Vou guardar só números que descrevem o seu rosto, neste computador (<code>%LOCALAPPDATA%\\CerebroLube\\rosto</code>). Nenhuma foto é salva e nada sai daqui. A câmera desliga ao terminar.</p>
-  <p>Isto é uma trava do Jarvis neste computador. Não substitui o login do Windows: quem entra na sua conta do Windows consegue apagar a trava, e um vídeo seu poderia enganar a prova de vida (o piscar).</p>`;
+  <p>Isto é uma trava do Jarvis neste computador, não do Windows. Ela não substitui o login: quem entra na sua conta do Windows consegue apagar a trava. E quem abrir o console do navegador neste computador e tiver uma foto sua consegue passar, porque a prova de vida (o piscar) é conferida na página. Um vídeo seu também poderia enganar o piscar.</p>`;
 const NUMERO = { 2: 'duas', 3: 'três' };
 
 /* ---------- utilidades ---------- */
@@ -459,7 +481,11 @@ export function criarPortao(opts = {}) {
   const hud = opts.hud || null;
   const onEstado = typeof opts.onEstado === 'function' ? opts.onEstado : () => {};
   const nome = opts.nome || 'Júlio';
-  const simulado = opts.simular != null ? !!opts.simular && (ehLocal() || location.protocol === 'file:') : querySim();
+  // saudar: false = a primeira frase do portão não diz "Bom dia, Júlio" (o jarvis.js saúda pela hora depois de liberar)
+  const saudarAntes = opts.saudar !== false;
+  const abertura = (resto) => (saudarAntes ? `${saudacao()}, ${nome}. ${resto}` : resto);
+  // o simulador foi PEDIDO (?rosto=simular); ele só liga quando o servidor confirma o modo de teste (aplicarTeste)
+  const simPedido = opts.simular != null ? !!opts.simular && (ehLocal() || location.protocol === 'file:') : querySim();
   const debug = queryDebug();
   const ID = `rs${++contador}`;
   let C = lerCores();
@@ -502,11 +528,37 @@ export function criarPortao(opts = {}) {
     const r = await chamar('/api/rosto/estado', { prazo: 6000 });
     if (r.status !== 200 || typeof r.dados.liberado !== 'boolean') return null;
     S.ultimo = r.dados;
+    aplicarTeste(r.dados);
     return r.dados;
+  }
+  /* O simulador e os ganchos do ?debug só ligam quando o servidor diz que está em modo de teste (--simulado: a trava
+     usa uma pasta temporária). No app de verdade, ?rosto=simular mandaria ao servidor os descritores de uma pessoa de
+     mentira sempre igual — o cadastro dela, ou o dia liberado para qualquer um —, então é ignorado. */
+  let avisouSim = false, ganchosLigados = false;
+  function aplicarTeste(st) {
+    const teste = !!(st && st.teste === true);
+    // (o modo de teste é do servidor e não muda com ele ligado: a troca só acontece na primeira consulta, antes de
+    // qualquer câmera)
+    if (simPedido) {
+      if (teste) sim = SIM;
+      else {
+        sim = null;
+        if (!avisouSim) { avisouSim = true; try { console.warn('[Rosto] ?rosto=simular ignorado: o app não está em modo de teste (servidor sem --simulado).'); } catch { /* nada */ } }
+      }
+    }
+    if (debug && teste && !ganchosLigados) { ganchosLigados = true; ligarGanchos(); }
   }
 
   /* ---------- sessão e cancelamento ---------- */
   function checar() { if (!S.sessao || S.sessao.signal.aborted) throw erro('cancelado'); }
+  // a promessa ou o cancelamento da sessão, o que vier primeiro (para o que não ouve o AbortSignal)
+  function cancelavel(p) {
+    const sinal = S.sessao && S.sessao.signal;
+    if (!sinal || sinal.aborted) return Promise.reject(erro('cancelado'));
+    let ab = null;
+    const corte = new Promise((_, falha) => { ab = () => falha(erro('cancelado')); sinal.addEventListener('abort', ab, { once: true }); });
+    return Promise.race([p, corte]).finally(() => sinal.removeEventListener('abort', ab));
+  }
   function dormir(ms) {
     return new Promise((ok, falha) => {
       const sinal = S.sessao && S.sessao.signal;
@@ -582,8 +634,10 @@ export function criarPortao(opts = {}) {
     W = Math.max(1, r.width || innerWidth); H = Math.max(1, r.height || innerHeight);
     let c = null;
     try { c = hud && typeof hud.centro === 'function' ? hud.centro() : null; } catch { c = null; }
-    Rhud = c && Number.isFinite(c.r) && c.r > 0 ? c.r : 0.3 * Math.min(W, H);
-    hx = c && Number.isFinite(c.x) ? c.x : W / 2; hy = c && Number.isFinite(c.y) ? c.y : H * 0.44;
+    // o centro do HUD só vale se estiver dentro da tela (o HUD medido com a janela escondida fica no canto)
+    if (c && !(Number.isFinite(c.x) && Number.isFinite(c.y) && c.x > 0.2 * W && c.x < 0.8 * W && c.y > 0.1 * H && c.y < 0.9 * H && c.r > 40)) c = null;
+    Rhud = c ? c.r : 0.3 * Math.min(W, H);
+    hx = c ? c.x : W / 2; hy = c ? c.y : H * 0.44;
     cx = hx; cy = hy;
     // raio da lente (§6.7): min(0,62 R, 180 px); em tela estreita, min(36vw, 150 px)
     Rc = W <= 480 ? Math.min(0.36 * W, 150) : Math.min(0.62 * Rhud, 180);
@@ -902,7 +956,8 @@ export function criarPortao(opts = {}) {
     const [, ya] = mapa(0, b.y0), [, yb] = mapa(0, b.y1);
     const ys = lerp(oy + ya - 12, oy + yb + 12, rev);
     const parado = !S.cam.ligada;
-    const base = parado ? 0.16 : 0.25;
+    // em repouso a malha fica fraca (25% do brilho da varredura, com um mínimo para aparecer em rosto claro)
+    const base = parado ? 0.22 : 0.34;
     const baldes = [[], [], [], []];   // 4 níveis de brilho (um fillStyle por nível)
     for (let i = 0; i < p.length; i++) {
       const [x, y] = mapa(p[i].x, p[i].y), X = ox + x, Y = oy + y;
@@ -915,7 +970,7 @@ export function criarPortao(opts = {}) {
       const l = baldes[k]; if (!l.length) continue;
       g.fillStyle = rgba(C.holo, alfas[k]);
       g.beginPath();
-      for (let i = 0; i < l.length; i += 2) g.rect(l[i] - 0.8, l[i + 1] - 0.8, 1.6, 1.6);
+      for (let i = 0; i < l.length; i += 2) g.rect(l[i] - 0.95, l[i + 1] - 0.95, 1.9, 1.9);
       g.fill();
     }
     // contorno, sobrancelhas e nariz fracos; olhos e boca em --holo-medio (os olhos piscam em --ink)
@@ -927,10 +982,11 @@ export function criarPortao(opts = {}) {
     };
     if (rev >= 1) {
       g.lineWidth = 1;
-      g.strokeStyle = rgba(C.holo, parado ? 0.12 : 0.18); linha(LACO.oval, true); linha(LACO.sobD, false); linha(LACO.sobE, false); linha(LACO.nariz, false);
-      g.strokeStyle = rgba(C.holo, 0.36); linha(LACO.boca, true);
+      g.strokeStyle = rgba(C.holo, parado ? 0.2 : 0.3); linha(LACO.oval, true); linha(LACO.sobD, false); linha(LACO.sobE, false); linha(LACO.nariz, false);
+      g.lineWidth = 1.3;
+      g.strokeStyle = rgba(C.holo, 0.62); linha(LACO.boca, true);
       const pisca = now < A.olhosAte;
-      g.strokeStyle = pisca ? rgba(C.ink, 0.95) : rgba(C.holo, 0.36); g.lineWidth = pisca ? 1.6 : 1;
+      g.strokeStyle = pisca ? rgba(C.ink, 0.98) : rgba(C.holo, 0.62); g.lineWidth = pisca ? 2 : 1.3;
       linha(LACO.olhoD, true); linha(LACO.olhoE, true);
     } else {
       // a linha de luz que acende a malha
@@ -1025,11 +1081,18 @@ export function criarPortao(opts = {}) {
   }
   async function ligarCamera() {
     checar();
-    const stream = sim && sim.fonte !== 'real' ? await cameraSimulada() : await abrirCameraReal();
-    if (!S.sessao || S.sessao.signal.aborted || !el) { pararStream(stream); throw erro('cancelado'); }
+    // a sessão DESTA chamada: o pedido de permissão pode ficar sem resposta e ser respondido depois de o portão fechar
+    // (ou de outro abrir). A trilha que chegar atrasada é parada aqui, nunca adotada pela sessão nova
+    const sinal = S.sessao.signal;
+    const vivo = () => !sinal.aborted && !!S.sessao && S.sessao.signal === sinal && !!el;
+    const tmDica = setTimeout(() => { if (vivo() && !S.cam.ligada) dica('Responda ao pedido da câmera na janela do navegador.'); }, DICA_PERMISSAO_MS);
+    let stream;
+    try { stream = sim && sim.fonte !== 'real' ? await cameraSimulada() : await abrirCameraReal(); }
+    finally { clearTimeout(tmDica); }
+    if (!vivo()) { pararStream(stream); throw erro('cancelado'); }
     S.cam.stream = stream;
     await prepararVideo(el.video, stream);
-    if (!S.sessao || S.sessao.signal.aborted || !el) { desligarCamera(); throw erro('cancelado'); }
+    if (!vivo()) { if (S.cam.stream === stream) desligarCamera(); else pararStream(stream); throw erro('cancelado'); }
     S.cam.ligada = true;
     camIndicador(true);
     S.piscar = null; A.malhaT0 = -1; S.hist.length = 0;
@@ -1073,8 +1136,12 @@ export function criarPortao(opts = {}) {
   /* ---------- bibliotecas e câmera juntas ---------- */
   function carregarLibs() {
     if (S.libs) return Promise.resolve(S.libs);
-    if (S.carregando) return S.carregando;
     const sinal = S.sessao && S.sessao.signal;
+    // a carga de uma sessão cancelada ainda pode estar no ar (o import() não para): espera ela acabar e carrega de novo
+    // nesta (senão o "cancelado" dela derrubaria a sessão nova)
+    if (S.carregando && S.carregandoSinal !== sinal) return S.carregando.then(() => carregarLibs(), () => carregarLibs());
+    if (S.carregando) return S.carregando;
+    S.carregandoSinal = sinal;
     const p = (sim && sim.fonte === 'desenho' ? carregarSimulado(carga) : carregarReal(carga, sinal))
       .then((l) => { if (!S.sessao || S.sessao.signal !== sinal || sinal.aborted) { try { l.fechar(); } catch { /* nada */ } throw erro('cancelado'); } S.libs = l; return l; })
       .finally(() => { if (S.carregando === p) S.carregando = null; });
@@ -1092,8 +1159,9 @@ export function criarPortao(opts = {}) {
     tom('holo');
     definirEstado(S.libs ? 'camera' : 'carregando');
     if (S.libs) { status('ABRINDO A CÂMERA'); dica('Abrindo a câmera…'); } else { status('CARREGANDO 0%'); dica('Preparando o reconhecimento…'); carga(0); }
-    // a câmera pode abrir antes das bibliotecas: o vídeo já aparece na lente
-    const [rl, rc] = await Promise.allSettled([carregarLibs(), S.cam.ligada ? Promise.resolve() : ligarCamera().then(() => { if (S.estado === 'carregando') dica('A câmera já abriu. Terminando de carregar…'); })]);
+    // a câmera pode abrir antes das bibliotecas: o vídeo já aparece na lente. Fechar o portão no meio (Esc, Sair, com o
+    // pedido de permissão do navegador ainda sem resposta) não espera o getUserMedia, que não ouve o cancelamento
+    const [rl, rc] = await cancelavel(Promise.allSettled([carregarLibs(), S.cam.ligada ? Promise.resolve() : ligarCamera().then(() => { if (S.estado === 'carregando') dica('A câmera já abriu. Terminando de carregar…'); })]));
     if (rc.status === 'rejected') { desligarCamera(); throw rc.reason; }
     if (rl.status === 'rejected') { desligarCamera(); throw rl.reason; }
     checar();
@@ -1183,6 +1251,11 @@ export function criarPortao(opts = {}) {
     q.aberto = lista.length === 1 && !!S.piscar && S.piscar.aberto(b);
     if (ev && ev.tipo === 'fechou') A.olhosAte = agora() + 220;
     if (S.janela && S.janela.ativa && ev && ev.tipo === 'piscou') registrarPiscada(ev);
+    // piscada longa demais (acima de 600 ms) não conta: diz na hora, em vez de deixar a janela acabar calada
+    if (S.janela && S.janela.ativa && ev && ev.tipo === 'longa' && ev.fim - ev.ini > PISCAR.durMax) {
+      S.janela.longas++; S.janela.dicaAte = agora() + 1500;
+      dica('Pisque mais rápido, como sempre');
+    }
     if (S.des) S.des.quadros++;
     // quadros por segundo da câmera (a leitura do HUD e a prova)
     S.fps.n++;
@@ -1249,15 +1322,16 @@ export function criarPortao(opts = {}) {
     }
     dicaDaRegra(q, fixa);
   }
-  // rosto bom (1 pessoa, perto, de frente, com luz e parado) por `estavelMs` seguidos
-  function esperarQualidade(estavelMs = 400, cadastro = false) {
+  // rosto bom (1 pessoa, perto, de frente, com luz e parado) por `estavelMs` seguidos. → true, ou false quando o prazo
+  // vence sem rosto bom (quem chama desliga a câmera: ela nunca fica ligada esperando quem saiu da mesa)
+  function esperarQualidade(estavelMs = 400, cadastro = false, prazoMs = cadastro ? PRAZO_ROSTO.cadastro : PRAZO_ROSTO.conferir) {
     let desde = 0;
     definirEstado('procurando'); status('PROCURANDO ROSTO'); dica('Procurando seu rosto');
     return aguardarQuadros((q, fim) => {
       const qq = cadastro ? q.qualCad : q.qual;
       mostrarQualidade(qq, 'Isso. Fique assim.');
       if (qq.ok) { if (!desde) desde = agora(); if (agora() - desde >= estavelMs) fim(true); } else desde = 0;
-    });
+    }, prazoMs * lento()).then((v) => v === true);
   }
   async function novoDesafio() {
     const r = await chamar('/api/rosto/desafio', { metodo: 'POST', corpo: {} });
@@ -1267,8 +1341,9 @@ export function criarPortao(opts = {}) {
       const ex = typeof r.dados.expira_em === 'number' ? r.dados.expira_em : Date.parse(r.dados.expira_em);
       return { id: r.dados.id, n, t0: agora(), expira: Number.isFinite(ex) ? ex : Date.now() + 60000, quadros: 0, piscadas: [] };
     }
-    if (r.status === 429) return { erro: 'bloqueado', ate: quando(r.dados) };
+    if (r.status === 429) return { erro: 'bloqueado', ate: quando(r.dados), dia: r.dados.bloqueio === 'dia' };
     if (r.status === 404) return { erro: 'sem-cadastro' };
+    if (r.status === 409 && r.dados.erro === 'ilegivel') return { erro: 'ilegivel' };
     return { erro: 'servidor' };
   }
   function quando(d) {
@@ -1276,21 +1351,26 @@ export function criarPortao(opts = {}) {
     const t = typeof v === 'number' ? v : Date.parse(v);
     return Number.isFinite(t) ? t : Date.now() + 10 * 60000;
   }
+  // → { ok, longa } (longa: alguma piscada passou de 600 ms e não contou)
   async function pedirPiscadas(des) {
     definirEstado('piscar'); tom('holo');
-    const n = des.n;
-    status('PISQUE PARA CONFIRMAR'); dica(`Pisque ${NUMERO[n]} vezes`); bolinhas(n, 0);
-    dizer(`Pisque ${NUMERO[n]} vezes.`);
-    S.janela = { ativa: true, n, lista: [], des, ini: agora() };
+    const n = des.n, pedido = `Pisque ${NUMERO[n]} vezes`;
+    status('PISQUE PARA CONFIRMAR'); dica(pedido); bolinhas(n, 0);
+    dizer(`${pedido}.`);
+    S.janela = { ativa: true, n, lista: [], des, ini: agora(), longas: 0, dicaAte: 0 };
     let tFim = 0;
     const ok = await aguardarQuadros((q, fim) => {
       const j = S.janela;
       if (j.lista.length >= n) { if (!tFim) tFim = agora(); if (agora() - tFim >= CAPTURA.depoisPiscar) fim(true); return; }
       if (agora() - j.ini > PISCAR.janelaMs) fim(false);
+      if (agora() < j.dicaAte) return;   // "Pisque mais rápido" fica 1,5 s na tela
       if (q.rostos !== 1) dica(q.rostos ? 'Só uma pessoa na frente da câmera' : 'Procurando seu rosto');
-      else if (el.dica.textContent !== `Pisque ${NUMERO[n]} vezes`) dica(`Pisque ${NUMERO[n]} vezes`);
+      else if (el.dica.textContent !== pedido) dica(pedido);
     }, PISCAR.janelaMs + 2000);
-    return !!ok;
+    const longa = !!(S.janela && S.janela.longas);
+    // a janela fecha aqui: piscada durante a captura não entra na prova (o servidor aceita n ou n + 1)
+    if (S.janela) S.janela.ativa = false;
+    return { ok: !!ok, longa };
   }
   async function pegarDescritor() {
     const v = el.video;
@@ -1330,25 +1410,29 @@ export function criarPortao(opts = {}) {
   }
   const zerar = (lista) => { if (Array.isArray(lista)) for (const d of lista) if (Array.isArray(d)) d.length = 0; };
 
-  /* Uma tentativa com o rosto: câmera → desafio → rosto bom → piscar → 3 quadros → servidor.
-     → { liberado, distancia } | { recusado, codigo, restantes, distancia } | { erro, ate? } */
+  /* Uma tentativa com o rosto: câmera → rosto bom → desafio → piscar → 3 quadros → servidor.
+     → { liberado, distancia } | { recusado, codigo, restantes, distancia, dia? } | { erro, ate?, dia? } */
   async function tentativaRosto() {
     tom('holo'); limparParado(); A.checkT0 = -1; A.pulsoT0 = -1; A.flashT0 = -1; A.progVis = false; A.segsTotal = 0; bolinhas(0, 0); limparBotoes();
     try { await prepararCamera(); } catch (e) { if (ehCancelado(e)) throw e; return { erro: e.codigo || 'sem-modelo' }; }
-    let des = await novoDesafio();
-    if (des.erro) { desligarCamera(); return des; }
-    S.des = des;
+    let des = null, longa = false;
     try {
       for (let volta = 0; ; volta++) {
-        await esperarQualidade(400);
-        if (await pedirPiscadas(des)) break;
+        // sem rosto bom no prazo (saiu da mesa, pouca luz): a câmera desliga e ficam os botões
+        if (!(await esperarQualidade(400))) { desligarCamera(); return { erro: 'sem-rosto' }; }
+        // o desafio vale 60 s: pedido DEPOIS do alinhamento (que pode demorar), e outro se este estiver perto de vencer
+        if (!des || des.expira - Date.now() < FOLGA_DESAFIO_MS) {
+          des = await novoDesafio();
+          if (des.erro) { desligarCamera(); return des; }
+          S.des = des;
+        } else des.piscadas = [];
+        const pv = await pedirPiscadas(des);
+        if (pv.ok) break;
+        if (pv.longa) longa = true;
         S.janela = null; bolinhas(0, 0);
-        if (volta >= 1) { desligarCamera(); return { erro: 'sem-piscar' }; }
-        dica('Não vi as piscadas. Vamos de novo.');
+        if (volta >= 1) { desligarCamera(); return { erro: longa ? 'piscada-longa' : 'sem-piscar' }; }
+        dica(pv.longa ? 'Pisque mais rápido, como sempre. Vamos de novo.' : 'Não vi as piscadas. Vamos de novo.');
         await dormir(1200);
-        // a mesma conferência vale por 60 s: perto de vencer, pede outra
-        if (des.expira - Date.now() < 25000) { des = await novoDesafio(); if (des.erro) { desligarCamera(); return des; } S.des = des; }
-        else { des.piscadas = []; }
       }
       const descritores = await capturarDescritores();
       des.piscadas = S.janela ? S.janela.lista.slice() : [];
@@ -1362,9 +1446,10 @@ export function criarPortao(opts = {}) {
       checar();
       S.ultimaDist = Number.isFinite(r.dados.distancia) ? r.dados.distancia : null;
       if (r.status === 200 && r.dados.liberado) { A.progAlvo = 1; return { liberado: true, metodo: 'rosto', distancia: S.ultimaDist }; }
-      if (r.status === 403) return { recusado: true, codigo: r.dados.erro || 'nao-confere', restantes: Number.isFinite(r.dados.tentativas_restantes) ? r.dados.tentativas_restantes : null, distancia: S.ultimaDist };
+      if (r.status === 403) return { recusado: true, codigo: r.dados.erro || 'nao-confere', restantes: Number.isFinite(r.dados.tentativas_restantes) ? r.dados.tentativas_restantes : null, distancia: S.ultimaDist, dia: r.dados.bloqueio === 'dia', ate: r.dados.bloqueado_ate ? quando(r.dados) : 0 };
+      if (r.status === 409 && r.dados.erro === 'ilegivel') return { erro: 'ilegivel' };
       if (r.status === 409 || r.status === 410) return { erro: 'desafio' };
-      if (r.status === 429) return { erro: 'bloqueado', ate: quando(r.dados) };
+      if (r.status === 429) return { erro: 'bloqueado', ate: quando(r.dados), dia: r.dados.bloqueio === 'dia' };
       if (r.status === 400) return { erro: 'quadros' };
       return { erro: 'servidor' };
     } catch (e) {
@@ -1391,6 +1476,8 @@ export function criarPortao(opts = {}) {
   }
   async function animarLiberado(r) {
     if (!S.confirmado) await animarConfirmado(r.metodo);
+    // depois do cartão do Windows Hello o estado tinha mudado: volta para o liberado (a leitura do HUD acompanha)
+    definirEstado('liberado'); tom('ok'); limparBotoes();
     // a lente encolhe até o núcleo e o sistema é liberado
     el.p.classList.add('rs-encolhendo');
     encolherLente();
@@ -1400,7 +1487,7 @@ export function criarPortao(opts = {}) {
   }
   async function animarRecusado(r) {
     definirEstado('recusado');
-    tom('vermelho');
+    tom('vermelho'); bolinhas(0, 0);
     A.pulsoT0 = agora(); A.glitch = reduzido() ? 0 : 2; A.progVis = false;
     sons.tocar('interrompido');
     status('NÃO RECONHECI');
@@ -1432,6 +1519,7 @@ export function criarPortao(opts = {}) {
     const op = await chamar('/api/rosto/hello/opcoes', { metodo: 'POST', corpo: { tipo } });
     checar();
     if (op.status === 404) return { erro: 'sem-hello-cadastro' };
+    if (op.status === 423 && op.dados.erro === 'reconfirme') return { erro: 'reconfirme' };
     if (op.status !== 200) return { erro: op.dados.erro || 'servidor' };
     const optionsJSON = op.dados.optionsJSON || op.dados.opcoes || op.dados;
     let resposta;
@@ -1449,15 +1537,17 @@ export function criarPortao(opts = {}) {
     checar();
     if (r.status === 200) return { ok: true, liberado: !!r.dados.liberado };
     if (r.status === 410) return { erro: 'hello-falhou' };
-    return { erro: r.dados.erro === 'sem-pasta' ? 'sem-pasta' : 'hello-falhou' };
+    if (r.status === 423 && r.dados.erro === 'reconfirme') return { erro: 'reconfirme' };
+    return { erro: ['sem-pasta', 'ilegivel'].includes(r.dados.erro) ? r.dados.erro : 'hello-falhou' };
   }
   // entrada pelo Hello: → 'liberado' | 'rosto' | 'nao'
-  async function sessaoHelloEntrada({ podeRosto }) {
+  async function sessaoHelloEntrada({ podeRosto, aviso = '' }) {
     for (;;) {
       desligarCamera(); limparParado();
       abrirLente(); tom('holo'); A.checkT0 = -1; A.pulsoT0 = -1; A.progVis = false; bolinhas(0, 0);
       definirEstado('hello');
-      status('WINDOWS HELLO'); dica('Confirme no Windows Hello');
+      status('WINDOWS HELLO'); dica(aviso ? `${aviso} Confirme no Windows Hello.` : 'Confirme no Windows Hello');
+      aviso = '';
       const r = await cerimoniaHello('entrada');
       if (r.ok) return 'liberado';
       let msg;
@@ -1477,35 +1567,48 @@ export function criarPortao(opts = {}) {
     const helloCad = !!(st.hello && st.hello.cadastrado);
     let restantes = Number.isFinite(st.tentativas_restantes) ? st.tentativas_restantes : 3;
     let bloqueadoAte = st.bloqueado_ate ? quando({ bloqueado_ate: st.bloqueado_ate }) : 0;
-    let auto = !(bloqueadoAte > Date.now()), desafioDeNovo = 0;
+    // o 2º bloqueio do dia vale até a meia-noite (o servidor diz bloqueio: 'dia')
+    let bloqueioDia = st.bloqueio === 'dia';
+    let auto = !(bloqueadoAte > Date.now()), desafioDeNovo = 0, direto = false;
     for (;;) {
       let r = null;
       if (auto) {
         r = await tentativaRosto();
         if (r.liberado) return { liberado: true, metodo: 'rosto' };
-        // a conferência venceu ou já foi usada: tenta de novo sozinho, uma vez
+        // a conferência venceu ou já foi usada: tenta de novo sozinho, uma vez por pedido do Júlio
         if (r.erro === 'desafio' && desafioDeNovo++ < 1) continue;
-        if (r.erro === 'bloqueado') { bloqueadoAte = r.ate; restantes = 0; }
+        // sem câmera ou câmera negada (§6.2): vai direto para o Windows Hello, uma vez; cancelado, ficam os botões
+        if ((r.erro === 'sem-camera' || r.erro === 'negado') && helloCad && !direto) {
+          direto = true;
+          const h = await sessaoHelloEntrada({ podeRosto: true, aviso: r.erro === 'negado' ? 'Você não liberou a câmera.' : 'Não encontrei câmera.' });
+          if (h === 'liberado') return { liberado: true, metodo: 'hello' };
+          if (h === 'nao') return { liberado: false };
+          continue;
+        }
+        if (r.erro === 'bloqueado') { bloqueadoAte = r.ate; restantes = 0; bloqueioDia = !!r.dia; }
         if (r.recusado && Number.isFinite(r.restantes)) restantes = r.restantes;
         else if (r.recusado) restantes = Math.max(0, restantes - 1);
+        if (r.recusado && r.ate) { bloqueadoAte = r.ate; bloqueioDia = !!r.dia; }
       }
       auto = true;
       const bloqueado = restantes <= 0 || bloqueadoAte > Date.now();
+      const espera = bloqueioDia ? 'Tente de novo amanhã.' : 'Tente de novo em 10 minutos.';
       // o que dizer
       let msg;
       if (r && r.recusado) {
         const dbg = await animarRecusado(r);
         const falhas = Math.min(3, 3 - restantes);
         msg = r.codigo === 'prova-de-vida' ? TXT['prova-de-vida'] : r.codigo === 'quadros' ? TXT.quadros : `Não reconheci. Tente de novo (${falhas} de 3).`;
-        if (restantes <= 0) msg = `Não reconheci (3 de 3). ${helloCad ? 'Use o Windows Hello.' : 'Tente de novo em 10 minutos.'}`;
+        if (restantes <= 0) msg = `Não reconheci (3 de 3). ${helloCad ? 'Use o Windows Hello.' : espera}`;
         msg += dbg;
         dizer('Não reconheci.');
       } else {
         definirEstado('erro'); tom('vermelho'); status(bloqueado ? 'MUITAS TENTATIVAS' : 'NÃO DEU');
         const cod = r ? r.erro : 'bloqueado';
         if (cod === 'bloqueado' || bloqueado) {
-          const hm = new Date(bloqueadoAte || Date.now() + 600000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-          msg = helloCad ? 'Muitas tentativas com o rosto. Use o Windows Hello.' : `Muitas tentativas com o rosto. Tente de novo às ${hm}.`;
+          const hm = new Date(bloqueadoAte || Date.now() + 600000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+          if (bloqueioDia) msg = `Muitas tentativas com o rosto hoje. ${helloCad ? 'Use o Windows Hello.' : 'Tente de novo amanhã.'}`;
+          else msg = helloCad ? 'Muitas tentativas com o rosto. Use o Windows Hello.' : `Muitas tentativas com o rosto. Tente de novo às ${hm}.`;
         } else if (cod === 'sem-camera' || cod === 'negado' || cod === 'em-uso') msg = `${TXT[cod]} ${helloCad ? 'Use o Windows Hello.' : 'O Windows Hello ainda não foi cadastrado.'}`;
         else msg = TXT[cod] || TXT.servidor;
       }
@@ -1525,7 +1628,8 @@ export function criarPortao(opts = {}) {
         auto = true;
         continue;
       }
-      // tentar de novo
+      // tentar de novo (pedido do Júlio: o desafio vencido volta a ter a sua tentativa automática)
+      desafioDeNovo = 0;
       if (r && r.erro === 'servidor') { const s2 = await consultar(); if (s2 && s2.liberado) return { liberado: true, metodo: s2.metodo || 'rosto' }; }
     }
   }
@@ -1535,11 +1639,49 @@ export function criarPortao(opts = {}) {
     void st;
     return h === 'liberado' ? { liberado: true, metodo: 'hello' } : { liberado: false };
   }
+  /* Trocar ou apagar o cadastro pede uma confirmação de até 5 min (o servidor confere e responde 423 "reconfirme"): um
+     "liberado" de horas atrás não vale — o Júlio liberou às 8 h e saiu da mesa com o Jarvis aberto, e um colega
+     cadastraria o próprio rosto. Se a do dia é velha, explica e confere o rosto (ou o Hello) de novo. → true se pode seguir */
+  async function garantirRecente(st) {
+    if (!st) return false;
+    if (st.recente) return true;
+    const temRosto = !!(st.cadastro && st.cadastro.rosto), temHello = !!(st.hello && st.hello.cadastrado);
+    if (!temRosto && !temHello) return true;   // sem cadastro nenhum: o primeiro é de confiança
+    desligarCamera(); limparParado(); abrirLente(); A.checkT0 = -1; A.pulsoT0 = -1; A.progVis = false; A.segsTotal = 0; tom('holo');
+    const id = await cartao({
+      estado: 'travado', rot: 'Trava do Jarvis', tit: 'Confirme que é você',
+      html: `<p>Para trocar ou apagar o cadastro, a confirmação tem que ser de agora há pouco (até 5 minutos).</p><p>${temRosto ? 'Vou conferir o seu rosto de novo.' : 'Confirme no Windows Hello.'}</p>`,
+      botoes: [{ id: 'sim', txt: temRosto ? 'Conferir meu rosto' : 'Usar o Windows Hello', principal: true }, { id: 'nao', txt: 'Cancelar' }]
+    });
+    if (id !== 'sim') return false;
+    const r = temRosto ? await sessaoConferir(st) : await sessaoHelloSo(st);
+    if (!r.liberado) return false;
+    await animarConfirmado(r.metodo);
+    // o que vem depois (o cadastro, o Hello, apagar) tem a sua própria animação de fim
+    S.confirmado = false; A.checkT0 = -1; A.flashT0 = -1; tom('holo');
+    return true;
+  }
+  // aberto sem ação do Júlio (a trava do vigia à meia-noite, "Travar agora"): só o cartão, a câmera liga no clique
+  async function cartaoTravado(temRosto) {
+    abrirLente(); definirEstado('travado'); tom('rever'); status('JARVIS TRAVADO');
+    dica(temRosto ? 'Para continuar, confira o seu rosto. A câmera só liga quando você pedir.' : 'Para continuar, confirme no Windows Hello.');
+    const id = await escolher([{ id: 'seguir', txt: temRosto ? 'Conferir meu rosto' : 'Usar o Windows Hello', principal: true }, { id: 'nao', txt: 'Agora não' }]);
+    dica('');
+    return id === 'seguir';
+  }
   // cadastro: a explicação, 8 amostras com o rosto um pouco virado, a conferência de prova e a oferta do Hello
   async function sessaoCadastro({ primeiro = true } = {}) {
     const temCam = await temCamera();
     checar();
     let intro = true;
+    // sem câmera no primeiro uso, o Windows Hello sozinho é o cadastro de confiança (§5.3)
+    async function soHello() {
+      abrirLente(); definirEstado('cadastro-hello'); status('WINDOWS HELLO'); dica('Confirme no Windows Hello');
+      const h = await cerimoniaHello('cadastro');
+      if (h.ok) return true;
+      await cartao({ estado: 'cadastro-hello', rot: 'Windows Hello', tit: h.cancelado ? 'Cancelado' : 'Não deu', html: `<p>${h.cancelado ? 'Você cancelou na janela do Windows.' : TXT[h.erro] || TXT['hello-falhou']}</p>`, botoes: [{ id: 'ok', txt: 'Voltar', principal: true }] });
+      return false;
+    }
     for (;;) {
       desligarCamera(); limparParado(); A.checkT0 = -1; A.pulsoT0 = -1; A.progVis = false; A.segsTotal = 0; tom('holo');
       if (intro) {
@@ -1551,10 +1693,7 @@ export function criarPortao(opts = {}) {
         });
         if (id === 'nao') return { liberado: false };
         if (id === 'hello') {
-          abrirLente(); definirEstado('cadastro-hello'); status('WINDOWS HELLO'); dica('Confirme no Windows Hello');
-          const h = await cerimoniaHello('cadastro');
-          if (h.ok) return { liberado: true, metodo: 'cadastro' };
-          await cartao({ estado: 'cadastro-hello', rot: 'Windows Hello', tit: h.cancelado ? 'Cancelado' : 'Não deu', html: `<p>${h.cancelado ? 'Você cancelou na janela do Windows.' : TXT[h.erro] || TXT['hello-falhou']}</p>`, botoes: [{ id: 'ok', txt: 'Voltar', principal: true }] });
+          if (await soHello()) return { liberado: true, metodo: 'cadastro' };
           continue;
         }
       }
@@ -1563,14 +1702,20 @@ export function criarPortao(opts = {}) {
       try { await prepararCamera(); } catch (e) {
         if (ehCancelado(e)) throw e;
         definirEstado('erro'); tom('vermelho'); status('NÃO DEU'); dica(TXT[e.codigo] || TXT['sem-modelo']);
-        const id = await escolher([{ id: 'tentar', txt: 'Tentar de novo', principal: true }, { id: 'nao', txt: 'Agora não' }]);
+        const semCam = primeiro && (e.codigo === 'negado' || e.codigo === 'sem-camera');
+        const id = await escolher([{ id: 'tentar', txt: 'Tentar de novo', principal: true }, semCam && { id: 'hello', txt: 'Cadastrar o Windows Hello' }, { id: 'nao', txt: 'Agora não' }]);
         if (id === 'nao') return { liberado: false };
+        if (id === 'hello') {
+          if (await soHello()) return { liberado: true, metodo: 'cadastro' };
+          continue;
+        }
         intro = false; continue;
       }
       let ds = null, motivo = 'sem-descritor';
       try {
-        await esperarQualidade(300, true);
-        ds = await coletarCadastro();
+        // sem rosto no prazo: a câmera desliga (logo abaixo) e ficam os botões
+        if (await esperarQualidade(300, true)) ds = await coletarCadastro();
+        else motivo = 'sem-rosto';
       } catch (e) {
         if (ehCancelado(e)) throw e;
         ds = null; motivo = e.codigo || motivo;
@@ -1584,20 +1729,32 @@ export function criarPortao(opts = {}) {
       }
       definirEstado('analisando'); A.progRot = 'GRAVANDO'; status('GRAVANDO 0%'); dica('Gravando neste computador…');
       A.progVis = true; A.prog = 0; A.progAlvo = 0.95;
-      const r = await chamar('/api/rosto/cadastro', { metodo: 'POST', corpo: { descritores: ds } });
-      zerar(ds);
+      let r = await chamar('/api/rosto/cadastro', { metodo: 'POST', corpo: { descritores: ds } });
       checar();
+      if (r.status === 423 && r.dados.erro === 'reconfirme') {
+        // a confirmação passou de 5 min (ficou lendo o cartão): confere de novo e manda as mesmas amostras
+        desligarCamera();
+        if (await garantirRecente(await consultar())) {
+          definirEstado('analisando'); A.progRot = 'GRAVANDO'; status('GRAVANDO 0%'); dica('Gravando neste computador…');
+          A.progVis = true; A.prog = 0; A.progAlvo = 0.95; A.checkT0 = -1; tom('holo');
+          r = await chamar('/api/rosto/cadastro', { metodo: 'POST', corpo: { descritores: ds } });
+          checar();
+        } else { zerar(ds); return { liberado: false }; }
+      }
+      zerar(ds);
       A.progVis = false; A.segsTotal = 0;
       if (r.status === 409) {
-        // já existe um cadastro (feito em outra aba): confere com ele
         desligarCamera();
         const st = await consultar();
+        // o cadastro existe mas não dá para ler: a trava fica fechada (o README explica como recomeçar)
+        if (r.dados.erro === 'ilegivel' || (st && st.erro === 'ilegivel')) { await telaErro('ilegivel'); return { liberado: false }; }
+        // já existe um cadastro (feito em outra aba): confere com ele
         return st ? sessaoConferir(st) : { liberado: false };
       }
       if (r.status !== 200) {
         desligarCamera();
         definirEstado('erro'); tom('vermelho'); status('NÃO DEU');
-        dica(r.status === 400 ? 'Fique de frente, com boa luz, e tente de novo.' : TXT[r.dados.erro] || TXT.servidor);
+        dica(r.status === 400 ? 'Fique de frente, com boa luz, e tente de novo.' : r.status === 423 ? TXT.reconfirme : TXT[r.dados.erro] || TXT.servidor);
         const id = await escolher([{ id: 'tentar', txt: 'Tentar de novo', principal: true }, { id: 'nao', txt: 'Agora não' }]);
         if (id === 'nao') return { liberado: false };
         intro = false; continue;
@@ -1652,6 +1809,8 @@ export function criarPortao(opts = {}) {
       const r = await cerimoniaHello('cadastro');
       if (r.ok) { dica('Windows Hello cadastrado.'); sons.tocar('pronto'); await dormirVisual(600); return true; }
       if (r.cancelado) continue;
+      // a confirmação do dia passou de 5 min: confere de novo (rosto ou Hello) e volta para a oferta
+      if (r.erro === 'reconfirme') { if (await garantirRecente(await consultar())) continue; return false; }
       const id2 = await cartao({ estado: 'cadastro-hello', rot: 'Reserva · Windows Hello', tit: 'Não deu', html: `<p>${TXT[r.erro] || TXT['hello-falhou']}</p>`, botoes: [{ id: 'tentar', txt: 'Tentar de novo', principal: true }, { id: 'pular', txt: 'Pular por agora' }] });
       if (id2 === 'pular') return false;
     }
@@ -1678,9 +1837,9 @@ export function criarPortao(opts = {}) {
   function aoSair() { fechar(); }
   async function iniciar() {
     await garantirCss();
+    checar();   // fechado enquanto o CSS chegava: nada monta, a câmera nunca liga
     montar();
     C = lerCores();
-    S.sessao = new AbortController();
     S.aberto = true; S.confirmado = false; S.estado = null;
     S.foco = document.activeElement;
     Object.assign(A, { k: 0, kDe: 0, kPara: 0, ka: 0, kaDe: 0, kaPara: 0, aroT0: -1, malhaT0: -1, checkT0: -1, flashT0: -1, pulsoT0: -1, encolherT0: -1, glitch: 0, prog: 0, progAlvo: 0, progVis: false, segs: 0, segsTotal: 0, mira: null, hex: [], chaveK: '', chaveKa: '' });
@@ -1719,9 +1878,17 @@ export function criarPortao(opts = {}) {
     try { if (S.foco && S.foco.isConnected && typeof S.foco.focus === 'function') S.foco.focus({ preventScroll: true }); } catch { /* nada */ }
     S.foco = null;
   }
-  // roda um fluxo com a tela montada; um por vez (o segundo pedido espera o primeiro terminar e devolve o padrão)
+  // roda um fluxo com a tela montada; um por vez (o segundo pedido espera o primeiro terminar e devolve o padrão). A
+  // sessão nasce aqui, antes de qualquer espera: o fechar() vale desde o primeiro instante
   function rodar(tipo, fluxo, padrao) {
-    if (S.promessa) return S.promessa.tipo === tipo ? S.promessa : S.promessa.then(() => padrao, () => padrao);
+    if (S.promessa) {
+      // o anterior foi cancelado e ainda está fechando (câmera, bibliotecas): espera ele sair e abre um novo — nunca
+      // devolve o portão morto ao Jarvis que abriu de novo
+      if (S.promessa.sessao.signal.aborted) return S.promessa.then(() => rodar(tipo, fluxo, padrao), () => rodar(tipo, fluxo, padrao));
+      return S.promessa.tipo === tipo ? S.promessa : S.promessa.then(() => padrao, () => padrao);
+    }
+    const sessao = new AbortController();
+    S.sessao = sessao;
     const p = (async () => {
       let r = padrao;
       try {
@@ -1736,28 +1903,34 @@ export function criarPortao(opts = {}) {
       }
       return r;
     })();
-    p.tipo = tipo;
+    p.tipo = tipo; p.sessao = sessao;
     S.promessa = p;
     return p;
   }
 
-  function abrir() {
+  // pedirClique: o portão abriu sem ação do Júlio (a trava do vigia à meia-noite, "Travar agora"): primeiro só o cartão
+  // "Jarvis travado", sem câmera e sem voz; a câmera liga no clique
+  function abrir({ pedirClique = false } = {}) {
     return rodar('abrir', async () => {
       const st = await consultar();
       checar();
       if (!st) return telaErro('servidor');
       if (st.liberado) return { liberado: true, metodo: st.metodo || 'rosto' };
       const temRosto = !!(st.cadastro && st.cadastro.rosto), temHello = !!(st.hello && st.hello.cadastrado);
+      // o cadastro existe mas não dá para ler: a trava fica fechada (nada de "primeiro cadastro" por cima dele)
+      if (st.erro === 'ilegivel' && !temRosto && !temHello) return telaErro('ilegivel');
+      if (pedirClique && (temRosto || temHello) && !(await cartaoTravado(temRosto))) return { liberado: false };
+      const falarAntes = (frase) => { if (!pedirClique) dizer(abertura(frase)); };
       let r;
       if (!temRosto && !temHello) {
-        dizer(`${saudacao()}, ${nome}. Antes de começar, vamos cadastrar o seu rosto.`);
+        falarAntes('Antes de começar, vamos cadastrar o seu rosto.');
         r = await sessaoCadastro({ primeiro: true });
       } else if (temRosto) {
-        dizer(`${saudacao()}, ${nome}. Antes de liberar, vou conferir seu rosto.`);
+        falarAntes('Antes de liberar, vou conferir seu rosto.');
         abrirLente();
         r = await sessaoConferir(st);
       } else {
-        dizer(`${saudacao()}, ${nome}. Antes de liberar, confirme no Windows Hello.`);
+        falarAntes('Antes de liberar, confirme no Windows Hello.');
         r = await sessaoHelloSo(st);
       }
       if (r && r.liberado) await animarLiberado(r);
@@ -1775,6 +1948,8 @@ export function criarPortao(opts = {}) {
         await escolher([{ id: 'ok', txt: 'Fechar', principal: true }]);
         return false;
       }
+      // trocar o cadastro: a confirmação tem que ser de até 5 min (senão o rosto, ou o Hello, de novo)
+      if (!(await garantirRecente(st))) return false;
       const r = await sessaoCadastro({ primeiro: false });
       if (r.liberado) { await animarLiberado(r); return true; }
       return false;
@@ -1786,26 +1961,37 @@ export function criarPortao(opts = {}) {
       const st = await consultar();
       checar();
       if (!st || !st.liberado) { await telaErro(st ? 'trava' : 'servidor'); return false; }
+      if (!(await garantirRecente(st))) return false;
       return ofertaHello();
     }, false);
   }
   // pelos ajustes: "Apagar meu cadastro" (pergunta antes)
   function apagarCadastro() {
     return rodar('apagar', async () => {
+      // travado, nem pergunta: o servidor só apaga com o dia liberado
+      const st = await consultar();
+      checar();
+      if (!st || !st.liberado) {
+        await cartao({ estado: 'apagar', rot: 'Trava do Jarvis', tit: 'Apagar meu cadastro', html: `<p>${st ? 'Faça o reconhecimento do dia antes de apagar.' : TXT.servidor}</p>`, botoes: [{ id: 'ok', txt: 'Fechar', principal: true }] });
+        return false;
+      }
+      // apagar também troca a credencial (o próximo cadastro seria "o primeiro", de confiança): confirmação de até 5 min
+      if (!(await garantirRecente(st))) return false;
       const id = await cartao({ estado: 'apagar', rot: 'Trava do Jarvis', tit: 'Apagar meu cadastro', tom: 'perigo', html: '<p>Apagar o cadastro do rosto e do Windows Hello deste computador? O Jarvis vai pedir um cadastro novo.</p>', botoes: [{ id: 'apagar', txt: 'Apagar', principal: true }, { id: 'nao', txt: 'Cancelar' }] });
       if (id !== 'apagar') return false;
       const r = await chamar('/api/rosto/apagar', { metodo: 'POST', corpo: { confirmar: true } });
       checar();
       const ok = r.status === 200;
-      await cartao({ estado: 'apagar', rot: 'Trava do Jarvis', tit: ok ? 'Cadastro apagado' : 'Não apaguei', html: `<p>${ok ? 'O cadastro do rosto e do Windows Hello saiu deste computador. Na próxima vez o Jarvis pede um cadastro novo.' : r.status === 423 ? 'Faça o reconhecimento do dia antes de apagar.' : TXT.servidor}</p>`, botoes: [{ id: 'ok', txt: 'Fechar', principal: true }] });
+      const porque = r.dados.erro === 'reconfirme' ? `${TXT.reconfirme} Peça para apagar de novo.` : r.status === 423 ? 'Faça o reconhecimento do dia antes de apagar.' : TXT.servidor;
+      await cartao({ estado: 'apagar', rot: 'Trava do Jarvis', tit: ok ? 'Cadastro apagado' : 'Não apaguei', html: `<p>${ok ? 'O cadastro do rosto e do Windows Hello saiu deste computador. Na próxima vez o Jarvis pede um cadastro novo.' : porque}</p>`, botoes: [{ id: 'ok', txt: 'Fechar', principal: true }] });
       return ok;
     }, false);
   }
   async function travar() { const r = await chamar('/api/rosto/travar', { metodo: 'POST', corpo: {} }); return r.status === 200; }
   function fechar() {
-    if (!S.aberto) return;
+    // vale também antes de a tela montar (o CSS ainda chegando): a sessão já existe desde o rodar()
     if (S.sessao && !S.sessao.signal.aborted) S.sessao.abort();
-    desligarCamera();
+    if (S.aberto || S.cam.stream) desligarCamera();
   }
   let destruido = false;
   function destruir() {
@@ -1818,11 +2004,13 @@ export function criarPortao(opts = {}) {
   /* =============================================================================
      Simulador (?rosto=simular): a câmera é um canvas desenhado; os pontos e os descritores são de mentira
      ============================================================================= */
-  const sim = simulado ? {
+  const SIM = simPedido ? {
     rosto: true, n: 1, largura: 0.42, x: 0, y: 0, yaw: 0, pitch: 0, roll: 0, piscar: 0, olhoBase: 0.12, luz: 1,
     pessoa: 1, camera: 'ok', auto: true, fonte: 'desenho', foto: null, hello: { disponivel: false, resultado: 'ok' },
     agenda: [], janelaVista: null, t0Cam: 0
   } : null;
+  // ligado só depois que o servidor confirmou o modo de teste (aplicarTeste); até lá, câmera e bibliotecas de verdade
+  let sim = null;
   function piscarSim(t) {
     let v = 0;
     for (let i = sim.agenda.length - 1; i >= 0; i--) {
@@ -1872,7 +2060,8 @@ export function criarPortao(opts = {}) {
   function desenharFotoSim(q, t) {
     const f = sim.foto, W0 = 640, H0 = 480;
     const s = Math.max(W0 / f.width, H0 / f.height) * (1.02 + 0.01 * Math.sin(t / 900)), w = f.width * s, h = f.height * s;
-    q.drawImage(f, (W0 - w) / 2 + 3 * Math.sin(t / 1300), (H0 - h) / 2, w, h);
+    // foto em pé (retrato): o rosto fica no terço de cima, então a sobra corta mais embaixo
+    q.drawImage(f, (W0 - w) / 2 + 3 * Math.sin(t / 1300), (H0 - h) * (h > w ? 0.12 : 0.5), w, h);
   }
   function desenharCenaSim(q, t) {
     const W0 = 640, H0 = 480;
@@ -1956,7 +2145,7 @@ export function criarPortao(opts = {}) {
               return { faceLandmarks: faces, faceBlendshapes: bs, facialTransformationMatrixes: mt };
             },
             async descritor() {
-              await esperar(140 + Math.random() * 80);
+              await esperar((sim.atraso || 160) + Math.random() * 60);
               if (sim.semDescritor) return null;
               return descritorSimulado(sim.pessoa, S.estado === 'cadastro-coleta' ? 0.2 : 0.14);
             },
@@ -1985,8 +2174,15 @@ export function criarPortao(opts = {}) {
     aberto: () => S.aberto,
     get estado() { return S.estado; }
   };
-  // teste local (localhost com ?debug): window.__rosto (no app normal nunca liga)
-  if (debug) {
+  // teste local (localhost com ?debug e o servidor em modo de teste): window.__rosto. No app de verdade nunca liga — o
+  // __rosto.foto(url) passaria uma foto qualquer pelo face-api no fluxo oficial
+  function ligarGanchos() {
+    // imagem de amostra pelo onload (o decode() não termina com a janela escondida, como no painel de teste)
+    const carregarImagem = (url) => new Promise((ok, falha) => {
+      const i = new Image(); i.crossOrigin = 'anonymous';
+      i.onload = () => ok(i); i.onerror = () => falha(erro('sem-imagem'));
+      i.src = url;
+    });
     const ganchos = {
       portao: api,
       // simulado: troca o que a "câmera" mostra ({rosto, n, largura, x, y, yaw, pitch, roll, piscar, olhoBase, luz, pessoa})
@@ -1998,9 +2194,10 @@ export function criarPortao(opts = {}) {
       piscar() { if (sim) sim.agenda.push(agora()); },
       falharLibs(v = true) { if (sim) sim.falharLibs = !!v; },
       semDescritor(v = true) { if (sim) sim.semDescritor = !!v; },
+      atraso(ms = 160) { if (sim) sim.atraso = ms; },
       async foto(url) {
         if (!sim) return false;
-        const i = new Image(); i.crossOrigin = 'anonymous'; i.src = url; await i.decode();
+        const i = await carregarImagem(url);
         sim.foto = i; sim.fonte = 'foto'; return { largura: i.naturalWidth, altura: i.naturalHeight };
       },
       fonte(f) { if (sim) sim.fonte = f; },
@@ -2029,7 +2226,7 @@ export function criarPortao(opts = {}) {
       // roda a análise de verdade numa imagem de amostra da biblioteca (não é rosto de ninguém daqui): só números
       async analisarImagem(url) {
         const l = await carregarReal(() => {}, new AbortController().signal);
-        const i = new Image(); i.crossOrigin = 'anonymous'; i.src = url; await i.decode();
+        const i = await carregarImagem(url);
         const c = document.createElement('canvas'); c.width = 640; c.height = Math.round(640 * i.naturalHeight / i.naturalWidth);
         c.getContext('2d').drawImage(i, 0, 0, c.width, c.height);
         const t = agora(), res = l.detectar(c, agora()), ms = agora() - t;
