@@ -215,16 +215,23 @@ def main():
         sys.exit(2)
     print(f"Segredos: nada achado em {n} arquivos (formatos de chave e senha, e {n_reais} valores reais do ENV).")
 
-    git("add", "-A")
-    if git("diff", "--cached", "--quiet", ok=(0, 1)).returncode == 0:
-        print("Nada novo para registrar.")
+    # só a cópia do vault entra neste commit: código em andamento no repositório (de outra conversa ou de um agente)
+    # não pode ir junto com o nome "atualização" (aconteceu em 2026-10-19). O commit com caminho registra só vault/,
+    # mesmo que haja outra coisa preparada no índice.
+    git("add", "-A", "--", "vault")
+    if git("diff", "--cached", "--quiet", "--", "vault", ok=(0, 1)).returncode == 0:
+        print("Nada novo no vault para registrar.")
     else:
-        mudou = git("diff", "--cached", "--name-only").stdout.split("\n")
+        mudou = git("diff", "--cached", "--name-only", "--", "vault").stdout.split("\n")
         msg = f"Cérebro: atualização de {datetime.now():%Y-%m-%d %H:%M} ({len([m for m in mudou if m])} arquivos)"
         if autor_claude:
             msg += "\n\n" + TRAILER_CLAUDE
-        git("commit", "-q", "-m", msg)
+        git("commit", "-q", "-m", msg, "--", "vault")
         print("Commit:", git("log", "-1", "--format=%h %s").stdout.strip())
+    fora_do_vault = [l for l in git("status", "--porcelain").stdout.splitlines() if l and not l[3:].strip('"').startswith("vault/")]
+    if fora_do_vault:
+        print(f"Aviso: {len(fora_do_vault)} mudança(s) fora do vault ficaram sem commit (código em andamento); "
+              "o push leva só o que já tem commit.")
 
     if sem_push:
         print("Sem push (--sem-push).")
