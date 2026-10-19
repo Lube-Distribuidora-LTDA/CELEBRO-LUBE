@@ -64,6 +64,7 @@ Configurações que o Claude usa para abrir um sistema no navegador do app. Sem 
 | `painel-lube` | `python -m http.server` na pasta do [[PAINEL LUBE DISTRIBUIDORA]] (para ver `/sentinela/?demo=1`) | 4321 | 2026-10-06 |
 | `sac` | `node ...\10. SAC\web\servidor_local.js` ([[SAC]]) | 3110 | 2026-10-07 (até 2026-10-09 chamava `saq`, com a pasta `10. SAQ`) |
 | `trade` | `node ...\11. TRADE\web\servidor_local.js` ([[GESTÃO COMERCIAL TRADE]]) | 8700 | 2026-10-14 |
+| `inventario` | `node ...\16. INVENTARIO\web\servidor_local.js` ([[MOVIMENTAÇÃO DE INVENTÁRIO]]; só escuta a própria máquina) | 3102 | 2026-10-19 |
 
 - `reposicoes-teste` (`node servidor_local.js`, porta 3101) entrou e saiu a cada rodada de teste do
   [[REPOSIÇÕES E CHAMADOS]] em 2026-10-06 e 2026-10-07. Não fica no arquivo.

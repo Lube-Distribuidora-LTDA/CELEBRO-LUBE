@@ -41,6 +41,12 @@ Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise 
 | `PCSUPERV` | Supervisores | `CODSUPERVISOR`, `NOME`, `EMAIL` (**vazio em todos os 21 ativos**, 2026-10-09), `COD_CADRCA` (o código de RCA do próprio supervisor), `DTDEMISSAO`, `POSICAO` (A/I), `CODGERENTE` — rotina **516** |
 | `PCMANASSUNTO` | Assuntos (= **motivos**) de chamado | `CODASSUNTO`, `ASSUNTO` (corta em 30 caracteres), `CODSETOR`, `PRAZO1..4`, `CODFUNC1..4` (responsáveis), `ATIVO`, `INTERNO`, `OBRIGAQTDE`. Os assuntos **"SAC - ..." (65 a 73, setor 12)** são os do RCA — usados no [[SAC]] |
 | `PCROTINA` | Catálogo de rotinas | `CODIGO`, `NOMEROTINA`, `ROTINA` — onde se descobre o que é a rotina 8352 |
+| `PCLOGDESBLOQUEIO` | Livro do estoque **bloqueado** (rotina **266** e companhia): uma linha por bloqueio, desbloqueio, avaria, devolução que entra bloqueada, liberação do WMS — usado pelo [[MOVIMENTAÇÃO DE INVENTÁRIO]]. **Cada programa grava os campos de um jeito** (tabela de leitura na nota do sistema) | `DTDESBLOQUEIO` (com hora), `CODFILIAL` (texto), `CODPROD`, `CODFUNCDESBLOQUEIO`, `CODDEVOL` (motivo, da `PCTABDEV`), `PROGRAMA`, `QTBLOQUEADA`, `QTDESBLOQUEADA`, `QTINDENIZ`, `QTBLOQUEADAANT`, `QTINDENIZANT`, `NUMTRANSENT`. Índice por data. Sem chave primária |
+| `PCINVENTROT` | Inventário rotativo (rotina **1147**): um produto contado por linha | `NUMINVENT`, `DATA`, `CODFILIAL`, `CODPROD`, `CODLOCAL`, `QT1`/`QT2`/`QT3` (contagens; só a 1ª é usada hoje), `QTESTGER` (estoque na montagem), `CUSTO`, `DATACONT1`, `CODFUNCCONT1`, `DTATUALIZACAO`, `CODFUNCATUALIZACAO`, `DTCANCEL` |
+| `PCLOGATUALIZAINVENT` | O que a atualização da 1147 lançou no estoque, **só para os produtos com diferença** | `NUMINVENT`, `CODPROD`, `CODFILIAL`, `QTINVENT`, `QTESTGER`, `QTDIF` (sempre positivo), `VLDIF`, `VLCUSTO`, `CUSTOUTILIZADO` (`F` = custo financeiro), `TIPOAJUSTE` (`EI` sobra / `SI` falta). Bate com o PCMOV EI/SI de `ROTINACAD` 1147 |
+| `PCEMPR` | Funcionários (quem bloqueia, conta, atualiza) | `MATRICULA`, `NOME`, `NOME_GUERRA`, `FUNCAO`, `SITUACAO`. Matrícula **1 = PCADMIN** (é quem aparece nas liberações do WMS) |
+| `PCFILIAL` | Filiais | `CODIGO` (texto), `RAZAOSOCIAL`, `FANTASIA`, `CIDADE`, `UF`. Distribuição: 1 (Cariacica), 7 (Somar), 10 e 12 (Itaperuna), 11 (Teixeira de Freitas); 3, 4 e 6 são SERMAR, L LOG e Império |
+| `PCLOGESTOQUE` | Log de toda alteração do PCEST (antes/depois de estoque, bloqueado, avaria, custos), com `PROGRAMA` e `USUARIO` | ~218 milhões de linhas em 2026-10-19: só consultar por produto e data |
 
 ## Conceitos do negócio
 - **Estoque disponível** = `QTESTGER - QTRESERV - QTBLOQUEADA`.
@@ -53,7 +59,15 @@ Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise 
 - **Margem líquida do RCA** = (total líquido − CMV líquido) / total líquido. A faixa de comissão sai dela.
 - **Reposição** = pedido de venda lançado no vendedor **`CODUSUR = 999` ("REPOSICAO")**, faturado (`POSICAO = 'F'`), que repõe ao cliente o que deu errado numa entrega. A NF original vai escrita à mão em `PCPEDC.OBS`/`OBS1` ("PEND. REF. A NF 1504784"). `PCPEDC.VLTOTAL` é o total do **pedido** — somar esse campo por item conta o pedido várias vezes. Ver [[REPOSIÇÕES E CHAMADOS]].
 - **ICMS de entrada / ICMS de saída**: é assim que a Lube fala, **nunca "débito/crédito"** (Júlio, 2026-09-08). As rotinas **8086** (entradas) e **8087** (saídas), dentro da rotina **800** (Relatórios), são a origem do [[PAINEL ICMS]]. Identidade V1: `VLDESDOBRADO = VLBASE + VLISENTAS + VLOUTRAS`.
+- **Estoque bloqueado** = `PCEST.QTBLOQUEADA`; a **avaria** (`QTINDENIZ`) é parte dele. Entra bloqueado: bloqueio manual
+  na **266**, devolução de cliente (1303/1346/1361) e o **recebimento de compra (1301) — este sem registro no livro**; sai pelo
+  desbloqueio da 266 (inclusive o "Conferido pelo recebimento" das filiais sem WMS) e pela liberação do **WMS da Kaizen** depois
+  da armazenagem. A **1316** (cancelar devolução) estorna a entrada sem mexer no bloqueado. Ver [[MOVIMENTAÇÃO DE INVENTÁRIO]].
+- **Rotinas de inventário:** **1147** manutenção do inventário rotativo (lança EI/SI no estoque gerencial); **1188** atualização
+  contábil de inventários (EI/SI no contábil); **1148** inventário de número de série; **266** bloquear produtos no estoque;
+  **1182** gestão de avarias.
 - **Chamado** = manifestação do SAC em `PCMANIF`; o **motivo** é o `ASSUNTO`. Rotinas personalizadas do módulo 8000 (`PCSIS800`): **8351** Histórico de Reposição, **8352** Pedido de Reposição, **8353** Relatório Geral de Chamados.
 
 ## Registro de mudanças
+- **2026-10-19** — Entraram `PCLOGDESBLOQUEIO`, `PCINVENTROT`, `PCLOGATUALIZAINVENT`, `PCEMPR`, `PCFILIAL`, `PCLOGESTOQUE`, o conceito de estoque bloqueado e as rotinas de inventário (do [[MOVIMENTAÇÃO DE INVENTÁRIO]]).
 - **2026-10-09** — Entraram `PCNFBASEENT`, `PCNFBASESAID`, `PCCFO` e o termo "ICMS de entrada/saída" (do [[PAINEL ICMS]]), `PCPRODFILIAL` (da [[Abertura de margem]]) e os campos de e-mail e situação do `PCUSUARI` (do [[SAC]]). Compilado do Git e das sessões.

@@ -43,6 +43,15 @@ câmera, faz um reconhecimento do meu rosto e animação, e aí ele libera o sis
 - 2026-10-19 (Claude): nada sobe para o GitHub enquanto o `CELEBRO-LUBE` for público: os commits do vault estão na
   frente e iriam junto ([[2026-10-16 — Backup do cérebro no GitHub]]).
 
+## No caminho
+- A sessão do Claude fechou com o fluxo de agentes no meio: a pesquisa (`docs/OUVIDO-E-ROSTO.md`) e o servidor do
+  rosto (`servidor/rosto.js`, 132 de 132 verificações) ficaram prontos; o resto foi **retomado** do ponto em que parou,
+  com o aviso aos agentes de que havia trabalho pela metade nos arquivos.
+- **Tropeço do backup:** entre 10:25 e 10:32 o backup do cérebro, rodado por outras conversas, usou `git add -A` e
+  levou junto o código pela metade do ouvido e do rosto, com o nome "Cérebro: atualização" (3 commits, só no
+  computador: nada subiu, o repositório segue público). Corrigido no commit `2265523`: o backup agora registra **só a
+  pasta `vault/`** e avisa o que ficou fora.
+
 ## Pendências
-- [ ] Construção do ouvido no Chrome e do desbloqueio pelo rosto (fluxo de agentes em andamento) — Claude
+- [ ] Construção do ouvido no Chrome e do desbloqueio pelo rosto (fluxo de agentes retomado) — Claude
 - [ ] Mudar o `CELEBRO-LUBE` para privado — Júlio

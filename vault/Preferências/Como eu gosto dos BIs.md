@@ -147,6 +147,22 @@ Pedido do Júlio: o sistema vai ser **apresentado ao gestor comercial** — "pre
 - **A carga confere antes de publicar e, se uma fonte secundária sair do ar, avisa e segue** com a cópia do banco (AVISO), em vez de
   parar ou de apagar o painel.
 
+## Acrescentado em 2026-10-19 ([[MOVIMENTAÇÃO DE INVENTÁRIO]])
+Pedido do Júlio: "alta profundidade de personalização de dados dentro do navegador", nas mesmas formas dos últimos BIs. O que
+ficou de padrão (escolhas do Claude, a confirmar com o uso):
+- **Análise livre:** uma tela onde a pessoa monta a própria tabela — base × linhas × colunas × medida —, com cor de calor (escala
+  em raiz, para um valor gigante não apagar o resto), totais, Excel e clique em qualquer célula abrindo o relatório.
+- **Livro do WinThor se lê programa a programa.** Quando vários programas gravam na mesma tabela de log, cada um preenche os campos
+  de um jeito (na 266, o mesmo campo é "quanto bloqueou" num e "saldo depois" no outro). Antes de somar, conferir cada leitura
+  contra o saldo do PCEST; a leitura fica numa view, e programa desconhecido vira "Outro" com aviso no diagnóstico.
+- **O que o livro não registra não vira KPI de saldo.** O recebimento entra bloqueado sem registro; somar "entrou − saiu" mentiria.
+  No lugar, a foto de hoje (PCEST).
+- **Lançamento impossível fica fora da soma, com aviso e botão "incluir"** (ex.: 17 milhões de paletes num registro só). Nada some
+  em silêncio, e um erro de digitação não decide o número da tela.
+- **Valor vai cheio no pacote; arredondar só na tela.** Arredondar linha a linha tirou centavos da soma do inventário.
+- **Base de percentual é o todo, não o recorte do numerador** (o "% do estoque bloqueado" saiu com 27% em vez de 14% até a base
+  passar a ser o estoque inteiro). Erro do Claude, achado na conferência da tela contra o banco — que fica sendo passo obrigatório.
+
 ## Exportação (2026-09-29)
 **Planilha que sai do painel é `.xlsx` formatado, não CSV.** O CSV chega do outro lado como texto:
 número em coluna de texto, sem filtro, sem identidade, e quem recebe refaz o trabalho. O padrão,
