@@ -36,6 +36,9 @@ Os dois commits ficaram **`BLOCKED` na Vercel** — nem chegaram a construir, po
 
 **Não deu para conferir a página publicada**: com o guarda da [[SENTINELA LUBE]] ligado, sem sessão do Painel Lube a página responde 308 para o portal e os `.js` respondem 401. O matcher do middleware só deixa passar css, imagens e fontes. Quem confere é o Júlio, logado.
 
+## Painel do filtro cortado pelo card
+Depois de publicado, o Júlio mandou print: o painel abria **dentro** do card de filtros e só mostrava a primeira opção — "tem que aparecer para fora tudo". Era o overflow do card cortando um painel `absolute`. Corrigido em `941cff4`: o painel vai para o `<body>` com `position: fixed`, ancorado no botão, abre para cima quando não cabe embaixo e acompanha a rolagem. No teste apareceu um segundo defeito, que a versão anterior também tinha: **clicar numa opção fechava o painel**, porque a lista é redesenhada e o botão clicado sai da página antes do teste de "clique fora". Conferido com clique de mouse no modo claro e escuro, na InterJornadas (busca + 2 pessoas = 257 linhas) e no celular (375 px, abrindo para cima). Este deploy já saiu pelo Git.
+
 ## O que ficou de fora
 **O Turnover não foi convertido.** Lá o ano e o setor não filtram uma lista — eles **montam a série do gráfico** (12 meses do ano escolhido, uma linha por setor). Múltipla escolha ali exige refazer o gráfico, não só o filtro. Decisão do Júlio se vale a pena.
 

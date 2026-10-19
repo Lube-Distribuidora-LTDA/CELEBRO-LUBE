@@ -12,7 +12,7 @@ Painel de gestão de pessoas da Lube (no menu e na aba do navegador: **GESTÃO R
 - Pasta local: `Desktop\BI\4. RH\ABSENTEÍSMO RH - DASHBOARD\assets` (é a raiz do repositório)
 - Banco: [[Supabase]] projeto **GESTÃO RH** (`jhznrwmwszpfogvbjnjx`, us-west-2). Nasceu em 2026-08-24 com o nome "RH Absenteísmo", que o README ainda usa.
 - Painel: [[Vercel]], projeto `rh-absentismo` (`prj_DVpjRACXDvWA5e3x87ettwPn1sJL`) → `rh-absentismo.vercel.app`. **Fechado pela [[SENTINELA LUBE]] desde 2026-10-06**: só entra quem tem acesso pelo [[PAINEL LUBE DISTRIBUIDORA]] (slug `rh-absenteismo`); sem login a página vai para o portal, e `/api/*` e as planilhas respondem 401.
-- Versão no ar: o rodapé do menu lateral mostra `versão AAAA-MM-DD (commit)` desde 2026-10-01. Em 2026-10-16 a produção é o commit `82c3ddc` (deploy `dpl_At11aErqUGkzPRsMakpPpjPLwa4H`, feito pela API).
+- Versão no ar: o rodapé do menu lateral mostra `versão AAAA-MM-DD (commit)` desde 2026-10-01. Em 2026-10-16 a produção é o commit `941cff4` (deploy `dpl_ouTEnVWhoeoKsda1tWPGcMekSTcN`, já pelo Git, com o repositório público).
 - Cadastrado no [[PAINEL LUBE DISTRIBUIDORA]] como "Controle RH (absenteísmo)"
 
 ## Arquitetura — onde difere do padrão
@@ -137,7 +137,9 @@ A ideia é puxar faltas, empregados e movimentações direto da API do PontoMais
 Todos os filtros do painel são de **múltipla escolha**, no contrato de [[Como eu gosto dos BIs]]: a partir de "Todas", o clique seleciona **só** aquela opção; depois cada clique soma ou tira; esvaziar volta para "Todas". **Conjunto vazio = tudo**, então nenhum filtro começa escondendo dado.
 
 - Lista acima de 10 opções ganha campo de busca (são 78 colaboradores na InterJornadas).
-- Só um painel aberto por vez; clique fora fecha.
+- Só um painel aberto por vez; clique fora ou Esc fecha.
+- **O painel abre solto na página, nunca dentro do card** (pedido do Júlio em 2026-10-16: "tem que aparecer para fora tudo"). Na primeira versão ele era `absolute` dentro do card de filtros e o overflow do card cortava a lista — aparecia só a primeira opção. Agora vai para o `<body>` com `position: fixed`, ancorado no botão; abre para cima quando não cabe embaixo, encolhe a lista para caber na tela, acompanha a rolagem e, ao fechar, volta para o lugar de origem (commit `941cff4`).
+- O teste de "clique fora" usa `ev.composedPath()`, não `ev.target.closest()`: clicar numa opção redesenha a lista, o botão clicado sai da página e o `closest()` fechava o painel a cada clique.
 - Bolinha ciano no rótulo quando o filtro está ativo. O botão mostra o rótulo quando é uma opção só e "N selecionados" quando é mais de uma.
 - `descreverFiltroMulti()` escreve os filtros ativos no **cabeçalho do Excel**, então o relatório diz de onde veio.
 - Nas abas que já tinham `<select>`, `ativarMultiNoSelect()` **mantém o select escondido e espelha as opções dele** — o filtro nasce pronto sem mexer no resto da aba. Cuidado aprendido: ativar **depois** de preencher os selects; ativar antes deixa a lista vazia e o filtro passa a aceitar tudo.
@@ -215,6 +217,7 @@ O schema inicial (tabelas, views, RLS e Realtime) foi aplicado em 2026-08-24, fo
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-16** — Painel dos filtros abre por cima da página, sem ser cortado pelo card; clicar numa opção não fecha mais o painel (commit `941cff4`) · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]
 - **2026-10-16** — Repositório renomeado para `GESTAO-RH` e de volta a **público**, para destravar o deploy que vinha saindo `BLOCKED` · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]
 - **2026-10-16** — Filtros de múltipla escolha em todas as abas menos Turnover, e Excel com os dados filtrados e os filtros no cabeçalho (commits `a0601b6`, `82c3ddc`) · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]
 - **2026-10-07** — Guarda da Sentinela 1.1.0, que reconhece robôs e não-navegadores; publicado pela API (commit `d50de78`) · [[2026-10-05 — Sentinela Lube, sistema de segurança]]
