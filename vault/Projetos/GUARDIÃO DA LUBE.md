@@ -50,8 +50,8 @@ se subiram as informações corretamente… garanta a saúde do sistema… quem 
 | Vigia da VM (`guardiao_vm.py` 1.0.1) | VM `SRV-IA`, tarefa `Guardiao - Vigia` | batimento, tarefas do Agendador, servidor de margem, disco, relógio, aquecedor, conferência com o WinThor e a nova tentativa |
 | Painel | artifact do [[Cérebro da Lube]] (versão 7) e arquivo baixado | chip de saúde, painel Saúde, bolinha das rotinas, selo por etapa no funil, robô reagindo, `ver_saude` no "Pergunte ao cérebro" |
 
-## O que vigia (39 itens em 2026-10-14)
-**Rotinas (12):** as 11 de `Rotinas/` e a ponte do [[PAINEL ICMS]].
+## O que vigia (39 itens em 2026-10-14; **42 desde 2026-10-19**, com o Trade)
+**Rotinas (13):** as 12 de `Rotinas/` (com o [[Trade - Sync]], desde 2026-10-19) e a ponte do [[PAINEL ICMS]].
 
 | Rotina | Horários | Tolerância / duração máx. | Janela da nova tentativa |
 |---|---|---|---|
@@ -60,6 +60,7 @@ se subiram as informações corretamente… garanta a saúde do sistema… quem 
 | [[BI Comercial - Sync rapidas]] | 06:45, 07:45, 08:45, 09:45, 12:45, 14:45, 15:45, 16:45 | 20 / 25 min | o dia todo |
 | [[BI Comercial - Sync margem]] | 03:45 | 30 / 40 min | 00:00–06:00 (pesada; o Comercial rápidas, que grava as mesmas `core.dim_*`, começa 06:45) |
 | [[Reposições - Sync]] | 07:35, 09:35, 11:35, 13:35, 15:35, 17:35, 22:35 | 10 / 15 min | o dia todo, mas **adiada** enquanto a máquina estiver "a confirmar" |
+| [[Trade - Sync]] (desde 2026-10-19) | 06:25, 09:25, 12:25, 15:25, 18:25 | 10 / 15 min | o dia todo |
 
 Horários e tarefas saíram das notas de `Rotinas/` e do `instalar_e_agendar.ps1` de cada sistema; as consultas de cada
 grupo, do `controle_carga` real de 07/10 a 14/10; as tolerâncias, do fim mais demorado medido, com folga de ~2×. Nada
@@ -107,6 +108,8 @@ as linhas que a carga disse ter gravado (cargas completas; dimensão com upsert 
 acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracle: passaria de 60 s.
 
 ## Regras contra alarme falso
+- **Etapa que termina em `AVISO`** (migração `saude_v1_trade`, 2026-10-19): é um plano B (o Trade usa quando a pasta de fotos ou a planilha estão fora do ar e segue com a cópia do banco). O dado vale, mas a rotina vira **atenção** com o motivo escrito, em vez de ser lida como ERRO (falha) ou de passar calada. Só conta o AVISO que veio depois do último `OK` da janela. Compras, Comercial e Reposições nunca gravaram AVISO: nada mudou para eles (reavaliação de 10 dias idêntica antes e depois).
+- Etapa que conta fotos novas por carga (`miniaturas` do Trade) é **volátil**: 0 é o normal.
 - Carga só é julgada depois da tolerância do horário; "parou no meio" só com a tranca solta (prova) ou depois do dobro
   do limite de duração.
 - Queda: menos de 40% da mediana das 10 últimas cargas OK (`variacao_queda` 0,6); subida só acima de 3×. O "ATENCAO: o
@@ -235,9 +238,9 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
   de 20 min, mas não avisa. Sugestão (Claude): o vigia da VM conferir o `verificado_em` e avisar direto, pelo mesmo
   caminho do "Supabase fora".
 - **Ainda sem vigia:** as importações do [[BI ABSENTEÍSMO RH]] (PontoMais) e da [[GESTÃO DE SAÍDA DE VEÍCULOS]]
-  (Getrak), que ficam em Supabase próprios; a ponte do [[PAINEL ICMS]] (aparece como desligada); e o [[Trade - Sync]],
-  agendado em 2026-10-14 em outra conversa, que ainda não está no catálogo (as cargas vigiadas são só as dos schemas
-  `compras`, `comercial` e `reposicao`).
+  (Getrak), que ficam em Supabase próprios; a ponte do [[PAINEL ICMS]] (aparece como desligada). O [[Trade - Sync]] entrou
+  no catálogo em 2026-10-19 (as cargas vigiadas são as dos schemas `compras`, `comercial`, `reposicao` e `trade`; a
+  lista de schemas é fixa de propósito, porque nome de schema entra em SQL dinâmico).
 - **Reposições:** máquina "a confirmar" no catálogo; a nova tentativa fica adiada até o vigia achar a tarefa na
   `SRV-IA`.
 - **COMPRAS sem tranca de carga:** o Guardião julga só pelo tempo, e uma nova tentativa não tem a proteção contra carga
@@ -276,12 +279,15 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
   testar: localhost não tem o conector) — Júlio e Claude
 - [ ] Confirmar que o `Cerebro da Lube.html` baixado foi regerado com a saúde (`empacotar.py`; o `saude.js` entra
   sozinho) — Claude
-- [ ] Decidir: o vigia da VM vigiar o próprio Guardião; pôr o [[Trade - Sync]] no catálogo — Júlio
+- [x] Pôr o [[Trade - Sync]] no catálogo — feito em 2026-10-19, pedido do Júlio (migração `saude_v1_trade`)
+- [ ] Decidir: o vigia da VM vigiar o próprio Guardião — Júlio
 - [ ] Remoto no GitHub para `Desktop\BI\12. GUARDIAO` (hoje só git local) — Júlio decide
 
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-19** — **"Sem tranca" deixa de ser prova de que a carga morreu** (Júlio pediu, Claude fez): migração **`guardiao_silencio_antes_de_falha`**. A `_avaliar_carga` tratava `v_tranca is false` + consulta faltando como falha imediata ("a carga terminou sem registrar"); mas o *advisory lock* morre junto com a sessão do Postgres, e com o banco instável uma conexão reaberta no meio faz a tranca sumir com o processo vivo. Agora, se alguma consulta entrou há menos que a duração máxima da rotina, o veredito é **"em andamento"**; só o silêncio prolongado vira falha. Deu alarme falso em 19/10 às 07:45, com as 9 consultas rodadas e registradas. A troca foi por **âncora dentro do banco** (se o trecho não fosse o esperado, a migração falhava e nada mudava) e conferida depois nas três rotinas (Compras, Comercial rápidas e margem) · [[2026-10-19 — Painel comercial no cache e o Guardião sem alarme falso]]
+- **2026-10-19** — **Trade no catálogo** (Júlio pediu, Claude fez): migração **`saude_v1_trade`** (`db/08_trade.sql`): as três funções que leem o `controle_carga` por schema aceitam `trade`, e a `_avaliar_carga` passa a tratar **AVISO** como atenção com o motivo; catálogo novo: `rotina:trade-sync`, `tarefa:Trade - Sync` e `site:gestao-comercial-trade` → **42 alvos**. Testado em transação desfeita: reavaliação de 10 dias **idêntica** para Compras, Comercial e Reposições, e o Trade teria acusado as duas falhas de 16/10 (`publicar` com ERRO às 09:32 e carga das 12:25 que não rodou). Função `guardiao` e vigia da VM **sem mudança** (a lista de sites e de tarefas sai do catálogo) · [[Trade - Sync]]
 - **2026-10-14** — **Vigia instalado na `SRV-IA`** (Júlio, 17:33): primeira rodada com 12 ok e 1 falha real (aquecedor do Reposições com erro de certificado), 16 conferências de integridade batendo; comparação com o WinThor parada até travar as permissões de `C:\BI`. Antes, às 17:31, instalado **por engano na LOGISTICA-55** (o instalador avisou; o Júlio confirmou e depois corrigiu): o banco recusou o batimento, mas aceitou a checagem da própria tarefa → **migração `saude_v1_maquina_fora_do_catalogo`** (`db/07`, commit `a291044`, Claude): checagem com máquina fora do catálogo é recusada e a errada voltou a "sem dado" · [[2026-10-14 — Guardião, o robô que garante as rotinas]]
 - **2026-10-14** — **Telegram ligado**: segredos cadastrados pelo Júlio; teste do Claude (`saude.testar_telegram()`) às 17:27 entregue ("Guardião da Lube ligado ✅"); o painel passa a mostrar o Telegram configurado · [[2026-10-14 — Guardião, o robô que garante as rotinas]]
 - **2026-10-14** — Pasta do código renomeada de `Desktop\BI\11. GUARDIAO` para `12. GUARDIAO` (o 11 ficou com o TRADE)

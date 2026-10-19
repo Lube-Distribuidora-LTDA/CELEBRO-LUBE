@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:">
+<title>Ouvido do Jarvis</title>
+</head>
+<body>
+<p>Ouvido do Jarvis. Esta página roda escondida no Google Chrome, aberta pelo app do Cérebro (servidor/ouvido.js). Aberta à mão, ela não faz nada.</p>
+<script>
+/* Cérebro da Lube — web/ouvido.html: a página do Chrome escondido (docs/OUVIDO-E-ROSTO.md §3.2).
+   Abre o microfone (com cancelamento de eco), entrega a trilha ao SpeechRecognition no computador (processLocally, pt-BR)
+   e manda parciais, finais, nível e estado ao Node pelo binding window.cerebroOuvido (posto pelo servidor/ouvido.js por
+   CDP). Sem o binding (aberta à mão) não faz nada. Nenhum recurso de fora; nada é gravado.
+   Teste (só com ?teste=1 no endereço E {teste: {arquivo}} no ligar): no lugar do microfone, toca um .wav da mesma origem
+   pela WebAudio (BufferSource → MediaStreamDestination) — nunca abre o microfone de verdade. */
+'use strict';
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const Frase = window.SpeechRecognitionPhrase;
+  const TESTE = new URLSearchParams(location.search).get('teste') === '1';
+  const MAX_TEXTO = 2000;
+  const agora = () => performance.now();
+  const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+  const enviar = (ev) => { try { window.cerebroOuvido(JSON.stringify(ev)); } catch (_) { /* sem o binding: nada */ } };
+  const cortar = (s) => { s = String(s || ''); return s.length > MAX_TEXTO ? s.slice(0, MAX_TEXTO) : s; };
+  const comCodigo = (codigo) => Object.assign(new Error(codigo), { codigo });
+
+  let ligado = false, ger = 0, lang = 'pt-BR', frases = [], teste = null;
+  // fonte: o microfone (ou o .wav do teste) e a trilha entregue ao reconhecedor
+  let stream = null, trilhaMic = null, trilhaRec = null, modo = 'direta';   // 'direta' | 'webaudio' | 'sem' (start() sem trilha)
+  let ctx = null, fonteAn = null, analisador = null, freq = null, tempo = null, fonteWa = null, destWa = null, arquivo = null;
+  // reconhecedor: um objeto novo a cada sessão
+  let rec = null, iniciando = false, ouvindo = false, tInicio = 0, ultimoErro = '', teveResultado = false;
+  let mortes = 0, abortsRapidos = 0, tReinicio = 0, tNivel = 0, reabrindo = false;
+  let resultadoEm = 0, ultimoVigia = -1e9, janelaAlto = [], esperaInicio = null, padraoMic = '';
+  const bandas = new Uint8Array(64);
+
+  /* ---------- nível: 64 bandas e o volume em dB, a MESMA conta do nivel() do criarOuvido do jarvis.js ---------- */
+  function medir() {
+    if (!analisador) return null;
+    analisador.getByteFrequencyData(freq);
+    const nb = freq.length;
+    for (let i = 0; i < 64; i++) {
+      // faixas de 80 Hz a ~6 kHz em escala quase logarítmica (onde a voz mora)
+      const a = Math.floor(2 + Math.pow(i / 64, 1.6) * (nb * 0.55)), b = Math.max(a + 1, Math.floor(2 + Math.pow((i + 1) / 64, 1.6) * (nb * 0.55)));
+      let s = 0; for (let k = a; k < b && k < nb; k++) s += freq[k];
+      bandas[i] = Math.round(Math.min(1, (s / (b - a) / 255) * 1.35) * 255);
+    }
+    analisador.getFloatTimeDomainData(tempo);
+    let q = 0; for (let i = 0; i < tempo.length; i++) q += tempo[i] * tempo[i];
+    return 20 * Math.log10(Math.sqrt(q / tempo.length) + 1e-9);
+  }
+  function lacoNivel() {
+    if (!ligado || !analisador) return;
+    const db = medir();
+    if (db == null) return;
+    enviar({ tipo: 'nivel', b: btoa(String.fromCharCode.apply(null, bandas)), db: Math.round(db * 10) / 10, ger });
+    // vigia: voz alta por 1,5 s (somados nos últimos 6 s) e nenhum resultado → a sessão ficou surda: começa de novo
+    // (no máximo uma vez a cada 20 s)
+    janelaAlto.push(db > -38 ? 1 : 0);
+    if (janelaAlto.length > 120) janelaAlto.shift();
+    const t = agora();
+    if (ouvindo && t - tInicio > 6000 && t - resultadoEm > 6000 && t - ultimoVigia > 20000) {
+      let alto = 0; for (const x of janelaAlto) alto += x;
+      if (alto * 50 >= 1500) { ultimoVigia = t; janelaAlto = []; try { rec && rec.abort(); } catch (_) { /* volta no onend */ } }
+    }
+  }
+  function ligarNivel() { clearInterval(tNivel); tNivel = setInterval(lacoNivel, 50); }
+
+  /* ---------- fonte de áudio ---------- */
+  async function lerPadrao() {
+    try {
+      const ds = await navigator.mediaDevices.enumerateDevices();
+      const d = ds.find((x) => x.kind === 'audioinput' && x.deviceId === 'default') || ds.find((x) => x.kind === 'audioinput');
+      return d ? `${d.groupId}|${d.label}` : '';
+    } catch (_) { return ''; }
+  }
+  async function abrirFonte() {
+    ctx = new AudioContext();
+    try { await ctx.resume(); } catch (_) { /* o Chrome abre com --autoplay-policy=no-user-gesture-required */ }
+    analisador = ctx.createAnalyser(); analisador.fftSize = 512; analisador.smoothingTimeConstant = 0.6;
+    freq = new Uint8Array(analisador.frequencyBinCount); tempo = new Float32Array(analisador.fftSize);
+    if (teste) {
+      let dados;
+      try {
+        const r = await fetch(teste.arquivo, { cache: 'no-store' });
+        if (!r.ok) throw new Error(String(r.status));
+        dados = await ctx.decodeAudioData(await r.arrayBuffer());
+      } catch (_) { throw comCodigo('arquivo'); }
+      const dest = ctx.createMediaStreamDestination();
+      const fonte = ctx.createBufferSource();
+      fonte.buffer = dados; fonte.loop = !!teste.repetir;
+      fonte.connect(dest); fonte.connect(analisador);
+      arquivo = { fonte, tocou: false };
+      stream = dest.stream;
+    } else {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw comCodigo('sem-microfone');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      } catch (err) {
+        const n = err && err.name;
+        // NotAllowedError no Windows: "aplicativos da área de trabalho" sem acesso ao microfone
+        throw comCodigo(n === 'NotAllowedError' || n === 'SecurityError' ? 'negado' : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'sem-microfone' : n === 'NotReadableError' ? 'em-uso' : 'erro');
+      }
+      fonteAn = ctx.createMediaStreamSource(stream);
+      fonteAn.connect(analisador);
+    }
+    trilhaMic = stream.getAudioTracks()[0] || null;
+    if (!trilhaMic) throw comCodigo('sem-microfone');
+    if (!teste) {
+      // a trilha parada no meio não dá evento nenhum no reconhecedor (medido): vigiar o ended
+      trilhaMic.onended = () => { if (ligado && !reabrindo) reabrir(); };
+      padraoMic = await lerPadrao();
+    }
+    montarTrilhaRec();
+  }
+  function limparWa() {
+    try { fonteWa && fonteWa.disconnect(); } catch (_) { /* nada */ }
+    if (destWa) { try { destWa.stream.getTracks().forEach((t) => t.stop()); } catch (_) { /* nada */ } }
+    fonteWa = null; destWa = null;
+  }
+  // a trilha do reconhecedor: a do microfone direto, ou passada pela WebAudio (MediaStreamSource → Destination, também provada)
+  function montarTrilhaRec() {
+    limparWa();
+    if (modo === 'webaudio' && stream && ctx) {
+      try {
+        fonteWa = ctx.createMediaStreamSource(stream); destWa = ctx.createMediaStreamDestination(); fonteWa.connect(destWa);
+        trilhaRec = destWa.stream.getAudioTracks()[0] || trilhaMic;
+        return;
+      } catch (_) { limparWa(); }
+    }
+    trilhaRec = trilhaMic;
+  }
+  function fecharFonte() {
+    clearInterval(tNivel); tNivel = 0;
+    if (arquivo) { try { arquivo.fonte.stop(); } catch (_) { /* nem começou */ } try { arquivo.fonte.disconnect(); } catch (_) { /* nada */ } }
+    arquivo = null;
+    limparWa();
+    try { fonteAn && fonteAn.disconnect(); } catch (_) { /* nada */ }
+    fonteAn = null; analisador = null;
+    if (stream) { try { stream.getTracks().forEach((t) => { t.onended = null; t.stop(); }); } catch (_) { /* nada */ } }
+    stream = null; trilhaMic = null; trilhaRec = null;
+    if (ctx) { try { ctx.close(); } catch (_) { /* nada */ } }
+    ctx = null; janelaAlto = [];
+  }
+
+  /* ---------- reconhecedor ---------- */
+  function criarRec() {
+    const r = new SR();
+    r.lang = lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+    try { r.processLocally = true; } catch (_) { /* nada */ }
+    if (Frase && frases.length) {
+      try { r.phrases = frases.map(([t, b]) => new Frase(t, b)); } catch (_) { /* este Chrome não aceita as frases: segue sem */ }
+    }
+    r.onstart = () => {
+      if (r !== rec) return;
+      iniciando = false; ouvindo = true; tInicio = agora(); ultimoErro = ''; teveResultado = false;
+      enviar({ tipo: 'estado', estado: 'ouvindo', ger });
+      if (esperaInicio) { const f = esperaInicio; esperaInicio = null; f({ ok: true }); }
+      if (arquivo && !arquivo.tocou) {
+        arquivo.tocou = true;
+        const f = arquivo.fonte, atraso = Math.max(0, Math.min(5000, Number(teste && teste.atrasoMs) || 300));
+        setTimeout(() => { try { f.start(); } catch (_) { /* já parou */ } }, atraso);
+      }
+    };
+    r.onresult = (e) => {
+      if (r !== rec) return;
+      teveResultado = true; resultadoEm = agora(); mortes = 0; abortsRapidos = 0;
+      // a mesma agregação do criarOuvido: de resultIndex ao fim, finais num texto e parciais no outro
+      let fin = '', parc = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const x = e.results[i], t = (x[0] && x[0].transcript) || '';
+        if (x.isFinal) fin += ` ${t}`; else parc += ` ${t}`;
+      }
+      enviar({ tipo: 'resultado', final: cortar(fin), parcial: cortar(parc), ger });
+    };
+    r.onspeechstart = () => { if (r === rec) enviar({ tipo: 'fala', fase: 'inicio', ger }); };
+    r.onspeechend = () => { if (r === rec) enviar({ tipo: 'fala', fase: 'fim', ger }); };
+    r.onerror = (e) => {
+      if (r !== rec) return;
+      const c = (e && e.error) || 'erro';
+      ultimoErro = c;
+      if (c === 'no-speech' || c === 'aborted') return;   // reinicia calado, no onend
+      if (c === 'audio-capture') { if (!teste) reabrir(); return; }
+      if (c === 'not-allowed' || c === 'service-not-allowed') { parar('negado'); return; }
+      if (c === 'language-not-supported') { parar('pacote-falhou'); return; }   // o Node confere o pacote no próximo preparar
+      enviar({ tipo: 'erro', codigo: c, ger });   // outro: avisa e segue tentando (com recuo)
+    };
+    r.onend = () => {
+      if (r !== rec) return;
+      iniciando = false;
+      const estava = ouvindo;
+      ouvindo = false;
+      if (!ligado || reabrindo) return;
+      // recuo 0,5 → 1 → 2 → 4 s só para sessões que morrem em menos de 1 s, em sequência (zera com resultado)
+      const curta = !estava || agora() - tInicio < 1000;
+      if (curta && !teveResultado) { mortes++; if (ultimoErro === 'aborted') abortsRapidos++; }
+      else { mortes = 0; abortsRapidos = 0; }
+      if (abortsRapidos >= 2) {
+        // duas mortes rápidas com aborted: troca a trilha pela versão WebAudio; se ainda morrer, start() sem trilha
+        // (último recurso, não provado; nunca no teste, que não pode abrir o microfone de verdade)
+        if (modo === 'direta') modo = 'webaudio';
+        else if (modo === 'webaudio' && !teste) modo = 'sem';
+        abortsRapidos = 0;
+        montarTrilhaRec();
+      }
+      if (mortes >= 8) { parar(ultimoErro === 'aborted' || !ultimoErro ? 'pacote-falhou' : ultimoErro); return; }
+      const atraso = mortes ? [500, 1000, 2000, 4000][Math.min(3, mortes - 1)] : 150;
+      clearTimeout(tReinicio);
+      tReinicio = setTimeout(iniciarSessao, atraso);
+    };
+    return r;
+  }
+  function iniciarSessao() {
+    if (!ligado || iniciando || ouvindo || reabrindo) return;
+    rec = criarRec();
+    iniciando = true; tInicio = agora();
+    try {
+      if (modo === 'sem' && !teste) rec.start();
+      else if (trilhaRec && trilhaRec.readyState === 'live') rec.start(trilhaRec);
+      else { iniciando = false; rec = null; if (!teste) reabrir(); else parar('audio-capture'); }
+    } catch (err) {
+      iniciando = false;
+      if (err && err.name === 'InvalidStateError') return;   // já estava ligado
+      rec = null;
+      mortes++;
+      if (mortes >= 8) { parar('erro'); return; }
+      clearTimeout(tReinicio);
+      tReinicio = setTimeout(iniciarSessao, [500, 1000, 2000, 4000][Math.min(3, mortes - 1)]);
+    }
+  }
+  // o microfone sumiu ou trocou (trilha parada, fone tirado): reabre até 3 vezes, 1 s entre elas
+  async function reabrir() {
+    if (reabrindo || !ligado || teste) return;
+    reabrindo = true;
+    const r = rec; rec = null;
+    try { r && r.abort(); } catch (_) { /* nada */ }
+    ouvindo = false; iniciando = false; clearTimeout(tReinicio);
+    const g = ger;
+    for (let i = 0; i < 3; i++) {
+      fecharFonte();
+      if (!ligado || ger !== g) { reabrindo = false; return; }
+      try {
+        await abrirFonte();
+        if (!ligado || ger !== g) { fecharFonte(); reabrindo = false; return; }
+        reabrindo = false;
+        ligarNivel();
+        iniciarSessao();
+        return;
+      } catch (err) {
+        if (err && err.codigo === 'negado') { reabrindo = false; parar('negado'); return; }
+      }
+      await esperar(1000);
+    }
+    reabrindo = false;
+    if (ligado && ger === g) parar('audio-capture');
+  }
+  function desligarTudo() {
+    ligado = false; clearTimeout(tReinicio);
+    const r = rec; rec = null;
+    try { r && r.abort(); } catch (_) { /* nada */ }
+    ouvindo = false; iniciando = false;
+    fecharFonte();
+  }
+  // erro que não tem volta: para tudo e avisa (durante o ligar, quem avisa é a resposta do ligar)
+  function parar(codigo) {
+    const g = ger;
+    desligarTudo();
+    if (esperaInicio) { const f = esperaInicio; esperaInicio = null; f({ ok: false, codigo }); return; }
+    enviar({ tipo: 'erro', codigo, ger: g });
+    enviar({ tipo: 'estado', estado: 'parado', ger: g });
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+      if (!ligado || teste || reabrindo) return;
+      const novo = await lerPadrao();
+      if ((trilhaMic && trilhaMic.readyState !== 'live') || (novo && novo !== padraoMic)) reabrir();
+    });
+  }
+  addEventListener('pagehide', desligarTudo);
+
+  /* ---------- o que o Node chama (Runtime.evaluate) ---------- */
+  async function disponivel(langs) {
+    const lista = Array.isArray(langs) && langs.length ? langs : ['pt-BR', 'en-US'];
+    const out = {};
+    for (const l of lista) {
+      try { out[l] = SR && typeof SR.available === 'function' ? await SR.available({ langs: [l], processLocally: true }) : 'unavailable'; }
+      catch (_) { out[l] = 'unavailable'; }
+    }
+    return out;
+  }
+  // precisa de gesto do usuário (o Node manda com userGesture: true); pt-BR sozinho não basta: vai junto o en-US
+  async function instalar(langs) {
+    if (!SR || typeof SR.install !== 'function') return { ok: false, codigo: 'sem-suporte' };
+    try {
+      const v = await SR.install({ langs: Array.isArray(langs) && langs.length ? langs : ['pt-BR', 'en-US'], processLocally: true });
+      return v ? { ok: true } : { ok: false, codigo: 'pacote-falhou' };
+    } catch (_) { return { ok: false, codigo: 'pacote-falhou' }; }
+  }
+  async function ligar(op) {
+    op = op && typeof op === 'object' ? op : {};
+    if (!SR) return { ok: false, codigo: 'sem-suporte' };
+    if (op.teste && !TESTE) return { ok: false, codigo: 'teste' };
+    const novoGer = Number.isFinite(op.ger) ? op.ger : ger + 1;
+    const novoLang = typeof op.lang === 'string' && /^[a-z]{2}-[A-Z]{2}$/.test(op.lang) ? op.lang : 'pt-BR';
+    const novasFrases = Array.isArray(op.frases)
+      ? op.frases.filter((f) => Array.isArray(f) && typeof f[0] === 'string' && f[0].length <= 40 && Number.isFinite(f[1])).slice(0, 50)
+      : [];
+    let novoTeste = null;
+    if (TESTE && op.teste && typeof op.teste.arquivo === 'string' && /^\/[A-Za-z0-9._-]{1,80}\.wav$/.test(op.teste.arquivo)) {
+      novoTeste = { arquivo: op.teste.arquivo, repetir: op.teste.repetir === true, atrasoMs: Number(op.teste.atrasoMs) || 0 };
+    }
+    // já ouvindo o microfone: só troca a geração (outra aba virou dona) e, se mudou, o idioma
+    if (ligado && !reabrindo && !teste && !novoTeste && trilhaMic && trilhaMic.readyState === 'live') {
+      ger = novoGer; frases = novasFrases;
+      if (novoLang !== lang) { lang = novoLang; try { rec && rec.abort(); } catch (_) { /* volta no onend */ } }
+      if (ouvindo) enviar({ tipo: 'estado', estado: 'ouvindo', ger });
+      return { ok: true };
+    }
+    if (ligado) desligarTudo();
+    ger = novoGer; lang = novoLang; frases = novasFrases; teste = novoTeste;
+    ligado = true; mortes = 0; abortsRapidos = 0; modo = 'direta'; resultadoEm = agora(); ultimoVigia = -1e9;
+    try { await abrirFonte(); }
+    catch (err) { const codigo = (err && err.codigo) || 'erro'; if (ger === novoGer) desligarTudo(); return { ok: false, codigo }; }
+    if (!ligado || ger !== novoGer) return { ok: false, codigo: 'cancelado' };   // pausaram enquanto abria
+    ligarNivel();
+    const inicio = new Promise((res) => { esperaInicio = res; });
+    iniciarSessao();
+    // o onstart vem em 0,03–0,6 s (medido); se demorar, responde assim mesmo (o estado chega pelo binding)
+    const r = await Promise.race([inicio, esperar(5000).then(() => ({ ok: true, aindaIniciando: true }))]);
+    esperaInicio = null;
+    return r;
+  }
+  function pausar() {
+    const g = ger, estava = ligado;
+    desligarTudo();
+    if (estava) enviar({ tipo: 'estado', estado: 'parado', ger: g });
+    return { ok: true };
+  }
+  function estado() {
+    return { ligado, ouvindo, modo, lang, ger, fonte: teste ? 'arquivo' : 'microfone', suportado: !!SR };
+  }
+  window.ouvido = Object.freeze({ disponivel, instalar, ligar, pausar, estado });
+})();
+</script>
+</body>
+</html>
