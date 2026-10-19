@@ -236,12 +236,18 @@ function limparFrases(frases) {
   return frases.filter((f) => Array.isArray(f) && typeof f[0] === 'string' && f[0].trim() && f[0].length <= 40 && Number.isFinite(f[1]) && f[1] >= 0 && f[1] <= 10)
     .slice(0, 50).map(([t, b]) => [t.trim(), b]);
 }
-// {teste: {arquivo: '/fala-pt.wav', repetir?, atrasoMs?}}: só um .wav da mesma origem
+// {teste: {arquivo: '/fala-pt.wav', repetir?, atrasoMs?}}: só um .wav da mesma origem. {teste: {microfoneFalso: true}}: o
+// caminho do microfone de verdade (getUserMedia), com o dispositivo FALSO do Chrome (a página recusa se achar um de verdade)
 function limparTeste(t) {
-  if (!t || typeof t !== 'object' || typeof t.arquivo !== 'string' || !/^\/[A-Za-z0-9._-]{1,80}\.wav$/.test(t.arquivo)) return null;
+  if (!t || typeof t !== 'object') return null;
+  if (t.microfoneFalso === true && t.arquivo === undefined) return { microfoneFalso: true };
+  if (typeof t.arquivo !== 'string' || !/^\/[A-Za-z0-9._-]{1,80}\.wav$/.test(t.arquivo)) return null;
   const atraso = Number(t.atrasoMs);
   return { arquivo: t.arquivo, repetir: t.repetir === true, ...(Number.isFinite(atraso) ? { atrasoMs: Math.max(0, Math.min(5000, atraso)) } : {}) };
 }
+// ruído conhecido do stderr do Chrome (atualizador, GCM, o modelo de voz): não ajuda a entender uma queda
+const RUIDO_STDERR = /update_service_dialer|updater|gcm|registration_request|DEPRECATED_ENDPOINT|TensorFlow Lite|XNNPACK|DevTools listening/i;
+const FLAGS_TESTE = (f) => f === '--use-fake-device-for-media-stream' || /^--use-file-for-fake-audio-capture=[^\0]+$/.test(f);
 
 /* =============================================================================
    criarOuvidoChrome
@@ -259,10 +265,12 @@ export function criarOuvidoChrome({
   instalarSemPedir = false,                    // true = baixa o pacote sozinho no preparar/ligar (sem pedido explícito)
   log = () => {},
   _semPreTrava = false,                        // só o teste: pula a conferência do lockfile (para provocar o código 21)
+  _flagsExtras = [],                           // só o teste (com permitirTeste): o microfone FALSO do Chrome
 } = {}) {
   perfil = path.resolve(perfil);
   idiomas = Array.isArray(idiomas) && idiomas.length ? [...idiomas] : [...IDIOMAS_PADRAO];
   const frasesOk = limparFrases(frases);
+  const extras = permitirTeste && Array.isArray(_flagsExtras) ? _flagsExtras.filter((f) => typeof f === 'string' && FLAGS_TESTE(f)) : [];
   let exe = chrome || null;
 
   let filho = null, cdp = null, sessao = null, pagina = false;
@@ -312,12 +320,13 @@ export function criarOuvidoChrome({
 
   /* ---------- Chrome ---------- */
   function guardarStderr(d) {
-    for (const l of String(d).split(/\r?\n/)) if (l.trim()) stderrFim.push(l.slice(0, 200));
+    for (const l of String(d).split(/\r?\n/)) if (l.trim() && !RUIDO_STDERR.test(l)) stderrFim.push(l.slice(0, 200));
     if (stderrFim.length > 20) stderrFim = stderrFim.slice(-20);
   }
   async function abrirFilho() {
     let f;
-    try { f = spawn(exe, [...FLAGS, `--user-data-dir=${perfil}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], windowsHide: true }); }
+    stderrFim = [];   // só as linhas desta partida
+    try { f = spawn(exe, [...FLAGS, ...extras, `--user-data-dir=${perfil}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], windowsHide: true }); }
     catch (e) { return { erro: codigoDe(e) }; }
     if (!f.stdio || !f.stdio[2] || !f.stdio[3] || !f.stdio[4]) { matarArvore(f.pid); return { erro: 'pipe' }; }
     const saida = new Promise((r) => f.once('exit', (c) => r({ saiu: c ?? -1 })));
@@ -535,7 +544,8 @@ export function criarOuvidoChrome({
     if (t) t.fechar(new ErroOuvido('caiu', 503));
     if (fechando) { estadoAtual = 'desligado'; return; }
     estadoAtual = 'caiu';
-    log(`ouvido: o Chrome escondido saiu sozinho (código ${codigo ?? '?'})`);
+    // morto por fora (taskkill, Gerenciador de Tarefas) o código vem como 4294967295 (= -1 sem sinal)
+    log(`ouvido: o Chrome escondido saiu sozinho (código ${codigo == null ? '?' : codigo > 0x7fffffff ? codigo - 0x100000000 : codigo})`);
     for (const l of stderrFim.slice(-5)) log(`  chrome: ${l}`);
     if (dono && gerAtivo != null && contarQueda()) agendarVolta();
   }
@@ -606,7 +616,7 @@ export function criarOuvidoChrome({
     if (teste != null) {
       if (!permitirTeste) throw new ErroOuvido('teste', 400);   // nunca ignorar calado: sem o teste abriria o microfone
       t = limparTeste(teste);
-      if (!t) throw new ErroOuvido('teste', 400, 'O teste precisa de {arquivo: "/nome.wav"}.');
+      if (!t) throw new ErroOuvido('teste', 400, 'O teste precisa de {arquivo: "/nome.wav"} ou {microfoneFalso: true}.');
     }
     if (!pode()) throw new ErroOuvido('trava', 423);
     if (encerrado) throw new ErroOuvido('desligado', 503);
@@ -644,7 +654,7 @@ export function criarOuvidoChrome({
     if (gerAtivo !== g) throw new ErroOuvido('cancelado', 409);
     if (estadoAtual === 'iniciando' && !r.aindaIniciando) estadoAtual = 'ouvindo';
     ultimoErro = null;
-    log(`ouvido: ouvindo (${lang}${t ? ', teste com arquivo' : ''})`);
+    log(`ouvido: ouvindo (${lang}${t ? (t.arquivo ? ', teste com arquivo' : ', teste com o microfone falso') : ''})`);
     vigiarDono(temSse(aba) ? 2000 : 5000);
     return { ok: true, ger: g };
   }

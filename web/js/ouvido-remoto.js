@@ -6,21 +6,26 @@
 
      O = criarOuvidoRemoto(h, sons, { token, aba, base = '', lang = 'pt-BR', medidor = 'remoto', fetch, prazoLigarMs, tempos })
      O = { suportado, ativo, ouvindo, remoto: true, pacote, motivo,
-           ligar(): Promise<void> (lança Error com .codigo), pausar(), nivel(): { bandas: Float32Array(64), db } | null,
-           destruir(), preparar(): Promise<EstadoOuvido|null>, consultar(): Promise<EstadoOuvido|null>,
-           precisaBaixar(): boolean, estadoRemoto(): string }
-     h = { parcial(texto), final(texto), estado('ouvindo'|'parado'), erro(codigo), aviso?(codigo, dados), fala?(fase) }
+           ligar(): Promise<void> (lança Error com .codigo e a mensagem do servidor), pausar(),
+           nivel(): { bandas: Float32Array(64), db } | null, destruir(),
+           preparar(): Promise<EstadoOuvido|null>   abre o Chrome escondido e confere o pacote (não baixa),
+           instalar(): Promise<EstadoOuvido|null>   baixa o pacote de voz (o botão "Baixar o pacote de voz"),
+           consultar(): Promise<EstadoOuvido|null>, precisaBaixar(): boolean, estadoRemoto(): string }
+     h = { parcial(texto), final(texto), estado('ouvindo'|'parado'), erro(codigo, mensagem?), aviso?(codigo, dados),
+           fala?(fase) }
 
-   Rotas do servidor (todas com x-cerebro-token): POST /api/ouvido/preparar, POST /api/ouvido/ligar {aba, lang},
-   POST /api/ouvido/pausar {aba}, GET /api/ouvido/estado e GET /api/ouvido/eventos?aba= (SSE com estado, resultado,
-   nivel, fala e erro). O EventSource não manda cabeçalho, então o SSE é lido por fetch.
+   Rotas do servidor (todas com x-cerebro-token): POST /api/ouvido/preparar {instalar?}, POST /api/ouvido/ligar
+   {aba, lang}, POST /api/ouvido/pausar {aba}, GET /api/ouvido/estado e GET /api/ouvido/eventos?aba= (SSE com estado,
+   resultado, nivel, fala e erro). O EventSource não manda cabeçalho, então o SSE é lido por fetch.
 
-   Códigos (err.codigo do ligar e h.erro): trava (423: falta o rosto de hoje), reiniciado (401: o app reiniciou, F5),
-   sem-chrome (503), sem-rota (404: o app ainda não tem o ouvido do Chrome), prazo (o ligar passou de 150 s), sem-app
-   (o app não respondeu), outra-aba (outra janela do Jarvis pegou o microfone), caiu (o Chrome caiu e não voltou), e os
-   da página do Chrome: negado, sem-microfone, em-uso, audio-capture, pacote-falhou. Os textos estão em TEXTOS_OUVIDO.
-   Avisos (h.aviso, sem parar nada): instalando (baixando o pacote de voz), caiu (o servidor está religando o Chrome),
-   reconectando (o SSE caiu e estou voltando).
+   Códigos (err.codigo do ligar e h.erro): trava (423: falta o rosto de hoje), sem-pacote (409: falta baixar o pacote
+   de voz; precisaBaixar() fica true e a interface oferece instalar()), reiniciado (401: o app reiniciou, F5),
+   sem-chrome (503), sem-rota (404: o app ainda não tem o ouvido do Chrome), prazo, sem-app (o app não respondeu),
+   outra-aba (outra janela do Jarvis pegou o microfone), caiu (o Chrome caiu e não voltou), desligado, e os da página
+   do Chrome: negado, sem-microfone, em-uso, audio-capture, pacote-falhou. Os textos estão em TEXTOS_OUVIDO.
+   Avisos (h.aviso, sem parar nada): instalando (baixando o pacote de voz), caiu (o Chrome caiu e o servidor está
+   religando), reconectando (o SSE caiu e estou voltando), erro-remoto ({codigo}: a página do Chrome errou e segue
+   tentando).
 
    O microfone: quem abre é o Chrome escondido. A onda e o medidor vêm pelo SSE (evento nivel, 20 por segundo; a mesma
    conta do nivel() do criarOuvido). Com medidor: 'local', o Edge também abre o microfone, só para o medidor e a onda
@@ -45,11 +50,16 @@ const RELIGAR_APOS_CAIU_MS = 8000;           // o Chrome voltou ('pronto') mas a
 const MAX_RELIGADAS = 3, JANELA_RELIGADAS_MS = 60000;
 const MAX_TEXTO = 2000;
 const ESTADOS = new Set(['desligado', 'abrindo', 'instalando', 'pronto', 'iniciando', 'ouvindo', 'parado', 'caiu', 'sem-chrome']);
+// erro sem volta: para tudo. Os outros a página do Chrome manda e segue tentando (viram h.aviso('erro-remoto'));
+// se um 'parado' vier logo depois de um deles, era sem volta também
+const FATAIS = new Set(['negado', 'sem-microfone', 'em-uso', 'audio-capture', 'pacote-falhou', 'sem-pacote', 'caiu', 'trava', 'sem-suporte', 'desligado']);
 const TAMANHO_PACOTE_MB = 300;               // pt-BR + en-US: 296 MB medidos (só o pt-BR não funciona)
 
-// os textos para a tela (o jarvis.js junta no ERRO_MIC quando usa este ouvido); frases curtas, palavras simples
+// os textos para a tela (o jarvis.js junta no ERRO_MIC quando usa este ouvido); frases curtas, palavras simples. Os
+// códigos que o servidor também tem (servidor/ouvido.js, TEXTOS) usam o mesmo texto de lá
 export const TEXTOS_OUVIDO = {
   'sem-chrome': 'Não achei o Google Chrome neste computador. Ele é o ouvido do Jarvis: instale o Chrome e abra de novo. Enquanto isso, digite.',
+  'sem-pacote': `Falta baixar o pacote de voz em português, só desta vez (cerca de ${TAMANHO_PACOTE_MB} MB). Peça para baixar e eu ligo o ouvido.`,
   instalando: `Baixando o pacote de voz em português, só desta vez (cerca de ${TAMANHO_PACOTE_MB} MB)…`,
   baixar: `Baixar o pacote de voz (cerca de ${TAMANHO_PACOTE_MB} MB, uma vez só)`,
   'pacote-falhou': 'Não consegui baixar o pacote de voz. Confira a internet e tente de novo. Enquanto isso, digite.',
@@ -61,9 +71,12 @@ export const TEXTOS_OUVIDO = {
   reiniciado: 'O app do cérebro foi reiniciado. Recarregue a página (F5) e fale de novo.',
   'outra-aba': 'O microfone passou para outra janela do Jarvis.',
   'sem-app': 'O app do cérebro não respondeu. Ele ainda está ligado? Abra pelo INICIAR.bat.',
-  prazo: 'O ouvido do Jarvis demorou demais para ligar. Tente de novo.',
+  prazo: 'O ouvido do Jarvis demorou demais para responder. Tente de novo.',
+  desligado: 'O ouvido do Jarvis está desligado. Abra o Jarvis de novo.',
+  pagina: 'O ouvido do Jarvis não abriu. Feche e abra o Jarvis de novo.',
+  perfil: 'Não consegui criar a pasta do ouvido em %LOCALAPPDATA%\\CerebroLube.',
+  'sem-suporte': 'Este Chrome não reconhece voz no computador. Atualize o Google Chrome.',
   'sem-rota': 'Este app do cérebro ainda não tem o ouvido do Chrome. Feche e abra de novo pelo INICIAR.bat.',
-  'sem-suporte': 'O ouvido do Chrome só funciona no app do computador. Digite, por enquanto.',
   'edge-vazio': 'O reconhecimento do Edge está devolvendo vazio; use o ouvido do Chrome.',
 };
 
@@ -119,7 +132,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
   // ger: cada ligar do servidor tem um número novo. Evento com ger <= gerPiso é de uma sessão morta (descarta); um ger
   // maior que o atual é uma sessão nova minha (o servidor religou o Chrome sozinho): adoto
   let gerAtual = -Infinity, gerPiso = -Infinity;
-  let sse = null, nSse = 0, falhasSse = 0, foraDesde = 0, avisouInstalando = false, religadas = [];
+  let sse = null, nSse = 0, falhasSse = 0, foraDesde = 0, avisouInstalando = false, religadas = [], ultimoErroRemoto = null;
   let tReconectar = 0, tCaiu = 0, tReligarCaiu = 0;
   const bandas = new Float32Array(64);
   const saidaNivel = { bandas, db: -90 };   // o laço lê a cada quadro: o mesmo objeto, sem alocar
@@ -179,8 +192,9 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     if (remoto === 'sem-chrome') { O.suportado = false; O.motivo = 'sem-chrome'; }
   }
   function semSuporte(codigo) {
-    if (codigo === 'sem-chrome' || codigo === 'sem-rota') { O.suportado = false; O.motivo = codigo; }
+    if (codigo === 'sem-chrome' || codigo === 'sem-rota' || codigo === 'sem-suporte') { O.suportado = false; O.motivo = codigo; }
   }
+  const mensagemDe = (corpo) => (corpo && typeof corpo.mensagem === 'string' ? corpo.mensagem.slice(0, 300) : undefined);
 
   // GET /api/ouvido/estado: o que o servidor sabe agora (não abre nada)
   async function consultar() {
@@ -204,19 +218,22 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     t = setTimeout(passo, 1200);
     return { parar() { vivo = false; clearTimeout(t); } };
   }
-  // POST /api/ouvido/preparar: abre o Chrome escondido e baixa o pacote de voz se faltar (o botão "Baixar o pacote")
-  async function preparar() {
+  // POST /api/ouvido/preparar: abre o Chrome escondido e confere o pacote de voz. Com instalar: true baixa o pacote se
+  // faltar (o botão "Baixar o pacote de voz"; o servidor só baixa por pedido explícito)
+  async function pedirPreparar(corpo) {
     if (!buscar || !token) { O.motivo = 'sem-suporte'; return null; }
     avisouInstalando = false;
     const vigia = vigiarInstalacao();
     try {
-      const r = await pedir('POST', '/api/ouvido/preparar', {}, PRAZO_PREPARAR_MS);
+      const r = await pedir('POST', '/api/ouvido/preparar', corpo, PRAZO_PREPARAR_MS);
       if (!r.ok) { const c = codigoHttp(r.status, r.corpo); O.motivo = c; semSuporte(c); return null; }
       anotarEstado(r.corpo);
       O.motivo = null;
       return r.corpo;
     } catch (err) { O.motivo = err.codigo || 'sem-app'; return null; } finally { vigia.parar(); }
   }
+  const preparar = () => pedirPreparar({});
+  const instalar = () => pedirPreparar({ instalar: true });
   function postPausar() {
     // keepalive: vale no pagehide (a página fechando); sem esperar a resposta
     pedir('POST', '/api/ouvido/pausar', { aba }, PRAZO_CURTO_MS, { keepalive: true }).catch(() => { /* o servidor pausa sozinho 2 s depois de o SSE cair */ });
@@ -338,25 +355,34 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     if (!ESTADOS.has(e)) return;
     remoto = e;
     if (e === 'instalando') { if (!avisouInstalando) { avisouInstalando = true; aviso('instalando', { pacote: d.pacote ?? null }); } return; }
-    if (e === 'caiu') { marcarParado(); aviso('caiu'); armarCaiu(); return; }
+    // 'abrindo' sem eu estar ligando: o Chrome caiu e o servidor está abrindo de novo (ele religa na mesma sessão)
+    if (e === 'caiu' || (e === 'abrindo' && !ligando)) { marcarParado(); aviso('caiu'); armarCaiu(); return; }
     if (e === 'sem-chrome') { pararTudo('sem-chrome', { avisarServidor: false }); return; }
-    if (e === 'parado' && d.motivo === 'outra-aba') { pararTudo('outra-aba', { avisarServidor: false }); return; }
-    if (e === 'ouvindo' || e === 'iniciando' || e === 'parado') {
+    if (e === 'parado') {
+      if (d.motivo === 'outra-aba' || d.motivo === 'desligado' || d.motivo === 'trava') { pararTudo(d.motivo, { avisarServidor: false }); return; }
+      if (!gerVale(d.ger)) return;
+      // a página do Chrome parou sozinha logo depois de um erro: era sem volta
+      const er = ultimoErroRemoto && agora() - ultimoErroRemoto.t < 2000 ? ultimoErroRemoto : null;
+      if (er) { pararTudo(er.codigo, { avisarServidor: false, mensagem: er.mensagem }); return; }
+      marcarParado();
+      // parado sem eu pedir (o servidor pausou a dona enquanto o SSE estava fora): ligo de novo
+      if (!ligando) religar();
+      return;
+    }
+    if (e === 'ouvindo' || e === 'iniciando') {
       if (!gerVale(d.ger)) return;
       if (e === 'ouvindo') marcarOuvindo();
-      else if (e === 'parado') {
-        marcarParado();
-        // parado sem eu pedir (o servidor pausou a dona enquanto o SSE estava fora): ligo de novo
-        if (!ligando) religar();
-      }
     }
   }
   function aoErroRemoto(d) {
     const c = typeof d.codigo === 'string' && /^[a-z0-9-]{2,40}$/.test(d.codigo) ? d.codigo : 'erro';
+    const mensagem = typeof d.mensagem === 'string' ? d.mensagem.slice(0, 300) : undefined;
     if (c === 'no-speech' || c === 'aborted') return;   // a página do Chrome já reinicia sozinha
-    if (c !== 'caiu' && !gerVale(d.ger)) return;
-    if (c === 'network') { chamar('erro', c); return; }   // não para (o jarvis.js só avisa)
-    pararTudo(c, { avisarServidor: true });
+    if (c !== 'caiu' && c !== 'trava' && !gerVale(d.ger)) return;
+    if (FATAIS.has(c)) { pararTudo(c, { avisarServidor: true, mensagem }); return; }
+    // a página do Chrome avisa e segue tentando: só aviso (o h.erro do jarvis.js pausaria o microfone)
+    ultimoErroRemoto = { codigo: c, mensagem, t: agora() };
+    aviso('erro-remoto', { codigo: c });
   }
   function gravarNivel(d) {
     if (typeof d.b !== 'string' || d.b.length > 200) return;
@@ -383,7 +409,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
     const vigia = vigiarInstalacao();
     try {
       const r = await pedir('POST', '/api/ouvido/ligar', { aba, lang }, prazoLigarMs);
-      if (!r.ok) throw erroCod(codigoHttp(r.status, r.corpo), r.corpo && typeof r.corpo.mensagem === 'string' ? r.corpo.mensagem.slice(0, 300) : undefined);
+      if (!r.ok) throw erroCod(codigoHttp(r.status, r.corpo), mensagemDe(r.corpo));
       if (minha !== nLigar) return;
       const g = Number(r.corpo && r.corpo.ger);
       if (Number.isFinite(g) && g >= gerAtual) { gerAtual = g; gerPiso = Math.max(gerPiso, g - 1); }
@@ -426,21 +452,26 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
       semSuporte(c);
       pararTudo(null, { avisarServidor: c !== 'reiniciado' });
       O.motivo = c;
+      if (c === 'sem-pacote') {
+        // a interface oferece "Baixar o pacote de voz" (instalar()); o estado de verdade vem do servidor logo depois
+        if (O.pacote !== 'unavailable') O.pacote = 'downloadable';
+        consultar();
+      }
       throw erroCod(c, falhou.message);
     }
     if (medidor === 'local') abrirMedidorLocal();   // sem esperar; se não abrir, fica o nível do Chrome
   }
   // para tudo; com codigo, avisa quem ouve com h.erro (depois de já estar parado: o pausar de lá não faz nada)
-  function pararTudo(codigo, { avisarServidor = true } = {}) {
+  function pararTudo(codigo, { avisarServidor = true, mensagem } = {}) {
     const tinha = querLigado || O.ativo || !!ligando || !!sse;
     nLigar++;
-    querLigado = false; O.ativo = false;
+    querLigado = false; O.ativo = false; ultimoErroRemoto = null;
     clearTimeout(tReconectar); clearTimeout(tCaiu); clearTimeout(tReligarCaiu);
     fecharSse(); fecharMedidorLocal(); nivelEm = 0;
     gerPiso = Math.max(gerPiso, gerAtual);
     if (tinha && avisarServidor) postPausar();
     marcarParado();
-    if (codigo) { O.motivo = codigo; chamar('erro', codigo); }
+    if (codigo) { O.motivo = codigo; chamar('erro', codigo, mensagem); }
   }
   function pausar() {
     const estava = O.ouvindo;
@@ -481,7 +512,7 @@ export function criarOuvidoRemoto(h = {}, sons = null, opcoes = {}) {
 
   O.ligar = ligar; O.pausar = pausar; O.nivel = nivel;
   O.destruir = pausar;
-  O.preparar = preparar; O.consultar = consultar;
+  O.preparar = preparar; O.instalar = instalar; O.consultar = consultar;
   O.precisaBaixar = () => O.pacote === 'downloadable';
   O.estadoRemoto = () => remoto;
   return O;

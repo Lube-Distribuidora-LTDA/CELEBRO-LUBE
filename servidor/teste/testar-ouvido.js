@@ -165,6 +165,15 @@ function gerarWav() {
       () => { try { res(fs.statSync(saida).size > 10000 ? saida : null); } catch (_) { res(null); } });
   });
 }
+// linhas de comando dos chrome.exe do perfil (para conferir as flags)
+function linhasDeComando(perfil) {
+  const script = String.raw`$p = $env:OUVIDO_PERFIL_TESTE; Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) } | ForEach-Object { $_.CommandLine }`;
+  return new Promise((res) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { windowsHide: true, timeout: 20000, env: { ...process.env, OUVIDO_PERFIL_TESTE: perfil } },
+      (err, out) => res(err ? [] : String(out || '').split(/\r?\n/).filter(Boolean)));
+  });
+}
 function rodarFilho(porta, modo) {
   const f = spawn(process.execPath, [ESTE, '--filho', String(porta), modo], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let saida = '';
@@ -352,6 +361,40 @@ async function principal() {
       const pausou = await ate(() => ouvido.estado().dono === null, 6000);
       ok(pausou && ouvido.estado().estado === 'pronto', `pausou ${seg(tSome)} s depois de a aba sumir (estado ${ouvido.estado().estado})`);
       ok(logsOuvido.some((l) => l.includes('a aba dona sumiu')), 'o log conta');
+
+      titulo('o caminho do microfone (getUserMedia + start(trilha)) com o microfone FALSO do Chrome');
+      // guarda: neste Chrome (sem o dispositivo falso) a lista tem microfones de verdade → a página nem abre
+      r = await post(porta, 'ligar', { aba: 'testeGuarda', teste: { microfoneFalso: true } });
+      ok(r.status === 409 && r.dados?.erro === 'teste' && ouvido.estado().dono === null, `microfone falso pedido num Chrome com microfone de verdade → ${r.status} ${r.dados?.erro} (não abriu)`);
+      await ouvido.desligar();   // libera o perfil para o Chrome com o dispositivo falso
+      const wavFalso = path.join(os.tmpdir(), `ouvido-falso-${process.pid}.wav`);
+      fs.copyFileSync(wav, wavFalso);   // caminho sem espaço para a flag do Chrome
+      const falso = criarOuvidoChrome({ ...base, perfil: PERFIL_TESTE, permitirTeste: true, log: registrar,
+        _flagsExtras: ['--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wavFalso}`, '--use-fake-ui-for-media-stream'] });
+      instancias.push(falso);
+      servidor.usar(falso);
+      const sseF = abrirSse(porta, 'testeFalso');
+      ok(await sseF.aberto === 200, 'SSE da aba do teste aberto');
+      t0 = Date.now();
+      r = await post(porta, 'ligar', { aba: 'testeFalso', teste: { microfoneFalso: true } });
+      const gF = r.dados?.ger;
+      ok(r.status === 200 && r.dados?.ok === true, `ligar com o microfone falso → ${r.status} ${r.dados?.erro || ''} (${Date.now() - t0} ms)`);
+      const linhas = await linhasDeComando(PERFIL_TESTE);
+      ok(linhas.length > 0 && linhas.some((l) => l.includes('--use-fake-device-for-media-stream')) && !linhas.some((l) => l.includes('--use-fake-ui-for-media-stream')),
+        'o Chrome abriu com o dispositivo falso, e a flag que liberaria o microfone para qualquer origem ficou de fora');
+      const finF = await sseF.esperar((x) => x.evento === 'resultado' && x.dados.ger === gF && norm(x.dados.final).includes('rodando'), 25000);
+      ok(!!finF, finF ? `transcreveu o microfone (falso) em ${seg(t0)} s: "${finF.dados.final.trim()}"` : 'nenhum final com "rodando" em 25 s');
+      const nivF = sseF.eventos.filter((x) => x.evento === 'nivel' && x.dados.ger === gF);
+      ok(nivF.length >= 20 && nivF.some((x) => x.dados.db > -45), `nível do microfone: ${nivF.length} eventos (máx. ${nivF.length ? Math.max(...nivF.map((x) => x.dados.db)).toFixed(1) : '-'} dB)`);
+      r = await post(porta, 'pausar', { aba: 'testeFalso' });
+      ok(r.status === 200 && r.dados?.ok === true && !!(await sseF.esperar((x) => x.evento === 'estado' && x.dados.estado === 'parado', 2000)), 'pausar → parado');
+      sseF.fechar();
+      await falso.desligar({ final: true });
+      try { fs.unlinkSync(wavFalso); } catch (_) { /* nada */ }
+      ok(await contarProcessos(PERFIL_TESTE) === 0, '0 Chrome depois do teste do microfone falso');
+      servidor.usar(ouvido);
+      e = await ouvido.preparar();
+      ok(e.estado === 'pronto', 'o ouvido principal abre de novo');
     } else console.log('   (sem áudio ou sem pacote: a transcrição ficou de fora)');
 
     titulo('segunda partida no mesmo perfil (código 21)');

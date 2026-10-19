@@ -12,8 +12,10 @@
    Abre o microfone (com cancelamento de eco), entrega a trilha ao SpeechRecognition no computador (processLocally, pt-BR)
    e manda parciais, finais, nível e estado ao Node pelo binding window.cerebroOuvido (posto pelo servidor/ouvido.js por
    CDP). Sem o binding (aberta à mão) não faz nada. Nenhum recurso de fora; nada é gravado.
-   Teste (só com ?teste=1 no endereço E {teste: {arquivo}} no ligar): no lugar do microfone, toca um .wav da mesma origem
-   pela WebAudio (BufferSource → MediaStreamDestination) — nunca abre o microfone de verdade. */
+   Teste (só com ?teste=1 no endereço E {teste} no ligar), nunca com o microfone de verdade:
+   - {arquivo: '/x.wav'}: no lugar do microfone, toca o .wav da mesma origem pela WebAudio (BufferSource → Destination);
+   - {microfoneFalso: true}: o caminho do microfone (getUserMedia + start(trilha)) com o dispositivo FALSO do Chrome
+     (--use-fake-device-for-media-stream); antes de abrir, confere que TODOS os microfones da lista são falsos. */
 'use strict';
 (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -25,6 +27,7 @@
   const enviar = (ev) => { try { window.cerebroOuvido(JSON.stringify(ev)); } catch (_) { /* sem o binding: nada */ } };
   const cortar = (s) => { s = String(s || ''); return s.length > MAX_TEXTO ? s.slice(0, MAX_TEXTO) : s; };
   const comCodigo = (codigo) => Object.assign(new Error(codigo), { codigo });
+  const comArquivo = () => !!(teste && teste.arquivo);   // o .wav do teste: sem microfone, sem vigias de dispositivo
 
   let ligado = false, ger = 0, lang = 'pt-BR', frases = [], teste = null;
   // fonte: o microfone (ou o .wav do teste) e a trilha entregue ao reconhecedor
@@ -81,7 +84,7 @@
     try { await ctx.resume(); } catch (_) { /* o Chrome abre com --autoplay-policy=no-user-gesture-required */ }
     analisador = ctx.createAnalyser(); analisador.fftSize = 512; analisador.smoothingTimeConstant = 0.6;
     freq = new Uint8Array(analisador.frequencyBinCount); tempo = new Float32Array(analisador.fftSize);
-    if (teste) {
+    if (comArquivo()) {
       let dados;
       try {
         const r = await fetch(teste.arquivo, { cache: 'no-store' });
@@ -96,6 +99,13 @@
       stream = dest.stream;
     } else {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw comCodigo('sem-microfone');
+      if (teste && teste.microfoneFalso) {
+        // teste com o microfone FALSO do Chrome: se aparecer um microfone de verdade na lista, nem abre
+        let ds = [];
+        try { ds = await navigator.mediaDevices.enumerateDevices(); } catch (_) { /* lista vazia: recusa abaixo */ }
+        const mics = ds.filter((d) => d.kind === 'audioinput');
+        if (!mics.length || !mics.every((d) => /^fake /i.test(d.label))) throw comCodigo('teste');
+      }
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (err) {
@@ -108,7 +118,7 @@
     }
     trilhaMic = stream.getAudioTracks()[0] || null;
     if (!trilhaMic) throw comCodigo('sem-microfone');
-    if (!teste) {
+    if (!comArquivo()) {
       // a trilha parada no meio não dá evento nenhum no reconhecedor (medido): vigiar o ended
       trilhaMic.onended = () => { if (ligado && !reabrindo) reabrir(); };
       padraoMic = await lerPadrao();
@@ -182,7 +192,7 @@
       const c = (e && e.error) || 'erro';
       ultimoErro = c;
       if (c === 'no-speech' || c === 'aborted') return;   // reinicia calado, no onend
-      if (c === 'audio-capture') { if (!teste) reabrir(); return; }
+      if (c === 'audio-capture') { if (!comArquivo()) reabrir(); return; }
       if (c === 'not-allowed' || c === 'service-not-allowed') { parar('negado'); return; }
       if (c === 'language-not-supported') { parar('pacote-falhou'); return; }   // o Node confere o pacote no próximo preparar
       enviar({ tipo: 'erro', codigo: c, ger });   // outro: avisa e segue tentando (com recuo)
@@ -199,7 +209,7 @@
       else { mortes = 0; abortsRapidos = 0; }
       if (abortsRapidos >= 2) {
         // duas mortes rápidas com aborted: troca a trilha pela versão WebAudio; se ainda morrer, start() sem trilha
-        // (último recurso, não provado; nunca no teste, que não pode abrir o microfone de verdade)
+        // (último recurso, não provado; nunca no teste: start() sem trilha abriria o microfone padrão)
         if (modo === 'direta') modo = 'webaudio';
         else if (modo === 'webaudio' && !teste) modo = 'sem';
         abortsRapidos = 0;
@@ -219,7 +229,7 @@
     try {
       if (modo === 'sem' && !teste) rec.start();
       else if (trilhaRec && trilhaRec.readyState === 'live') rec.start(trilhaRec);
-      else { iniciando = false; rec = null; if (!teste) reabrir(); else parar('audio-capture'); }
+      else { iniciando = false; rec = null; if (!comArquivo()) reabrir(); else parar('audio-capture'); }
     } catch (err) {
       iniciando = false;
       if (err && err.name === 'InvalidStateError') return;   // já estava ligado
@@ -232,7 +242,7 @@
   }
   // o microfone sumiu ou trocou (trilha parada, fone tirado): reabre até 3 vezes, 1 s entre elas
   async function reabrir() {
-    if (reabrindo || !ligado || teste) return;
+    if (reabrindo || !ligado || comArquivo()) return;
     reabrindo = true;
     const r = rec; rec = null;
     try { r && r.abort(); } catch (_) { /* nada */ }
@@ -274,7 +284,7 @@
 
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
     navigator.mediaDevices.addEventListener('devicechange', async () => {
-      if (!ligado || teste || reabrindo) return;
+      if (!ligado || comArquivo() || reabrindo) return;
       const novo = await lerPadrao();
       if ((trilhaMic && trilhaMic.readyState !== 'live') || (novo && novo !== padraoMic)) reabrir();
     });
@@ -309,8 +319,11 @@
       ? op.frases.filter((f) => Array.isArray(f) && typeof f[0] === 'string' && f[0].length <= 40 && Number.isFinite(f[1])).slice(0, 50)
       : [];
     let novoTeste = null;
-    if (TESTE && op.teste && typeof op.teste.arquivo === 'string' && /^\/[A-Za-z0-9._-]{1,80}\.wav$/.test(op.teste.arquivo)) {
-      novoTeste = { arquivo: op.teste.arquivo, repetir: op.teste.repetir === true, atrasoMs: Number(op.teste.atrasoMs) || 0 };
+    if (op.teste) {
+      if (typeof op.teste.arquivo === 'string' && /^\/[A-Za-z0-9._-]{1,80}\.wav$/.test(op.teste.arquivo)) {
+        novoTeste = { arquivo: op.teste.arquivo, repetir: op.teste.repetir === true, atrasoMs: Number(op.teste.atrasoMs) || 0 };
+      } else if (op.teste.microfoneFalso === true) novoTeste = { microfoneFalso: true };
+      else return { ok: false, codigo: 'teste' };
     }
     // já ouvindo o microfone: só troca a geração (outra aba virou dona) e, se mudou, o idioma
     if (ligado && !reabrindo && !teste && !novoTeste && trilhaMic && trilhaMic.readyState === 'live') {
@@ -340,7 +353,7 @@
     return { ok: true };
   }
   function estado() {
-    return { ligado, ouvindo, modo, lang, ger, fonte: teste ? 'arquivo' : 'microfone', suportado: !!SR };
+    return { ligado, ouvindo, modo, lang, ger, fonte: comArquivo() ? 'arquivo' : teste ? 'microfone-falso' : 'microfone', suportado: !!SR };
   }
   window.ouvido = Object.freeze({ disponivel, instalar, ligar, pausar, estado });
 })();

@@ -68,7 +68,12 @@ const servidor = http.createServer(async (req, res) => {
   if (p === '/api/ouvido/estado' && req.method === 'GET') { json(200, estadoServidor()); return; }
   if (p === '/api/ouvido/preparar' && req.method === 'POST') {
     if (S.modo === 'sem-chrome') { json(503, { erro: 'sem-chrome', mensagem: 'Sem Chrome.' }); return; }
-    if (S.prepararMs) { S.estado = 'instalando'; S.pacote = 'downloading'; await esperar(S.prepararMs); S.estado = 'pronto'; S.pacote = 'available'; }
+    // como o servidor/ouvido.js: o pacote só baixa por pedido explícito ({instalar: true})
+    if (S.pacote !== 'available' && corpo && corpo.instalar === true) {
+      S.estado = 'instalando'; S.pacote = 'downloading';
+      await esperar(S.prepararMs || 50);
+      S.estado = 'pronto'; S.pacote = 'available';
+    }
     json(200, estadoServidor());
     return;
   }
@@ -77,12 +82,12 @@ const servidor = http.createServer(async (req, res) => {
     if (S.modo === 'trava') { json(423, { erro: 'trava', mensagem: 'O Jarvis está travado. Faça o reconhecimento do rosto.' }); return; }
     if (S.modo === 'sem-chrome') { json(503, { erro: 'sem-chrome', mensagem: 'Sem Chrome.' }); return; }
     if (S.modo === 'negado') { json(409, { erro: 'negado', mensagem: 'O Windows bloqueou o microfone.' }); return; }
+    if (S.pacote !== 'available') { json(409, { erro: 'sem-pacote', mensagem: 'Falta baixar o pacote de voz.' }); return; }
     if (S.modo === 'mudo') return;   // nunca responde (o prazo do cliente vence)
-    if (S.modo === 'instalando') {
-      S.estado = 'instalando'; S.pacote = 'downloading';
+    if (S.modo === 'instalando') {   // um servidor que baixa o pacote dentro do ligar (a especificação permite)
+      S.estado = 'instalando';
       enviar(aba, 'estado', { estado: 'instalando', ger: S.ger, pacote: 'downloading' });
       await esperar(400);
-      S.pacote = 'available';
     }
     const velho = S.dono;
     S.ger++;
@@ -120,7 +125,7 @@ function coletor() {
   const log = [];
   const h = {
     parcial: (t) => log.push(['parcial', t]), final: (t) => log.push(['final', t]), estado: (e) => log.push(['estado', e]),
-    erro: (c) => log.push(['erro', c]), aviso: (c, d) => log.push(['aviso', c, d]), fala: (f) => log.push(['fala', f]),
+    erro: (c, m) => log.push(['erro', c, m]), aviso: (c, d) => log.push(['aviso', c, d]), fala: (f) => log.push(['fala', f]),
   };
   return { log, h, de: (tipo) => log.filter((x) => x[0] === tipo).map((x) => x[1]) };
 }
@@ -154,7 +159,7 @@ titulo('a mesma cara do criarOuvido do jarvis.js');
 {
   const { O } = novo();
   for (const k of ['suportado', 'ativo', 'ouvindo']) ok(typeof O[k] === 'boolean', `O.${k} é booleano`);
-  for (const k of ['ligar', 'pausar', 'nivel', 'destruir', 'preparar', 'consultar', 'precisaBaixar', 'estadoRemoto']) ok(typeof O[k] === 'function', `O.${k}() existe`);
+  for (const k of ['ligar', 'pausar', 'nivel', 'destruir', 'preparar', 'instalar', 'consultar', 'precisaBaixar', 'estadoRemoto']) ok(typeof O[k] === 'function', `O.${k}() existe`);
   ok(O.remoto === true && O.suportado === true && O.ativo === false && O.ouvindo === false, 'começa suportado, parado, remoto');
   ok(O.nivel() === null, 'nivel() é null antes de ligar');
   const semToken = criarOuvidoRemoto({}, null, { aba: ABA, base: BASE, fetch: espiao });

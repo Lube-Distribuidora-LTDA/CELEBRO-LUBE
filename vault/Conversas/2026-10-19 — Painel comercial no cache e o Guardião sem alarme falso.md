@@ -69,14 +69,15 @@ consulta — que nem toca no disco — levava 574 ms. Tudo lento pelo mesmo fato
   reaberta faz a tranca sumir com o processo vivo.
 
 ## Pendências
-- [ ] **Rodar o `INSTALAR TUDO.bat` na `SRV-IA`** (Júlio) — é o que leva a
-  correção de 13/10 e faz a `mv_margem_dia` voltar a se atualizar. Até lá, a
-  página *Margem por item* continua parada em 10/10.
+- [x] **`INSTALAR TUDO.bat` rodado na `SRV-IA` às 10:30** (Júlio). A
+  `mv_margem_dia` foi de 10/10 para **17/10** e a *Margem por item* de outubro
+  voltou ao completo: R$ 7.470.816,94 de venda e R$ 1.513.490,04 de margem em
+  50.409 itens. O aquecimento gravou os dois períodos (286 KB e 308 KB).
 - [ ] **Decidir sobre a instância do Supabase** (Júlio) — pendente desde 14/10.
   O cache protege o painel, mas não cura a lentidão, que também atinge as
   cargas e é o que vem causando os registros perdidos.
-- [ ] Conferir, depois da próxima carga, se o aquecimento gravou (o log passa a
-  dizer "painel guardado (… a …) em Xs — N KB").
+- [x] Aquecimento conferido na carga das 10:30: as duas linhas gravadas, com
+  `carga` de referência 19/10 10:30.
 
 Ver também: [[BI COMERCIAL]], [[GUARDIÃO DA LUBE]], [[Supabase]],
 [[REPOSIÇÕES E CHAMADOS]], [[Registro de mudanças]].
