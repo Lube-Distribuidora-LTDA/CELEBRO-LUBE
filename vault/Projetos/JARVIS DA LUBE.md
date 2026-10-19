@@ -45,9 +45,41 @@ fosse uma pessoa, respeitando quando eu interromper"). Conversa: [[2026-10-15 �
 ## Voz
 - **Voz grátis do Edge** (escolha do Júlio): Microsoft **Antônio** Online (Natural), Francisca ou Thalita
   multilíngue, escolhidas nos Ajustes. São vozes on-line da Microsoft: o texto da resposta passa por elas.
-- O reconhecimento de fala também é o do Edge (na nuvem da Microsoft); não existe pt-BR local.
+- O reconhecimento de fala **não é mais o do Edge** (desde 2026-10-19): o Edge passou a devolver texto vazio. Quem
+  ouve é um Chrome escondido, offline (ver Ouvido).
 - **Não se clona voz de pessoa real**: a voz do Jarvis do filme é de um ator. Fica o jeito do personagem, com uma voz
   pronta.
+
+## Ouvido (desde 2026-10-19)
+- **"Edge fala, Chrome ouve"** (escolha do Júlio): o Jarvis segue no Edge com a voz Antônio; quem transcreve é um
+  **Chrome sem janela** aberto pelo app, com o reconhecimento **offline** do Chrome (`processLocally`). A fala não sai
+  do computador. Por quê: o Edge 155.0.4283.62 (atualizou em 2026-10-18) ouve, mas devolve resultado vazio
+  ([[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]).
+- O app controla o Chrome por **pipe** (`--remote-debugging-pipe`, sem porta aberta), com perfil próprio em
+  `%LOCALAPPDATA%\CerebroLube\ouvido-chrome`. O Chrome só abre quando o microfone liga e fecha junto com o app.
+- Na primeira vez, o Jarvis pede para **baixar o pacote de voz** (pt-BR + en-US, cerca de 300 MB, uma vez; ~650 MB
+  no disco). Só pt-BR não basta: sem o en-US toda sessão termina em `aborted`.
+- Consumo medido: 8,6% de um núcleo ouvindo silêncio, 42% ouvindo fala, 200 a 315 MB de memória.
+- Nos Ajustes: **Ouvido: Chrome (offline) / Edge**. No Edge fica um vigia: depois de 3 resultados vazios, avisa.
+- Use **fone**: o cancelador de eco do Chrome não ouve a voz que sai pelo Edge; o filtro de eco por texto continua.
+
+## Trava do rosto (desde 2026-10-19)
+- **Primeira conversa do dia** (fuso de Brasília): o Jarvis abre a câmera num visor redondo no estilo do HUD
+  (imagem espelhada, anéis, varredura, os 478 pontos do rosto), pede para **piscar** e, se for o Júlio, mostra
+  "IDENTIDADE CONFIRMADA · JÚLIO", e o HUD nasce no centro com a saudação pela hora. Na primeira vez é o **cadastro**
+  (8 amostras com o rosto um pouco virado).
+- Bibliotecas no navegador: **face-api 1.7.15** (descritor de 128 números) + **MediaPipe FaceLandmarker 0.10.14**
+  (pontos e piscar). A comparação é **no servidor** do app (distância euclidiana, limiar 0,45): enquanto não libera, o
+  turno, o "confirmar" de uma ação e o ligar do ouvido respondem 423.
+- 3 falhas travam o rosto por 10 min; o 2º bloqueio do dia vale até a meia-noite, e só o **Windows Hello** libera
+  antes. Cadastrar de novo, cadastrar o Hello e apagar pedem confirmação recente.
+- **Dado biométrico só neste computador**, em `%LOCALAPPDATA%\CerebroLube\rosto\` (fora do repositório, do vault e
+  do OneDrive). Nenhum quadro da câmera é guardado; a câmera desliga ao terminar (e sozinha se não achar rosto em
+  45 s, 60 s no cadastro).
+- Nos Ajustes, **Trava do rosto**: Travar agora, Cadastrar o rosto de novo, Windows Hello e Apagar meu cadastro.
+- **Limite, dito na tela e no README:** é uma trava do Jarvis neste computador, não substitui o login do Windows.
+  Quem tem este computador destravado e uma foto ou vídeo do Júlio poderia passar. Proteção mais forte seria exigir o
+  Windows Hello no "confirmar" do e-mail (não feito: o Júlio ainda não tem PIN do Hello).
 
 ## Ferramentas
 | Ferramenta | App local | Link |
@@ -71,9 +103,11 @@ Travas:
 - **App local:** escuta só em `127.0.0.1`, com um token novo a cada partida e conferência de Host e Origin.
 
 ## Onde fica
-- Código: `Desktop\BI\13. CEREBRO` (Git local, **sem GitHub**): `web/` (painel do robô + `jarvis.js`,
-  `jarvis-hud.js`, `jarvis-link.js`, `fala.js`, `bloqueio.js`), `servidor/` (Node: `servidor.js`, `cerebro.js`,
-  `conversa.js`, `prompts.js`, `ferramentas/`), `docs/JARVIS.md` (especificação e pesquisa), `ENV.example`.
+- Código: `Desktop\BI\13. CEREBRO` (no GitHub `CELEBRO-LUBE` até o commit `62b5520`; o resto espera o repositório
+  ficar privado): `web/` (painel do robô + `jarvis.js`, `jarvis-hud.js`, `jarvis-link.js`, `fala.js`, `bloqueio.js`,
+  `ouvido-remoto.js`, `rosto.js`, `css/rosto.css`, `ouvido.html`), `servidor/` (Node: `servidor.js`, `cerebro.js`,
+  `conversa.js`, `prompts.js`, `ouvido.js`, `rosto.js`, `ferramentas/`), `docs/JARVIS.md` e `docs/OUVIDO-E-ROSTO.md`
+  (especificação e pesquisa), `ENV.example`.
 - `ENV` (credenciais) na raiz da pasta, ao lado do `INICIAR.bat`; o Git ignora. **Quem preenche é o Júlio**; só o
   programa lê.
 - Arquivo único do painel (sem o Jarvis de voz): `dist\Cerebro da Lube.html`, gerado por
@@ -96,11 +130,18 @@ Travas:
 - [ ] Primeiro e-mail de verdade: ler antes; o primeiro envio para a própria `cpd@` — Júlio
 - [ ] Abrir o link no claude.ai e aceitar os consentimentos (Claude, Supabase, Microsoft 365); conferir se o HUD mostra HAIKU — Júlio
 - [ ] Opcional: `ARQUIVOS_RAIZES` só com pastas de documentos (o `P:\` inteiro inclui as pastas do WinThor) — Júlio
-- [ ] Subir o repositório para o GitHub? Hoje é só local — Júlio decide
+- [x] 2026-10-16 — Repositório no GitHub (`CELEBRO-LUBE`); o código novo só sobe quando ele ficar privado ([[2026-10-16 — Backup do cérebro no GitHub]])
+- [ ] Reabrir o app pelo `INICIAR.bat` (o servidor mudou), ligar o microfone e **baixar o pacote de voz** (cerca de 300 MB, uma vez) — Júlio
+- [ ] **Cadastrar o rosto** (aparece sozinho na primeira abertura): sozinho na frente da câmera, com boa luz; depois, em dias diferentes, conferir no `?debug` a distância dele para ele mesmo (meta até 0,35) — Júlio
+- [ ] **Criar o PIN do Windows Hello** (Configurações › Contas › Opções de entrada; hoje não existe) e cadastrar o Hello nos Ajustes do Jarvis. Sem ele não há reserva: 3 falhas travam o rosto por 10 min — Júlio
+- [ ] Conferir no uso real: microfone com a voz dele, eco com alto-falante, tempo até a primeira palavra, piscar com óculos e pouca luz — Júlio
+- [ ] Copiar face-api, MediaPipe, SimpleWebAuthn e os modelos para `web/vendor/` com hash conferido (hoje vêm do jsdelivr, sem SRI) — Claude, quando o Júlio quiser
+- [ ] Opcional: apagar `%LOCALAPPDATA%\CerebroLube\ouvido-chrome-teste` (646 MB, perfil só dos testes) se precisar do espaço; os testes baixam de novo — Júlio
 
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-19** — **Ouvido pelo Chrome escondido e trava do rosto** (Júlio pediu, Claude fez com um fluxo de 9 agentes: pesquisa, 4 construtores, integração, 2 revisões com 18 achados, correção). O Edge parou de transcrever (resultado vazio); um Chrome sem janela, por pipe, ouve offline. Na primeira conversa do dia o rosto é conferido no servidor (face-api + MediaPipe, limiar 0,45, piscar), com o Windows Hello de reserva; o turno, o confirmar e o ligar do ouvido dão 423 até liberar. CSP nova na página do app. Testes: geral 128/128, cérebro 37/37, rosto 168/168, ouvido 81/81, ouvido remoto 159/159, integração 49/49 (rodados de novo pelo Claude principal). Commits `599ee6b` e `efa3459` (local; nada subiu, o repositório segue público). O link do claude.ai continua na versão 8 (ouvido e rosto só existem no app local) · [[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]
 - **2026-10-15** — **E-mail no `ENV`** (Júlio pediu "me passe esses valores", Claude fez): os 11 campos `IMAP_*` e `SMTP_*` vieram do `Desktop\BI\5. GESTÃO TI\.env.local` por um script que só preenche linhas vazias, confere que o resto do arquivo ficou igual e que o Jarvis lê o mesmo valor que a Vercel usa; as senhas não foram mostradas. Valores que não são segredo: `email-ssl.com.br`, IMAP 993, SMTP 465 com TLS, usuário `cpd@lube.com.br`, pasta `INBOX`, nome "TI - Lube Distribuidora". O Jarvis passa a ler: cérebro Claude, banco, leitura e envio de e-mail · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]
 - **2026-10-15** — Link: o trecho da busca do SharePoint vinha com as marcas de destaque (`<c0>`, `<ddd/>`) e seria lido em voz alta; limpo (Claude, visto numa chamada real) — commit `8b96b9a` · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]
 - **2026-10-15** — **Publicado na versão 8 do painel do cérebro** (artifact, runtime `0.2.80`): conectores Supabase (`execute_sql`) e Microsoft 365 (`sharepoint_search`, `sharepoint_folder_search`, `read_resource`) e o Claude do claude.ai (`sample`) (Claude) · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]

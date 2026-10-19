@@ -2,7 +2,7 @@
 tipo: conversa
 data: 2026-10-19
 projeto: "[[JARVIS DA LUBE]]"
-status: em andamento
+status: resumido
 tags: [conversa, jarvis, voz, edge, chrome, rosto, seguranca]
 ---
 # 2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto
@@ -52,6 +52,29 @@ câmera, faz um reconhecimento do meu rosto e animação, e aí ele libera o sis
   computador: nada subiu, o repositório segue público). Corrigido no commit `2265523`: o backup agora registra **só a
   pasta `vault/`** e avisa o que ficou fora.
 
+## O que foi construído
+Fluxo de 9 agentes (pesquisa, 4 construtores em arquivos separados, integração, 2 revisões, correção), sem erro.
+Detalhes em [[JARVIS DA LUBE]] (seções Ouvido e Trava do rosto).
+- **Ouvido:** Chrome sem janela, controlado por pipe, perfil em `%LOCALAPPDATA%\CerebroLube\ouvido-chrome`;
+  reconhece offline; só abre com o microfone ligado. Achado da pesquisa: o pacote pt-BR sozinho não funciona
+  (`aborted`, "Unable to find SODA files"); precisa de pt-BR + en-US, cerca de 300 MB.
+- **Trava do rosto:** face-api 1.7.15 (descritor) + MediaPipe FaceLandmarker 0.10.14 (pontos e piscar); comparação no
+  servidor (limiar 0,45); 423 no turno, no confirmar e no ligar do ouvido até liberar; Windows Hello de reserva. O
+  Human 3.3.6 ficou de fora: confundia pessoas diferentes e era 9 vezes mais lento.
+- **Revisões:** 18 achados (2 graves: o simulador do rosto funcionava no app de verdade, e a câmera ficava ligada sem
+  prazo quando não havia rosto); 17 corrigidos, 1 era sobra de teste.
+- **Testes, rodados de novo pelo Claude principal:** geral 128/128, cérebro 37/37, rosto 168/168, ouvido 81/81 (com o
+  Chrome de verdade transcrevendo a frase gravada), ouvido remoto 159/159, integração 49/49. Nenhum Chrome de teste
+  sobrou; a pasta real do rosto nunca foi criada pelos testes.
+- Commits `599ee6b` e `efa3459` (local). O link do claude.ai continua na versão 8: ouvido e rosto só existem no app.
+- O Júlio **não tem PIN do Windows Hello** nesta conta (`NgcSet: NO`), então a reserva só funciona depois de criar.
+- O pesquisador abriu o microfone real duas vezes por 0,2 s, só para ver se o Chrome sem janela enxerga o microfone;
+  nada foi gravado nem transcrito.
+
 ## Pendências
-- [ ] Construção do ouvido no Chrome e do desbloqueio pelo rosto (fluxo de agentes retomado) — Claude
-- [ ] Mudar o `CELEBRO-LUBE` para privado — Júlio
+- [x] Construção do ouvido no Chrome e da trava do rosto — Claude
+- [ ] Reabrir pelo `INICIAR.bat`, ligar o microfone e baixar o pacote de voz (cerca de 300 MB, uma vez) — Júlio
+- [ ] Cadastrar o rosto (aparece sozinho), com boa luz — Júlio
+- [ ] Criar o PIN do Windows Hello e cadastrar o Hello nos Ajustes do Jarvis — Júlio
+- [ ] Mudar o `CELEBRO-LUBE` para privado (aí o código novo e o vault sobem) — Júlio
+- [ ] Decidir se o "confirmar" do e-mail passa a exigir o Windows Hello (proteção de verdade contra quem tiver uma foto) — Júlio

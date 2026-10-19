@@ -138,7 +138,11 @@ tags: [tag1, tag2]
   HUD com transição (botão Jarvis ou Ctrl+J). Completo só no **app local** (`Desktop\BI\13. CEREBRO\INICIAR.bat`,
   `127.0.0.1:8790`): cérebro, saúde, banco só de leitura, e-mail `cpd@` (envio só com confirmação na tela), arquivos e
   internet. No link, só texto (cérebro, saúde e arquivos do OneDrive). `ENV` preenchido em 2026-10-15 (o e-mail veio
-  do `.env.local` do Gestão TI, sem mostrar a senha). **Falta o Júlio:** testar a voz no Edge.
+  do `.env.local` do Gestão TI, sem mostrar a senha). **Desde 2026-10-19 o Edge só fala:** o reconhecimento do Edge
+  passou a devolver texto vazio, e quem ouve é um **Chrome sem janela**, offline (pacote de voz de ~300 MB, uma vez).
+  Na **primeira conversa do dia** o Jarvis confere o **rosto** do Júlio (câmera com animação, piscar; comparação no
+  servidor; Windows Hello de reserva); dado biométrico só em `%LOCALAPPDATA%\CerebroLube\rosto\`. **Falta o Júlio:**
+  baixar o pacote de voz, cadastrar o rosto e criar o PIN do Windows Hello (hoje não tem).
 - **Vídeo do Workshop Lube:** [[VÍDEO WORKSHOP LUBE]] (2026-10-01): as 23 logos de fornecedores
   sobre mármore branco, com abertura e encerramento da Lube. Em 2026-10-09 a pasta do projeto já não estava na Área
   de Trabalho; ver a nota antes de refazer.
