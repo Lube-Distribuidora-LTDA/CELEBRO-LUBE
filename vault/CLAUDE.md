@@ -101,6 +101,13 @@ tags: [tag1, tag2]
   do recebimento, a linha da nota no PCMOV registra (`QTBLOQUEADA`), provado contra a foto diária do estoque (`PCHISTEST`); tela
   "Recebimento e devoluções" com o tempo de armazenagem; commit `cf65b78` no ar. **Pacote com formato novo só junto com a tela
   publicada** (o painel está na Vercel, deploy a cada push).
+- **Fiscal (tributação e preço por região):** [[GESTÃO FISCAL]] (2026-10-20): "Código | Descrição | Região sem tributação |
+  Região sem preço de venda" da rotina **201** (`PCTABPR`: preço de venda e `CODST` por região; a `PCTABTRIB` é a tributação por UF,
+  **desligada** no WinThor). Só as **16 regiões** que o Júlio pediu (18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40, 41, 42, 43, 45, 46;
+  `ENV` `FISCAL_REGIOES`; a região 1 ficou fora — perguntado) × produtos de revenda não excluídos. Schema `fiscal`, carga
+  [[Fiscal - Sync]] com instalador em `P:\INTEGRAÇÃO BI\FISCAL` (**ainda não agendada**), conferida contra a PCTABPR em toda carga;
+  painel de 4 telas **só local** (`Desktop\BI\17. FISCAL\INICIAR.bat`, porta 3103): **falta o Júlio** criar o repositório no GitHub
+  e cadastrar as `SUPABASE_DB_*` na Vercel.
 - **Folha de pagamento:** [[SISTEMA FINANCEIRO]] (no ar desde 2026-09-25, `gestao-finaceiro.vercel.app`): Validação de
   Folha das cinco empresas (LUBE, LUBE RJ, L LOG, IMPÉRIO LOG, SERMAR) no schema `financeiro` do DATA WAREHOUSE. A
   folha entra em PDF do DP e só grava se bater com o resumo impresso. Rotina: [[Validação mensal da folha]].

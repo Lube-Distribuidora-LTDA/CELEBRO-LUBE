@@ -24,6 +24,7 @@ pediu ou decidiu está marcado "(Júlio)"; o que o Claude escolheu sozinho, "(Cl
 - **GESTÃO COMERCIAL TRADE** — [[GESTÃO COMERCIAL TRADE]] (o Power BI "final" recriado; dados no DATA WAREHOUSE, painel só na máquina; carga em [[Trade - Sync]])
 - **REPOSIÇÕES** — [[REPOSIÇÕES E CHAMADOS]]
 - **MOVIMENTAÇÃO DE INVENTÁRIO** — [[MOVIMENTAÇÃO DE INVENTÁRIO]] (rotinas 266 e 1147; carga em [[Inventário - Sync]])
+- **GESTÃO FISCAL** — [[GESTÃO FISCAL]] (tributação e preço de venda por região, rotina 201; carga em [[Fiscal - Sync]])
 - **GESTÃO TI** — [[GESTÃO TI]]
 - **FINANCEIRO** — [[SISTEMA FINANCEIRO]] e [[GESTÃO FINANCEIRO — documentação técnica]]
 - **BI RH** — [[BI ABSENTEÍSMO RH]]
@@ -38,6 +39,7 @@ Banco **DATA WAREHOUSE**: cada mudança fica no sistema dono do schema (ver [[da
 ## Por data
 
 ### 2026-10-20
+- **GESTÃO FISCAL** — **Sistema criado** (Júlio pediu, Claude fez): "Código | Descrição | Região sem tributação | Região sem preço de venda" da rotina 201 (`PCTABPR`: preço e `CODST` por região; a `PCTABTRIB` do pedido é a tributação por UF, **desligada** no WinThor). Schema `fiscal` no DATA WAREHOUSE (migrações `fiscal_01_schema`, `fiscal_02_situacao_e_funcao` e `fiscal_03_regioes_escolhidas` — **só as 16 regiões que o Júlio pediu**: 18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40, 41, 42, 43, 45 e 46; a região 1 ficou fora da lista, perguntado), ETL de 5 consultas com **conferência × PCTABPR na mesma transação de leitura do Oracle** (igual nas 50 regiões e depois nas 16), `P:\INTEGRAÇÃO BI\FISCAL` com instalador (**não instalado**; tarefa `Fiscal - Sync` aos :15), painel de 4 telas (**só local**, porta 3103) que abre com a cópia guardada; commits locais `680f2d5`, `3e28128`, `5e39a30`; `.claude/launch.json` ganha `fiscal`. Achado: região 27 com 2.280 produtos com preço e sem tributação · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **MOVIMENTAÇÃO DE INVENTÁRIO** — **1ª carga agendada** (11:05, pela tarefa na `SRV-IA`): 10 de 10 `OK`, fim 11:23. **Achado (sem mudança):** o banco DATA WAREHOUSE passou a manhã sobrecarregado e o pg_cron do Guardião falha com "job startup timeout" — os 12 sites estão "sem checagem desde 10:30" sem alarmar · [[GUARDIÃO DA LUBE]]
 - **GUARDIÃO / MOVIMENTAÇÃO DE INVENTÁRIO** — **Inventário no Guardião** (Júlio pediu, Claude fez, 10:27): migração `saude_v1_inventario` (`db/09_inventario.sql`, commit `977ae31`): as três funções de carga aceitam o schema `inventario` (só a lista trocada, na definição do banco; md5 conferido), catálogo com `rotina:inventario-sync`, `tarefa:Inventario - Sync` e `site:movimentacao-inventario` (45 alvos). Às 10:30 o vigia viu a tarefa na `SRV-IA` e o site respondeu; a rotina começa a ser cobrada na carga das 11:05 · [[GUARDIÃO DA LUBE]]
 - **MOVIMENTAÇÃO DE INVENTÁRIO** — **Agendado na `SRV-IA`** (Júlio rodou o `INSTALAR TUDO.bat`, ~10:03; tarefa `Inventario - Sync`, 8 horários): a carga disparada pelo instalador terminou 10:20 com 10 passos `OK`, pacote `20261020-101950` · [[Inventário - Sync]]

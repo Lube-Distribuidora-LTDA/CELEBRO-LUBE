@@ -526,6 +526,11 @@ reinício. O "checkpoint com `write=266 s`" que parece alarmante é normal. Rece
 
 ## Registro de mudanças
 
+- **2026-10-20** — Schema `fiscal` ([[GESTÃO FISCAL]]): a conferência da carga roda **na mesma transação de leitura do Oracle** que
+  extraiu os dados (`SET TRANSACTION READ ONLY` no começo do sync; `rollback` no fim), para tabela que muda o dia inteiro (a `PCTABPR`
+  da 201) não gerar diferença falsa; o recorte do universo (regiões escolhidas) fica no `ENV` **e** no banco (`regiao.no_painel`), para a
+  regra (`vw_situacao`) e o pacote não dependerem do ETL; e o navegador abre com a cópia do IndexedDB e só confere a versão por trás
+  (item 4 da seção 8b) · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **2026-10-14** — Schema `trade` ([[GESTÃO COMERCIAL TRADE]]): primeiro que guarda um **pacote** (arquivo colunar comprimido,
   em pedaços de 4 MB numa tabela `bytea`, com ponteiro de versão trocado numa transação) em vez de um fato linha a linha, porque
   o consumidor precisa da base inteira em memória. Também novos neste padrão: o ETL **confere antes de publicar** (recusa carga

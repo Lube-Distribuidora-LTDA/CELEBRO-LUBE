@@ -171,6 +171,21 @@ ficou de padrão (escolhas do Claude, a confirmar com o uso):
 - **Base de percentual é o todo, não o recorte do numerador** (o "% do estoque bloqueado" saiu com 27% em vez de 14% até a base
   passar a ser o estoque inteiro). Erro do Claude, achado na conferência da tela contra o banco — que fica sendo passo obrigatório.
 
+## Acrescentado em 2026-10-20 ([[GESTÃO FISCAL]])
+Pedido do Júlio: o BI do Fiscal "na mesma pegada dos últimos que fizemos com informações claras e filtros personalizados", e no meio
+do caminho "eu preciso de apenas algumas regiões". O que ficou de padrão (escolhas do Claude, a confirmar com o uso):
+- **Quando o pedido cita rotina ou tabela que não bate com o WinThor, o painel segue o WinThor e a nota diz por quê.** O pedido dizia
+  "203 (pcclient)" e "201 (pctabtrib)": a 203 é o produto, e a tributação que vale é o `CODST` da `PCTABPR` (a por UF está desligada).
+- **Lista de regiões (ou de qualquer código curto) vira chip**: o número no chip, o nome na dica, a cor da situação, e o clique abre o
+  relatório daquele item. No Excel vai o texto por extenso ("18 Espírito Santo - MEI; 23 ...").
+- **Lista de pendências começa pelo que mais importa para o negócio** (o que mais vende), não pela maior contagem: por contagem, o
+  topo era cesta de Natal e item de consumo sem preço em lugar nenhum.
+- **A carga se confere na mesma foto da origem.** Tabela que muda o dia inteiro (a 201) se extrai e se confere numa transação só de
+  leitura do Oracle (`SET TRANSACTION READ ONLY`): sem isso, um preço mudado no meio da carga vira diferença que não existe (alarme falso).
+- **O painel abre com a cópia guardada e confere a versão por trás** (seção 8b do [[data-warehouse]], levada ao pé da letra): com o banco
+  lento, o `/api/versao` levou 20 s, e a pessoa ficava olhando o caminhão. Carga nova é baixada por trás e o botão Atualizar acende.
+  _O [[MOVIMENTAÇÃO DE INVENTÁRIO]] ainda espera o `/api/versao` ao abrir._
+
 ## Exportação (2026-09-29)
 **Planilha que sai do painel é `.xlsx` formatado, não CSV.** O CSV chega do outro lado como texto:
 número em coluna de texto, sem filtro, sem identidade, e quem recebe refaz o trabalho. O padrão,

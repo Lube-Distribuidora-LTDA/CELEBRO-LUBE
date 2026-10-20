@@ -6,14 +6,18 @@ tags: [winthor, glossario, conceito]
 ---
 # Glossário WinThor
 
-Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise do BI COMPRAS ([[BI COMPRAS — documentação técnica]]) e completado com o [[BI COMERCIAL]], o [[SAC]], o [[REPOSIÇÕES E CHAMADOS]] e o [[PAINEL ICMS]].
+Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise do BI COMPRAS ([[BI COMPRAS — documentação técnica]]) e completado com o [[BI COMERCIAL]], o [[SAC]], o [[REPOSIÇÕES E CHAMADOS]], o [[PAINEL ICMS]], o [[MOVIMENTAÇÃO DE INVENTÁRIO]] e o [[GESTÃO FISCAL]].
 
 | Tabela | Conteúdo | Campos mais usados |
 |---|---|---|
-| `PCPRODUT` | Cadastro de produtos | `CODPROD`, `DESCRICAO`, `CODFORNEC`, `QTUNIT`, `QTUNITCX`, `UNIDADE`, `UNIDADEMASTER`, `CODAUXILIAR` (EAN), `CODAUXILIAR2` (DUN), `CODSEC`, `CODEPTO`, `OBS2`, `REVENDA`, `DTEXCLUSAO` |
+| `PCPRODUT` | Cadastro de produtos (rotina **203**) | `CODPROD`, `DESCRICAO`, `CODFORNEC`, `QTUNIT`, `QTUNITCX`, `UNIDADE`, `UNIDADEMASTER`, `CODAUXILIAR` (EAN), `CODAUXILIAR2` (DUN), `CODSEC`, `CODEPTO`, `OBS2`, `REVENDA` (`N` = uso e consumo), `NBM` (NCM), `DTCADASTRO`, `DTEXCLUSAO` |
 | `PCEST` | Estoque por produto e filial | `QTESTGER`, `QTRESERV`, `QTBLOQUEADA`, `QTINDENIZ`, `QTGIRODIA`, `VALORULTENT`, `QTVENDMES1/2/3`, `CODFILIAL` |
 | `PCMOV` | Movimentação (itens faturados) | `CODPROD`, `QT`, `CODOPER` (`S` = saída, `ED` = devolução de cliente, `SB` = saída bonificada), `DTMOV`, `DTCANCEL`, `CODFILIAL`, `CODUSUR`, `CODCLI`, `PUNIT`, `PUNITCONT` (preço contábil), `ST`, `VLOUTROS`, `CUSTOFIN` (CMV), `PBONIFIC`, `NUMTRANSVENDA`, `NUMTRANSENT`, `NUMNOTADEV`, `CODFISCAL` |
-| `PCTABPR` | Tabela de preços por região | `PVENDA`, `PTABELA4`, `VLST`, `NUMREGIAO` |
+| `PCTABPR` | Tabela de preços por região — é o que a rotina **201** (Precificar Produto) grava: uma linha por produto × região | `CODPROD`, `NUMREGIAO`, `PVENDA` (preço de venda), `PTABELA`, `PTABELA4`, `VLST`, **`CODST`** (a **tributação de saída da região**, aponta para a `PCTRIBUT`; é a coluna "Tributação" da 201), `DTULTALTPVENDA`, `ROTINA` (quem alterou: 201, 552, 507), `EXCLUIDO`. Usada pelo [[GESTÃO FISCAL]] |
+| `PCTABTRIB` | Tributação **por UF** (filial da NF × UF de destino) | `CODPROD`, `CODFILIALNF`, `UFDESTINO`, `CODST`, `CODTRIBPISCOFINS`. **Desligada na Lube** (`PCPARAMFILIAL.CON_USATRIBUTACAOPORUF = 'N'`, `PCCONSUM.USATRIBUTACAOPORUF = 'N'`, 2026-10-20): só filial 1 × ES, uma linha por produto, quase toda CODST 0 — a tributação que vale é a da `PCTABPR` |
+| `PCTRIBUT` | Tipos de tributação (rotina **514**) — 798 códigos | `CODST`, `MENSAGEM`, `OBS`, `SITTRIBUT` (CST), `CODICM` (alíquota de ICMS), `CODICMTAB`, `IVA`, `PERCBASERED`, `CODFISCAL` / `CODFISCALINTER` (CFOP) |
+| `PCREGIAO` | Regiões de preço (50) | `NUMREGIAO`, `REGIAO`, `UF`, `CODFILIAL` (99 = todas), `STATUS` (A/I; nulo = ativa) |
+| `PCPRACA` | Praças | `CODPRACA`, `NUMREGIAO` — a região do cliente que não tem região própria |
 | `PCPRECOPROM` | Preço promocional | `PRECOFIXO`, `DTFIMVIGENCIA`, `NUMREGIAO`, `CODFILIAL`, `CODCLI` |
 | `PCFORNEC` | Fornecedores | `CODFORNEC`, `FORNECEDOR`, `CODFORNECPRINC`, `CODCOMPRADOR` |
 | `PCEMPR` | Funcionários (compradores) | `MATRICULA`, `NOME` |
@@ -23,7 +27,7 @@ Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise 
 | `PCCONTA` | Plano de contas | `CODCONTA`, `CONTA` |
 | `PCPEDC` / `PCPEDI` | Pedido de **venda** (capa / itens) | `NUMPED`, `DATA`, `CODCLI`, `CONDVENDA`, `POSICAO`, `CODFILIAL`, `CODUSUR`, `QT`, `PVENDA`, `ST`, `VLCUSTOFIN` |
 | `PCPEDIDO` / `PCITEM` | Pedido de **compra** (capa / itens) | `NUMPED`, `QTPEDIDA`, `QTENTREGUE` |
-| `PCCLIENT` / `PCCIDADE` | Clientes e cidades | `CODCLI`, `CODCIDADE`, `UF` |
+| `PCCLIENT` / `PCCIDADE` | Clientes e cidades (cliente = rotina **302**) | `CODCLI`, `CODCIDADE`, `UF`, `CODPRACA`, **`NUMREGIAOCLI`** (região própria do cliente; vazia = a da praça), `DTEXCLUSAO`, `BLOQUEIO`, `DTULTCOMP` |
 | `PCUSUARI` / `PCSUPERV` | RCAs e supervisores | `CODUSUR`, `CODSUPERVISOR`, `NOME`, `CODEQUIPE`; no `PCUSUARI`, desde 2026-10-07, também `EMAIL`, `EMAIL2` (o ETL apara os espaços das pontas), `BLOQUEIO` (S/N) e `DTTERMINO` (preenchida = RCA desligado) — vão para `core.dim_rca` e são usados pelo [[SAC]] |
 | `PCSECAO` / `PCDEPTO` | Seção e departamento | `CODSEC`, `CODEPTO`, `DESCRICAO` |
 | `PCUNIDADE` | Unidades de medida | `UNIDADE`, `DESCRICAO` |
@@ -63,11 +67,15 @@ Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise 
   na **266**, devolução de cliente (1303/1346/1361) e o **recebimento de compra (1301) — este sem registro no livro**; sai pelo
   desbloqueio da 266 (inclusive o "Conferido pelo recebimento" das filiais sem WMS) e pela liberação do **WMS da Kaizen** depois
   da armazenagem. A **1316** (cancelar devolução) estorna a entrada sem mexer no bloqueado. Ver [[MOVIMENTAÇÃO DE INVENTÁRIO]].
+- **Tributação e preço por região:** a **201** (Precificar Produto) grava preço de venda e tributação de saída (`CODST`) na
+  `PCTABPR`, região a região; a **574** (Cadastrar Tributação nos Produtos) e a **271** também mexem na tributação; a **514**
+  cadastra os tipos (`PCTRIBUT`). "Região sem tributação" = CODST vazio; "sem preço" = `PVENDA` zero ou vazio. Ver [[GESTÃO FISCAL]].
 - **Rotinas de inventário:** **1147** manutenção do inventário rotativo (lança EI/SI no estoque gerencial); **1188** atualização
   contábil de inventários (EI/SI no contábil); **1148** inventário de número de série; **266** bloquear produtos no estoque;
   **1182** gestão de avarias.
 - **Chamado** = manifestação do SAC em `PCMANIF`; o **motivo** é o `ASSUNTO`. Rotinas personalizadas do módulo 8000 (`PCSIS800`): **8351** Histórico de Reposição, **8352** Pedido de Reposição, **8353** Relatório Geral de Chamados.
 
 ## Registro de mudanças
+- **2026-10-20** — Entraram `PCTABTRIB`, `PCTRIBUT`, `PCREGIAO`, `PCPRACA`, o `CODST` da `PCTABPR`, o `NUMREGIAOCLI` do `PCCLIENT`, o `NBM` do `PCPRODUT` e as rotinas 201/203/302/514/574 (do [[GESTÃO FISCAL]]).
 - **2026-10-19** — Entraram `PCLOGDESBLOQUEIO`, `PCINVENTROT`, `PCLOGATUALIZAINVENT`, `PCEMPR`, `PCFILIAL`, `PCLOGESTOQUE`, o conceito de estoque bloqueado e as rotinas de inventário (do [[MOVIMENTAÇÃO DE INVENTÁRIO]]).
 - **2026-10-09** — Entraram `PCNFBASEENT`, `PCNFBASESAID`, `PCCFO` e o termo "ICMS de entrada/saída" (do [[PAINEL ICMS]]), `PCPRODFILIAL` (da [[Abertura de margem]]) e os campos de e-mail e situação do `PCUSUARI` (do [[SAC]]). Compilado do Git e das sessões.
