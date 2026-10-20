@@ -44,6 +44,12 @@
       "port": 3102
     },
     {
+      "name": "fiscal",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\gti.julio.alves\\Desktop\\BI\\17. FISCAL\\web\\servidor_local.js"],
+      "port": 3103
+    },
+    {
       "name": "rosto-teste",
       "runtimeExecutable": "node",
       "runtimeArgs": ["C:\\Users\\GTIJUL~1.ALV\\AppData\\Local\\Temp\\claude\\C--Users-gti-julio-alves-OneDrive---Lube-CEREBRO-DA-LUBE\\039b4773-f12f-401f-9e60-debd67483968\\scratchpad\\rosto-teste\\servidor-teste.mjs"],

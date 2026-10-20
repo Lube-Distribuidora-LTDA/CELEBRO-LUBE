@@ -282,6 +282,12 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
   sozinho) — Claude
 - [x] Pôr o [[Trade - Sync]] no catálogo — feito em 2026-10-19, pedido do Júlio (migração `saude_v1_trade`)
 - [x] Pôr o [[Inventário - Sync]] no catálogo — feito em 2026-10-20, pedido do Júlio (migração `saude_v1_inventario`)
+- [ ] **Banco sobrecarregado deixa o Guardião cego** (achado em 2026-10-20 11:25, sem causa ainda): os jobs `saude-guardiao` e
+  `saude-verificar` do pg_cron falham com **"job startup timeout"** quase toda rodada (pelo menos de 08:25 a 11:25, menos 10:30 e
+  11:20); sem a função `guardiao`, os **12 sites** ficaram "sem checagem desde 10:30" — status `sem_dado`, que **não alarma**. No
+  mesmo período: 189 "canceling statement due to statement timeout" (06:46–11:26), conexões do MCP caindo por timeout, cargas lentas
+  (Inventário 17–18 min contra 31 s; Comercial rápidas 17 min 44 s) e uma consulta de `pg_stat_statements` de 15–17 s a cada poucos minutos.
+  Investigar a causa e fazer "função guardiao parada" virar alarme. Nada disso veio da migração do Inventário (as falhas começaram antes).
 - [ ] Decidir: o vigia da VM vigiar o próprio Guardião — Júlio
 - [ ] Remoto no GitHub para `Desktop\BI\12. GUARDIAO` (hoje só git local) — Júlio decide
 

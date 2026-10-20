@@ -43,6 +43,10 @@ produto 212 s, recebimento 147 s (55.588), livro 440 s (201.188), conferência 1
 `20261020-101950`). Foi a carga que o `INSTALAR TUDO.bat` dispara ao criar a tarefa (o Júlio confirmou; o vigia viu
 "última execução hoje 10:03, sem erro").
 
+**2026-10-20, 11:05 — 1ª carga pela tarefa agendada:** 10 de 10 `OK`, terminou 11:23:20 (~18 min; produto 147 s, recebimento
+132 s, livro 545 s, pacote 210 s, versão `20261020-112227`). O vigia viu "rodando agora (começou hoje 11:05)" e o Guardião, às 11:20,
+"em andamento: 9 de 10". O banco estava sobrecarregado a manhã toda (ver [[GUARDIÃO DA LUBE]], 2026-10-20).
+
 **Vigia:** no [[GUARDIÃO DA LUBE]] desde 2026-10-20 10:27 (migração `saude_v1_inventario`): `rotina:inventario-sync` (10 consultas,
 tolerância 10 min para começar, limite 25 min de duração, tranca `carga:inventario:carga`), `tarefa:Inventario - Sync` (vigia
 da VM) e `site:movimentacao-inventario`. AVISO na `conferencia_1147` vira atenção com o motivo.

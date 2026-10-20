@@ -48,6 +48,11 @@ e site") e o Claude aplicou a migração `saude_v1_inventario`, trocando só a l
 08, que desfez a correção de outra conversa). Às 10:30 o vigia da `SRV-IA` viu a tarefa e o site respondeu; a rotina passa a ser
 cobrada a partir da carga das 11:05.
 
+A carga das 11:05 rodou sozinha pela tarefa (10 de 10 `OK`, fim 11:23). Ao conferir, o Claude achou que o próprio Guardião está
+cego desde cedo: os jobs do pg_cron falham com "job startup timeout" (banco sobrecarregado, com 189 statement timeouts na manhã), e
+os 12 sites ficaram "sem checagem desde 10:30" sem alarme. Não veio da migração (as falhas começaram antes); ficou como pendência
+no [[GUARDIÃO DA LUBE]] e proposta de sessão separada.
+
 ## Decisões
 - 2026-10-19 (Claude): schema `inventario`, filiais 1/7/10/11/12, histórico desde 2025-01-01, valor ao custo financeiro de hoje,
   movimento ≥ 1 milhão de unidades fora das somas com aviso, sem KPI de "saldo do período" (o recebimento não aparece no livro),
