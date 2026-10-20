@@ -31,8 +31,13 @@ echo   Preencha o ENV, salve, feche o Bloco de Notas e aperte uma tecla para con
 pause >nul
 :env_ok
 
-if not exist "%~dp0servidor\node_modules" (
-  echo   Primeira vez neste computador: instalando as bibliotecas do servidor...
+rem --- bibliotecas: na primeira vez, e quando faltar uma das novas (a planilha e o construtor, 2026-10-20)
+set "INSTALAR="
+if not exist "%~dp0servidor\node_modules" set "INSTALAR=1"
+if not exist "%~dp0servidor\node_modules\exceljs" set "INSTALAR=1"
+if not exist "%~dp0servidor\node_modules\@anthropic-ai\claude-agent-sdk" set "INSTALAR=1"
+if defined INSTALAR (
+  echo   Instalando as bibliotecas do servidor (a primeira vez leva alguns minutos^)...
   pushd "%~dp0servidor"
   call npm install --omit=dev --no-audit --no-fund
   popd

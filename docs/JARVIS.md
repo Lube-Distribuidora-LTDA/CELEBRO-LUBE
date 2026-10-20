@@ -22,7 +22,9 @@ Limites que valem desde já (dizer na tela e na resposta final):
 - **O claude.ai não libera microfone** para páginas publicadas: voz só no app local.
 - **O Edge manda o áudio para o serviço de fala da Microsoft** para transcrever (Web Speech API). Dizer isso na tela de
   ligar o microfone. O microfone só fica aberto no modo Jarvis, com indicador visível. (Desde 2026-10-19, no app do
-  computador quem ouve é um Chrome escondido, sem internet, e a primeira conversa do dia passa pela trava do rosto: §10.)
+  computador quem ouve é um Chrome escondido, sem internet, e a primeira conversa do dia passa pela trava do rosto: §10.
+  Desde 2026-10-20 ele também FAZ: pasta própria, planilha, sites com print, câmera "Ver você", construtor de sites e
+  BIs, e aprovação por voz: §11 e `docs/JARVIS-ACOES.md`.)
 
 Vale tudo de `docs/CONTRATO.md`, `ROTINAS.md`, `MAOS.md`, `GUARDIAO.md` (tokens, fontes, CSP do artifact, ids,
 reduced motion, 400 px, português claro, segredos nunca em código/nota/log).
@@ -675,3 +677,137 @@ SIGHUP); se o Node morre à força, o pipe fecha e ele sai sozinho.
 ajustes, o ouvido do Chrome levando a fala do `.wav` à legenda "VOCÊ", a oferta do pacote e a regressão do painel).
 **Falta no PC do Júlio** (`OUVIDO-E-ROSTO.md` §10): o microfone de verdade com a voz dele, o eco com alto-falante, a
 câmera de verdade (distância dele para ele mesmo, o piscar com óculos e pouca luz) e o PIN do Windows Hello.
+
+---------------------------------------------------------------------------------------------------
+## 11. O Jarvis que faz (agente INTEGRADOR, 2026-10-20)
+
+Pedido do Júlio (2026-10-20): "quero que ele seja literalmente um sistema nativo, execute muito mais" — câmera, sites com
+print e cartão, anotações, pastas, planilhas, BI, site, "tudo", e executar pela voz. A especificação inteira (decisões,
+provas, contrato das quatro partes, textos) está em **`docs/JARVIS-ACOES.md`**; aqui fica só o que a integração ligou.
+
+- **Ferramentas novas (21), no Haiku e no Sonnet**, em ordem fixa no `BASE` do `servidor/ferramentas/index.js`: a pasta
+  do Jarvis (`anotar`, `alterar_texto`, `listar_pasta`, `criar_pasta`, `criar_arquivo`, `copiar_para_jarvis`, `mover`,
+  `renomear`, `apagar`, `abrir_no_windows`), `criar_planilha`, o navegador (`abrir_site`, `print_site`, `seguir_link`,
+  `preencher_formulario`), o construtor (`construir`, `ver_construcao`, `parar_construcao`, `listar_projetos`) e a
+  câmera (`camera`, `olhar_camera`). O `executarFerramenta` respeita o `prazoMs` de cada uma e passa os `blocos` (a
+  imagem); com eles o `tool_result` vira uma lista (texto + imagem). No histórico, a imagem vira
+  `[imagem enviada neste ponto; não fica guardada]` (`conversa.js`).
+- **Onde ele escreve:** só em `OneDrive - Lube\JARVIS` (`JARVIS_PASTA` no ENV muda). Ler continua como antes.
+- **Ação pendente generalizada** (`servidor/acoes.js`): tipos `enviar_email`, `mover`, `renomear`, `apagar`, `alterar`,
+  `formulario`, `construir`, `navegar`; **uma por vez, de qualquer tipo** (a nova troca a velha); `decidir(id, decisao,
+  motivo, via)` devolve o `cartao` do `executar()`; `ouvir()` alimenta o canal `/api/jarvis/eventos` (nova, trocada,
+  decidida, expirou); o aviso da próxima fala diz como foi ("O Júlio aprovou por voz às 15:02 a ação…"). O log diz só o
+  tipo, a via e o tamanho.
+- **Aprovação por voz** (`web/js/jarvis.js` com as listas do `web/js/jarvis-acoes.js`): o `respostaDeVoz` no lugar das
+  listas antigas; "aprovado" só pela fala inteira, com o cartão na tela há 1,5 s, a fala começando com o Jarvis calado
+  há 1,5 s e o silêncio depois (1,2 s; 1,8 s para palavra única); "sim/pode/isso" sozinhos só antes de a conversa andar;
+  recusar vale sempre (até no fim de uma fala com eco). Botão **Aprovar** / **Cancelar**; dica "Diga “aprovado” ou
+  “cancela”."; o chip de estado diz "Aguardando aprovação". O Modo Mãos continua sem aprovar.
+- **Câmera "Ver você"**: botão na barra de cima; o quadro mais recente vai em `contexto.camera` a cada turno, só com ela
+  ligada; o servidor tira do contexto antes de tudo (400 `camera` se estragado ou com mais de 30 s) e ele vira o
+  `ctx.quadroCamera`, que morre com o turno. Só o `olhar_camera` entrega a imagem ao Claude. O portão do rosto, fechar o
+  Jarvis e a janela sair da frente desligam a câmera. `camera {acao: conferir_rosto}` abre a conferência do rosto
+  (`portao.conferirAgora()`, novo no `web/js/rosto.js`) depois que o turno e a fala acabam.
+- **Rotas novas** (todas com token, Host e Origin; as que agem com a trava 423): `GET /api/jarvis/eventos?aba=`,
+  `GET /api/jarvis/arquivo/:id` (só imagem), `POST /api/jarvis/abrir`, `GET /api/jarvis/construcao`,
+  `POST /api/jarvis/construcao/parar` (sem a trava) e `POST /api/jarvis/chamar` (sem o token, com a chave do atalho).
+  Tabela no README.
+- **Cartões novos** na Exibição (`print`, `pagina`, `arquivo`, `pasta`, `planilha`, `anotacao`, `construcao`) pelo
+  `cartaoHtml` do `jarvis-acoes.js` antes do `switch` de hoje; a janelinha do print (Esc fecha só ela); o cartão da
+  construção atualizado no lugar e o chip "CONSTRUINDO · tempo · custo". O CSS (`web/css/jarvis-acoes.css`) entra pelo
+  próprio módulo, como o `rosto.css` (o `index.html` não muda: o arquivo único e o link não carregam nada disto).
+- **Ctrl+Alt+J**: `CRIAR ATALHO.bat` (o Júlio roda) → `ferramentas/chamar-jarvis.ps1`. O servidor grava a chave do
+  atalho a cada partida; o `/api/events` ganha o evento `jarvis` (guardado 10 s); `#jarvis` no endereço (o app ligado pelo
+  atalho, `CEREBRO_ABRIR=jarvis`) abre o Jarvis e sai do endereço. Só abre, nunca fecha.
+- **Teste sem gastar e sem sujar:** com `--simulado` (e no cérebro de teste) a pasta do Jarvis, a chave do atalho, o
+  perfil do navegador e o gasto do construtor ficam numa pasta temporária (`--teste-pasta=<pasta>`; o `jarvis-teste.cmd`
+  usa `%TEMP%\cerebro-jarvis-teste`); a Lixeira e o "abrir no Windows" são de mentira; o construtor usa o query de
+  mentira; um site de mentira em `127.0.0.1` é a única origem local que o navegador de teste aceita. O cérebro simulado
+  aciona as ferramentas novas por frase ("anota…", "cria uma planilha", "move a anotação", "apaga o arquivo", "abre o
+  site de teste", "abre o link 1", "liga a câmera", "está me vendo?", "constrói um BI de teste"…; a lista no cabeçalho
+  do `servidor/simulado.js`).
+- **Prompts:** o "Você só lê" saiu; entrou o bloco "Fazer coisas / Câmera / Sites / Construir" do `JARVIS-ACOES.md` §11
+  no Haiku e no Sonnet, sem mudar a personalidade.
+
+**Provado aqui (2026-10-20):** `npm run teste` inteiro passando (geral 128, e-mail, cérebro 47 com o quadro da câmera
+indo só no `tool_result` do `olhar_camera`, rosto 168, ouvido remoto 159, ouvido, integração 50, câmera, pasta,
+construtor 171, navegador 92 e o novo `teste:faz` 72: o servidor de verdade com `--teste-pasta`, anotar, planilha, mover
+aprovado por voz, apagar trocado e recusado, o 400 do quadro estragado ou velho, o site de mentira com a aprovação
+"navegar", a rota de arquivo servindo o PNG, a construção de mentira com andamento no canal e a fala do fim, o atalho e o
+423 com a trava fechada; nenhuma pasta `OneDrive\JARVIS` criada, nenhum Chrome sobrando). No navegador do app
+(`jarvis-teste`, `?jarvis=simular&debug`): anotação e planilha com cartão, "Abrir no Excel" (de mentira), mover aprovado
+com "aprovado" falado depois de o Jarvis calar, "aprovado" dito por cima da fala dele ignorado, "cancela" recusando, site
+com "pode abrir", a janelinha do print (Esc fecha só ela), "abre o link 1", a construção com o chip PREPARANDO →
+CONSTRUINDO → CONFERINDO → PRONTO e o print da prévia, "Ver você" com a câmera simulada e o OLHEI, "confere meu rosto"
+abrindo o portão, o e-mail com "pode enviar", a interrupção, o Ctrl+Alt+J (POST com a chave) abrindo o Jarvis, o
+`/#jarvis` abrindo e saindo do endereço, 400 px sem rolagem de lado e o painel do robô carregando normal.
+**Falta no PC do Júlio** (`JARVIS-ACOES.md` §12): a aprovação por voz com alto-falante, o Ctrl+Alt+J de verdade, "Abrir no
+Excel" e "Mostrar na pasta" de verdade, um arquivo só na nuvem indo para a Lixeira, a câmera real e uma construção média
+de verdade (custo contra a estimativa).
+
+## 12. Correção do Jarvis que faz (agente de CORREÇÃO, 2026-10-20)
+
+As revisões acharam 19 pontos (dois repetidos: o gasto do dia). Os reais foram corrigidos; o que mudou:
+
+- **Página HTML no navegador do Júlio só com aprovação.** `abrir_no_windows` de `.html`/`.htm` vira a ação pendente nova
+  **`abrir`** ("Abrir a página X no navegador", aprovada por voz; o cartão avisa que ela roda com o navegador dele). O
+  botão do cartão (`POST /api/jarvis/abrir`, o clique) abre direto. Mostrar na pasta continua livre. Todo `.html` que o
+  Jarvis grava (`escreverTexto`) e cada página do construtor no fim (`travarPaginas`) levam a **trava**: uma CSP meta
+  (`travarHtml`, `pasta.js`) com `connect-src 'none'`, `form-action 'none'`, script e estilo só do próprio arquivo e das
+  CDNs (cdnjs, jsdelivr, unpkg, Google Fonts). Provado no Chrome escondido: o Chart.js da cdnjs desenha por `file://`, o
+  `dados.js` e o script da página rodam, e `fetch` e imagem de fora são barrados pela CSP.
+- **Prévia do construtor:** abre sozinha só se a conferência não achou nada; a conferência agora também pega mudança de
+  página por código (`location.href =`, `location.assign/replace`, `window.open`, meta refresh). O pedido do construtor
+  diz para não mudar de página por código. O que a CSP não barra (ir para outra página) fica com a conferência e com a
+  aprovação do pedido.
+- **Política de endereço (§6.4):** host que só veio da pesquisa vale, como o do link, **só no endereço exato** visto
+  (`chaveUrl`: sem esquema, sem www, sem `#` e sem a barra do fim). Host citado pelo Júlio e host aprovado valem inteiros.
+  A página aberta pela ferramenta que vai sozinha para **outro site** (redirecionamento, script, meta refresh) passa pela
+  mesma regra (`destinoOk` do `abrir`; o mesmo site, `dominioBase`, passa): barrada, vira `site-redirecionou` e a
+  ferramenta oferece a aprovação `navegar` do destino, com o endereço inteiro no cartão.
+- **Câmera:** `camera` com `ligar` só liga quando a **fala do Júlio deste turno** pede a câmera (`falaPedeCamera`:
+  "câmera", "me vendo", "olha pra mim", "Ver você"…); sem isso, a tela só faz o botão "Ver você" piscar (`{acao:'pedir'}`).
+  "Liga a câmera e me diz o que você vê" funciona numa fala: o `olhar_camera` sem quadro pede um novo à tela
+  (`{acao:'quadro', pedido}` no turno → `POST /api/jarvis/camera/quadro`, só na memória) e espera até 6 s.
+- **Aprovação por voz em pedaços:** "Não, cancela", "Cancela isso", "Não precisa não", "Aprovado, pode fazer", "Sim, pode
+  apagar", "aprovado sim", "Ok" (só antes de a conversa andar). Recusa e aprovação na mesma fala = não sei. Entraram "pode
+  prosseguir", "ok", "beleza", "pode ser", "deixa quieto", "não quero mais" e o espelho negativo de cada "pode …". A
+  recusa em pedaços também vale com o eco (`recusaDe`). A ferramenta nova **`cancelar_acao`** deixa o modelo tirar o
+  cartão quando o Júlio recusa com outras palavras (recusar é o lado seguro; aprovar, nunca).
+- **"Pode fechar" com a janelinha do print aberta** fecha só ela ("fecha o print", "fecha a janela" também); o Jarvis
+  inteiro fecha com "fecha o Jarvis" (antes essa frase nem fechava: o `curto` tirava o "jarvis").
+- **Site aprovado (`navegar`)** volta com os dois cartões (print e página organizada); a tela e a voz não citam
+  ferramenta; o modelo lê no aviso (`paraModelo`) que pode chamar `abrir_site` com o mesmo endereço, e esse abre a página
+  já lida (uma vez, em até 2 min), sem abrir de novo nem outro print. O texto do site **não** vai no aviso: o aviso é
+  mensagem do sistema.
+- **Links depois de 5 min parado:** o Chrome que fecha por falta de uso não esquece os links da última página; "abre o
+  link 3" reabre o Chrome no endereço guardado.
+- **Construção com o Jarvis fechado:** ao reabrir, a tela pergunta ao servidor e acerta o cartão (fim, print, aviso
+  "terminou enquanto o Jarvis estava fechado" e a fala do fim); o canal manda ao conectar a última construção da aba (até
+  15 min, `reenvio`). O relógio do chip para quando o Jarvis fecha.
+- **Construção que falha:** o porquê numa frase (`motivoDaFalha`: chave recusada, sem crédito, API ocupada, sem internet,
+  construtor não instalado); projeto novo que ficou vazio tem a pasta apagada (o "de novo" com o mesmo nome é novo); o
+  SDK que não carrega aparece no `preparar()`, antes do cartão de custo. A fala do fim não leva caminho em nenhum estado.
+- **Gasto do dia:** a entrada da construção entra no `gastos.json` no começo e é atualizada a cada batimento (5 s); no
+  fim, acertada com o custo do SDK; a que ficou no meio de outra partida vira `interrompido` (o gasto até ali conta).
+- **Planilha:** coluna de código ou rótulo (filial, produto, RCA, pedido, nota, ano, mês, CNPJ; `CODFILIAL`, `NUMPED`)
+  vira o tipo `codigo` (formato `0`, sem ponto de milhar, fora do Total); `numeric` sem casas vira inteiro; "Total de
+  pedidos" e "Peso total" não viram R$. O cartão mostra o tipo de cada coluna.
+- **Lixeira:** a lista inteira num PowerShell só (uma conferência da Lixeira, uma volta para achar todos); arquivo solto
+  também tem o limite de 1 GB; sem a configuração do volume, o limite é o padrão do Windows (~5% do disco). Provado na
+  Lixeira de verdade (`TESTE_LIXEIRA=1`): 2 itens num lote em 1,3 s, conferidos e restaurados (o `ConvertFrom-Json` do
+  PowerShell 5.1 soltava a lista como um objeto só: corrigido).
+- **Dado de pessoa:** o `ler_nota` do construtor recusa nota com `repositorio: nao` ou da lista
+  `ferramentas/fora_do_repositorio.txt` (`servidor/pessoal.js`); o `copiar_para_jarvis` não põe essa nota em `Projetos`.
+- **Voz sem caminho:** as ações mandam a frase da voz pronta (`fala`); o `fraseDoDesfecho` troca o caminho que sobrar por
+  "o arquivo" / "a pasta X" e tira a extensão. Lista dos projetos com "Prévia" e "Pasta" em cada linha e "Abrir a pasta".
+
+**Provado aqui (2026-10-20):** `npm run teste` inteiro passando (geral 128, e-mail, cérebro 47, rosto 168, ouvido remoto
+159, ouvido 81, integração 50, câmera, pasta, construtor 183, navegador 102, `teste:faz` 90). No navegador do app
+(`jarvis-teste`, porta 8791): "Não, cancela" recusando o cartão de apagar; "não precisa mais disso, deixa quieto" tirando o
+cartão pelo `cancelar_acao`; site aprovado com os dois cartões e a fala sem caminho; "pode fechar" e "fecha o print"
+fechando só a janelinha; construção com o Jarvis fechado no meio e o cartão PRONTO, o aviso e a fala ao reabrir;
+"liga a câmera e me diz o que você vê" numa fala (câmera simulada); o botão "Ver você" piscando; a lista dos projetos com
+os botões por linha; a planilha com os tipos; a página criada com a trava e aberta com "Sim, pode abrir".
+**Falta no PC do Júlio:** o que já estava no §11 e mais: abrir uma prévia de verdade no Edge para ver o BI com a trava
+(gráfico e fontes da CDN), e "liga a câmera e me diz o que você vê" com a câmera real.
