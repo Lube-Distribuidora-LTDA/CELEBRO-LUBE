@@ -94,7 +94,10 @@ tags: [tag1, tag2]
   7 telas com análise livre, **publicado em 2026-10-20** em `movimentacao-inventario.vercel.app` (repositório público
   `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO`, fechado pela Sentinela, cartão do portal **inativo**); **faltam as 5 variáveis
   `SUPABASE_DB_*` (Júlio) e um novo deploy** — até lá, local pelo `Desktop\BI\16. INVENTARIO\INICIAR.bat` (porta 3102). Achados: acurácia do inventário rotativo 6,6% em 2026; 17 milhões de paletes
-  desbloqueados por erro em 04/07/2025 (fora das somas, com aviso); R$ 3,01 mi bloqueados hoje.
+  desbloqueados por erro em 04/07/2025 (fora das somas, com aviso; a origem é um recebimento de 17 paletes lançado com 17 milhões
+  bloqueados); R$ 3,01 mi bloqueados hoje. **Recebimento de compra (1301) no painel desde 2026-10-20**: o livro não registra o bloqueio
+  do recebimento, a linha da nota no PCMOV registra (`QTBLOQUEADA`), provado contra a foto diária do estoque (`PCHISTEST`); tela
+  "Recebimento e devoluções" com o tempo de armazenagem; commit `cf65b78` só local (subir antes do próximo deploy).
 - **Folha de pagamento:** [[SISTEMA FINANCEIRO]] (no ar desde 2026-09-25, `gestao-finaceiro.vercel.app`): Validação de
   Folha das cinco empresas (LUBE, LUBE RJ, L LOG, IMPÉRIO LOG, SERMAR) no schema `financeiro` do DATA WAREHOUSE. A
   folha entra em PDF do DP e só grava se bater com o resumo impresso. Rotina: [[Validação mensal da folha]].

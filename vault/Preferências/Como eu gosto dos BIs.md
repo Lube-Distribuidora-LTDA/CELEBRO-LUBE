@@ -157,6 +157,11 @@ ficou de padrão (escolhas do Claude, a confirmar com o uso):
   contra o saldo do PCEST; a leitura fica numa view, e programa desconhecido vira "Outro" com aviso no diagnóstico.
 - **O que o livro não registra não vira KPI de saldo.** O recebimento entra bloqueado sem registro; somar "entrou − saiu" mentiria.
   No lugar, a foto de hoje (PCEST).
+- **Quando o log não registra um movimento, procure quem registra e prove contra a foto do saldo** (2026-10-20, Claude). O
+  recebimento não estava no livro da 266, mas estava na linha da nota (`PCMOV.QTBLOQUEADA`); a ligação pela liberação do WMS
+  enganava (o WMS cita a transação de outra nota da mesma carga). A prova foi a **foto diária do estoque** (`PCHISTEST`): a variação
+  do saldo de cada produto tem que ser o que se soma. Fica num script que não grava, com os números de referência no cabeçalho
+  (`conferir_recebimento.py`). Ver [[2026-10-20 — Recebimento de compra no Movimentação de Inventário]].
 - **Lançamento impossível fica fora da soma, com aviso e botão "incluir"** (ex.: 17 milhões de paletes num registro só). Nada some
   em silêncio, e um erro de digitação não decide o número da tela.
 - **Valor vai cheio no pacote; arredondar só na tela.** Arredondar linha a linha tirou centavos da soma do inventário.
