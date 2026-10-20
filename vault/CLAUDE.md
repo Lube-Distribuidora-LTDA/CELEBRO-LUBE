@@ -97,7 +97,8 @@ tags: [tag1, tag2]
   desbloqueados por erro em 04/07/2025 (fora das somas, com aviso; a origem é um recebimento de 17 paletes lançado com 17 milhões
   bloqueados); R$ 3,01 mi bloqueados hoje. **Recebimento de compra (1301) no painel desde 2026-10-20**: o livro não registra o bloqueio
   do recebimento, a linha da nota no PCMOV registra (`QTBLOQUEADA`), provado contra a foto diária do estoque (`PCHISTEST`); tela
-  "Recebimento e devoluções" com o tempo de armazenagem; commit `cf65b78` só local (subir antes do próximo deploy).
+  "Recebimento e devoluções" com o tempo de armazenagem; commit `cf65b78` no ar. **Pacote com formato novo só junto com a tela
+  publicada** (o painel está na Vercel, deploy a cada push).
 - **Folha de pagamento:** [[SISTEMA FINANCEIRO]] (no ar desde 2026-09-25, `gestao-finaceiro.vercel.app`): Validação de
   Folha das cinco empresas (LUBE, LUBE RJ, L LOG, IMPÉRIO LOG, SERMAR) no schema `financeiro` do DATA WAREHOUSE. A
   folha entra em PDF do DP e só grava se bater com o resumo impresso. Rotina: [[Validação mensal da folha]].

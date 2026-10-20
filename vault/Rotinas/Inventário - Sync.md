@@ -33,6 +33,10 @@ galpão mexe o dia inteiro.
 **31 s:** cadastros 2,6 s, posição 0,5 s, inventário 0,5 s, livro de bloqueio 9,3 s (201.050 linhas), conferência 0,2 s, pacote 17 s
 (6 s com o banco quente). 9 passos `OK` em `inventario.controle_carga`.
 
+**2026-10-20, 08:41–08:56 (esta máquina, com o recebimento):** ~15 min, todos os passos `OK` — recebimento 69,6 s (55.571 linhas),
+livro 517 s, pacote 227 s (JSON de 11,2 MB, 1,47 MB comprimido). O banco estava lento por CPU naquela hora; o normal é perto dos 31 s
+de 19/10. O `statement_timeout` do pacote é 300 s: se o banco piorar, o passo `pacote` falha e a tela fica com o pacote anterior.
+
 **A carga entrou?** Responde `inventario.controle_carga` (um registro por passo, mais a `conferencia_1147` e o `pacote`), não o log.
 
 ## Atualizar agora e diagnóstico

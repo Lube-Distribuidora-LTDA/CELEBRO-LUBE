@@ -58,14 +58,19 @@ entrou bloqueado** (`PCMOV.QTBLOQUEADA`), e a foto diária do estoque do WinThor
   (registrada no Supabase), view `vw_movimento` com o recebimento, `painel_dados()` lendo o recebimento; consulta `recebimento`
   no ETL; `etl/conferir_recebimento.py` (a prova, sem gravar); diagnóstico conta as linhas de recebimento por situação; tela
   **Recebimento e devoluções** com recebimento que entrou bloqueado, tempo de armazenagem, liberado pelo WMS, recebimento
-  cancelado, entrou sem bloqueio, gráfico entradas × liberações e a tabela de notas de recebimento. Commit local **`cf65b78`**
-  (sem push).
+  cancelado, entrou sem bloqueio, gráfico entradas × liberações e a tabela de notas de recebimento. Commit **`cf65b78`**;
+  a sessão principal testou as 7 telas e fez o push para a `main` às ~09:00 (deploy automático na Vercel).
 - `P:\INTEGRAÇÃO BI\INVENTARIO`: consulta, diagnóstico, LEIA-ME e o `conferir_recebimento.py` atualizados (eram iguais ao
   commit anterior).
 - **Tela × banco, ao centavo** (filial 1, 2026, carga das 08:30): recebimento 22.046 linhas, 28.815.075,329 un.,
   **R$ 87.988.623,75**, 4.259 notas, 4.342 SKUs; cancelado R$ 12.087.343,37; sem bloqueio R$ 176.558,18; liberado pelo WMS
   R$ 75.330.666,51; tempo mediano de armazenagem **7,3 h** (1.876 notas medidas, 44% das notas). Nenhum erro no console nas 7
   telas.
+- **Reconferido depois da carga completa** (08:56, 9 passos `OK`, conferência 1147 `OK`, pacote `20261020-085550`): recebimento
+  22.066 linhas, 28.827.415,329 un., **R$ 88.066.991,27**, 4.261 notas; cancelado R$ 12.087.351,42; sem bloqueio R$ 176.558,18;
+  liberado pelo WMS R$ 75.360.387,05; mediana 7,275 h (1.876 notas) — tela e banco iguais ao centavo. A carga levou ~15 min (o livro,
+  8,6 min; o pacote, 3,8 min) porque o banco estava lento por CPU (um `count(*)` de 201 mil linhas em memória levando 0,5 s), não pela
+  mudança: o plano da view nova é normal.
 - [[Inventário - Sync]]: passo novo `recebimento` (55 mil linhas).
 
 ## Pendências
@@ -75,5 +80,7 @@ entrou bloqueado** (`PCMOV.QTBLOQUEADA`), e a foto diária do estoque do WinThor
 - [ ] Ler a devolução ao fornecedor (1302) e a 1322 como saída do bloqueado (PCMOV `SD`/`SR` com `QTBLOQUEADA`).
 - [ ] Saber com a Kaizen por que o WMS cita a transação de outra nota da mesma carga (o tempo de armazenagem hoje mede 44% das
   notas da filial 1).
-- [ ] **Subir o `cf65b78` antes do próximo deploy na Vercel**: o `b9554f9` publicado quebra com o pacote novo (tipos 13 a 15).
+- [x] `cf65b78` no ar (push da sessão principal às ~09:00). **Erro desta sessão:** o pacote com os tipos 13 a 15 foi gravado às
+  08:30, antes de a tela publicada (`b9554f9`) conhecer esses tipos, e a tela quebrou até o push. Regra: pacote com formato novo só
+  avisando, para a tela e o pacote andarem juntos.
 - [ ] As pendências de variáveis da Vercel e agendamento do sistema continuam com o Júlio (ver a nota do projeto).
