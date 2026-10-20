@@ -171,6 +171,10 @@ tags: [tag1, tag2]
   painel do robô. **Telegram ligado** e **vigia na `SRV-IA`** (2026-10-14); a instalação errada da LOGISTICA-55 já
   saiu (tarefa e pasta, conferido em 2026-10-15). **Falta o Júlio:** chave de leitura e travar `C:\BI` (para
   comparar com o WinThor). Alarme falso é pior que nenhum alarme.
+  **Espaço do banco** (desde 2026-10-20, [[Guardião - Espaço do banco]]): medição todo dia às 05:40 e limpeza semanal
+  (domingo 05:30) só do registro operacional. O DATA WAREHOUSE tem **4,4 GB, mas só 1,2 GB são dados**: 3,3 GB são
+  arquivos sem dono das **quedas do banco** no meio de cargas (4 na semana de 15 a 19/10, máquina Small). SQL não apaga;
+  sai na atualização do projeto no Supabase ou pelo suporte. **Decisão pendente do Júlio:** como parar as quedas.
 - **Mod do Claude Code:** [[MOD BARRA LUBE]] (2026-10-07): barra azul tecnológica com a logo da Lube que
   aparece quando o Claude termina de mexer em um projeto. Testado (7 de 7); no app a barra aparece, e a logo
   precisou virar **vetor** (o app descarta PNG embutido em Svg). Validar mods só com o binário **do app**

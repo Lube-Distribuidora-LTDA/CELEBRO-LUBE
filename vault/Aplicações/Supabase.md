@@ -153,8 +153,27 @@ há prova de que as cargas derrubaram o banco, e o Claude não tem como reinici�
 Decidir (Júlio): *Reports → Database* (CPU, memória, Disk IO) e o tamanho do compute; conferir a hipótese do
 `pg_stat_statements` acima. Origem: [[2026-10-09 — Comparação com o período anterior e o script de atualização da VM]].
 
+## Espaço do DATA WAREHOUSE e os arquivos sem dono (2026-10-20)
+- **Medido:** o banco ocupa **4,4 GB**, mas tudo o que está no catálogo (tabelas, índices, views, toast) soma
+  **1,2 GB**. Os outros **3,3 GB são arquivos sem dono**: sobra das **quedas do banco no meio de cargas** (15/10 07:57,
+  16/10 15:06, 18/10 03:53 na carga da margem, 19/10 09:57; nos logs, "database system was not properly shut down;
+  automatic recovery in progress"). Quando o Postgres cai com uma carga regravando tabela (`TRUNCATE` + `INSERT`), o
+  arquivo novo fica no disco. Os reinícios de 07/10 a 09/10 (acima) são o mesmo quadro.
+- **Não sai por SQL:** o usuário `postgres` não é superusuário; não lista nem apaga os arquivos. Saem na **atualização do
+  projeto** (Settings › Infrastructure, alguns minutos fora do ar; o disco volta para 1,2× o banco) ou pelo suporte.
+- **Disco no plano Pro:** cresce sozinho a 90% (+50%) e não diminui sozinho; só a atualização do projeto ajusta.
+- **Máquina:** Small (~2 GB: `shared_buffers` 512 MB, 90 conexões). A maior tabela, `comercial.fato_margem_item`
+  (732 MB, 3,35 milhões de linhas), é regravada inteira toda madrugada às 03:45.
+- **Vigia:** desde 2026-10-20 o [[GUARDIÃO DA LUBE]] mede o espaço todo dia e avisa com mais de 1 GB sem dono
+  ([[Guardião - Espaço do banco]]); a limpeza semanal apaga só registro operacional velho. Diagnóstico completo e
+  texto pronto para o suporte em [[2026-10-20 — Limpeza semanal e o espaço do banco]].
+
 ## Registro de mudanças
 _Compilado em 2026-10-09 a partir do Git, da API do Supabase e das sessões._
+- **2026-10-20** — DATA WAREHOUSE: migração `saude_v1_espaco_banco` (tabelas `saude.espaco_banco` e
+  `saude.manutencao_banco`, funções `saude.medir_espaco()` e `saude.manutencao_semanal()`, tarefas do pg_cron
+  `saude-espaco-banco` às 05:40/06:40 e `saude-manutencao-semanal` aos domingos às 05:30); achados os 3,3 GB sem dono das
+  quedas (Claude, a pedido do Júlio) · [[2026-10-20 — Limpeza semanal e o espaço do banco]]
 - **2026-10-14** — DATA WAREHOUSE: extensões `pg_cron` e `pg_net`, schema `saude` (8 migrações `saude_v1*`), segredo
   `guardiao_cron` no Vault, 3 tarefas do pg_cron e a Edge Function `guardiao`, a primeira do projeto. GESTAO TI:
   migração `saude_robo` (RPC liberada a `anon`, só contagens) (Claude) · [[GUARDIÃO DA LUBE]] ·
