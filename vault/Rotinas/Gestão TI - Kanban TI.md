@@ -14,7 +14,7 @@ Feito em 2026-10-07 (commit `11297c7`) e **no ar desde 2026-10-08 08:14** (commi
 ## Fluxo
 1. **Gatilho** · um problema interno da TI a resolver; pedido de usuário não entra aqui, vai para Atendimento › Chamados
 2. **Pessoa** · a TI cria o cartão em Infraestrutura › Kanban TI do [[GESTÃO TI]]: problema (obrigatório), detalhes e responsável
-3. **Pessoa** · arrasta o cartão entre Em análise, Tranquilo resolver, Crítico e Resolvido; ele entra no fim da coluna de destino
+3. **Pessoa** · arrasta o cartão entre Projetos, Novo, Em andamento, Aguardando retorno, Anotações e Feito; ele entra no fim da coluna de destino
 4. **Grava** · criar, editar e arrastar gravam em `kanban_cartoes` pelas rotas `/api/kanban` e `/api/kanban/[id]`; o navegador nunca fala com o [[Supabase]]
    - Colunas são dados em `kanban_colunas`: renomear, trocar a cor ou acrescentar é um registro, não uma migração
    - O id do cartão viaja no `dataTransfer`, não no estado do React (foi o que fez o primeiro teste não gravar)
@@ -32,7 +32,9 @@ Essa separação é a razão de ele existir:
 Os dois não se conversam. Decisão do Júlio em 2026-10-07, ao pedir o quadro.
 
 ## Colunas
-**Em análise · Tranquilo resolver · Crítico · Resolvido** — os nomes que o Júlio deu.
+**Projetos · Novo · Em andamento · Aguardando retorno · Anotações · Feito**
+
+Em 2026-10-20 as colunas passaram a espelhar o quadro que a TI já mantinha no **KanbanFlow** ("Demandas da TI"), em vez dos nomes do primeiro desenho (Em análise · Tranquilo resolver · Crítico · Resolvido). As colunas foram **renomeadas, não recriadas** — recriar exigiria mover ou apagar os cartões que já existiam.
 
 São **dados, não enum**: renomear uma coluna, trocar a cor ou acrescentar outra é um registro em `kanban_colunas`, não uma migração. A cor é guardada pelo nome (`azul`, `verde`, `vermelho`, `ambar`, `cinza`) e a tela traduz para a paleta, para o tema escuro continuar valendo.
 
