@@ -172,7 +172,8 @@ Decidir (Júlio): *Reports → Database* (CPU, memória, Disk IO) e o tamanho do
 _Compilado em 2026-10-09 a partir do Git, da API do Supabase e das sessões._
 - **2026-10-20** — DATA WAREHOUSE: migração `saude_v1_espaco_banco` (tabelas `saude.espaco_banco` e
   `saude.manutencao_banco`, funções `saude.medir_espaco()` e `saude.manutencao_semanal()`, tarefas do pg_cron
-  `saude-espaco-banco` às 05:40/06:40 e `saude-manutencao-semanal` aos domingos às 05:30); achados os 3,3 GB sem dono das
+  `saude-espaco-banco` às 05:40/06:40 e `saude-manutencao-semanal` às sextas às 05:30 — no domingo até a migração
+  `saude_v1_limpeza_na_sexta`, no mesmo dia); achados os 3,3 GB sem dono das
   quedas (Claude, a pedido do Júlio) · [[2026-10-20 — Limpeza semanal e o espaço do banco]]
 - **2026-10-14** — DATA WAREHOUSE: extensões `pg_cron` e `pg_net`, schema `saude` (8 migrações `saude_v1*`), segredo
   `guardiao_cron` no Vault, 3 tarefas do pg_cron e a Edge Function `guardiao`, a primeira do projeto. GESTAO TI:

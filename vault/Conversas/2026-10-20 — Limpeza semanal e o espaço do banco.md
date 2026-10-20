@@ -62,9 +62,25 @@ BI, por que eu não posso ficar colocando mais armazenamento dessa maneira."
 > Could you please remove the orphaned files (we cannot, the postgres role is not superuser) and right-size the disk?
 > We would also like to understand why the instance is restarting (memory on the Small compute?).
 
+## As quedas e a decisão do Júlio
+- Cruzando as quedas com o `controle_carga` de todos os sistemas: **as 4 aconteceram no meio da carga do BI COMERCIAL**,
+  logo depois das dimensões, nos passos pesados — 15/10 07:57 com Comercial, Trade (2,9 milhões de linhas de venda) e
+  Compras carregando juntos entre 07:45 e 07:55; 16/10 15:06 depois das devoluções; 18/10 03:52 na margem por item
+  (3,35 milhões de linhas); 19/10 09:57 com a comissão levando 390 s (normal 40 a 70 s), logo depois da margem por filial.
+- Perguntado como parar as quedas (aliviar a carga do Comercial, subir a máquina ou os dois), o Júlio decidiu:
+  "Gostaria que toda sexta você tenha uma rotina de limpeza do banco, verificar se tem lixo e limpar, caso precisarmos
+  de espaço com o ambiente limpo, a gente troca a máquina do banco".
+- Feito: a limpeza do banco passou de domingo para **sexta 05:30** (migração `saude_v1_limpeza_na_sexta`, commit
+  `275e1ef`) e foi criada a **tarefa agendada do Claude `limpeza-semanal-banco`, toda sexta às 08:11** (roda com o app
+  aberto; salva no modo "Bypass permissions"). Ela confere a limpeza, mede de novo, procura as quedas da semana nos logs
+  e tabela inchada (VACUUM simples só onde precisa, nunca VACUUM FULL), anota uma linha por semana em
+  [[Guardião - Espaço do banco]] e recomenda: "tudo limpo", "lixo que só o Supabase limpa" ou, só se faltar espaço com o
+  ambiente limpo (dados + WAL acima de 5,5 GB) ou com 2 ou mais quedas na semana, "trocar a máquina".
+
 ## Pendências
-- [ ] Decidir como parar as quedas: carregar a margem por partes (só os dias que mudam), subir a máquina para Medium
-  (custa mais por mês) ou espaçar as cargas — Júlio (Claude sugere a primeira, que também deixa a carga mais rápida)
+- [x] Decidir como parar as quedas — Júlio: limpeza toda sexta; trocar a máquina só se faltar espaço com o ambiente limpo
+- [ ] Primeira conferência do Claude na sexta 2026-10-23 às 08:11 (com o app aberto) — Claude
+- [ ] Se as quedas continuarem, voltar à ideia de aliviar a carga do Comercial (comissão e margem por item por partes, sem sobrepor Trade e Compras às 07:45) — Júlio decide
 - [ ] Recuperar os 3,3 GB: atualização do projeto em Supabase › Settings › Infrastructure (alguns minutos fora do ar,
   num horário sem carga) ou mandar o texto acima ao suporte — Júlio
 - [ ] Depois disso, conferir no item "Espaço do banco" que o "sem dono" caiu para perto de zero — Claude

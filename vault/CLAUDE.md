@@ -173,7 +173,9 @@ tags: [tag1, tag2]
   saiu (tarefa e pasta, conferido em 2026-10-15). **Falta o Júlio:** chave de leitura e travar `C:\BI` (para
   comparar com o WinThor). Alarme falso é pior que nenhum alarme.
   **Espaço do banco** (desde 2026-10-20, [[Guardião - Espaço do banco]]): medição todo dia às 05:40 e limpeza semanal
-  (domingo 05:30) só do registro operacional. O DATA WAREHOUSE tem **4,4 GB, mas só 1,2 GB são dados**: 3,3 GB são
+  (**sexta 05:30**) só do registro operacional, e **toda sexta às 08:11 o Claude confere** (tarefa agendada
+  `limpeza-semanal-banco`: limpa, mede, procura quedas e tabela inchada, anota a semana na nota da rotina). Regra do
+  Júlio: primeiro limpar; **trocar a máquina do banco só se faltar espaço com o ambiente limpo**. O DATA WAREHOUSE tem **4,4 GB, mas só 1,2 GB são dados**: 3,3 GB são
   arquivos sem dono das **quedas do banco** no meio de cargas (4 na semana de 15 a 19/10, máquina Small). SQL não apaga;
   sai na atualização do projeto no Supabase ou pelo suporte. **Decisão pendente do Júlio:** como parar as quedas.
 - **Mod do Claude Code:** [[MOD BARRA LUBE]] (2026-10-07): barra azul tecnológica com a logo da Lube que
