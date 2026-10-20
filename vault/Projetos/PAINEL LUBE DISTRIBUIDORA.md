@@ -161,6 +161,7 @@ Gestão de Saída de Veículos · Controle RH (absenteísmo, ver [[BI ABSENTEÍS
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — cartão novo **MOVIMENTAÇÃO DE INVENTÁRIO** (GESTÃO OPERACIONAL, ordem 10, ícone `inventario`): criado inativo antes do 1º deploy e **ativado às 09:20** a pedido do Júlio (`public.sistemas.ativo = true`, por SQL, Claude); entrada do Júlio conferida às 09:23. Aparece para quem tem "Todos os sistemas" (6 contas) · [[MOVIMENTAÇÃO DE INVENTÁRIO]]
 - **2026-10-09** — atalho do SAC no ar na tela de login: push às 09:34 e, 12 min depois, renomeado de "SAQ" para "SAC · Abrir chamado", apontando para `sac-lube.vercel.app` (commits `7529c25`, `913476c`; deploys `dpl_En67mE64ubeoDrGk1VcYFuordJsK` às 09:34 e `dpl_3bo2uYnT2pjF1h5agkvYdwnBv8dA` às 09:47, READY) · [[2026-10-07 — SAC, tela de chamado do RCA]]
 - **2026-10-07** — cartão "SAQ · Abrir chamado ao SAC" abaixo do botão Entrar, depois de "ou, sem login" (Júlio): `index.html`, `styles.css` (classes `.gate__ou` e `.gate__saq`), README; commit `7529c25` segurado sem push até o SAC funcionar · [[2026-10-07 — SAC, tela de chamado do RCA]]
 - **2026-10-07** — primeiro passe real usado (cpd@, 08:24): entrada portal → sistema funcionando · [[2026-10-05 — Sentinela Lube, sistema de segurança]]

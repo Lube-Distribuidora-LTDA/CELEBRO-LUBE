@@ -35,6 +35,11 @@ referência, para não levar trabalho de outra sessão que usa a mesma pasta), c
 sistema na Sentinela e o cartão inativo no portal **antes** do primeiro deploy, publicou em produção (`READY`) e provou de fora que só
 abre com login. Faltam as variáveis (Júlio) e um novo deploy depois delas.
 
+O Júlio pediu as variáveis por escrito (nomes e valores sem a senha, que ele copia do `ENV`), cadastrou e fez o redeploy. O pacote do
+recebimento, gravado às 08:30 pela outra sessão, quebraria a tela publicada; o Claude testou o `cf65b78` e subiu (produção `READY`).
+O portal só abre cartão ativo: o Júlio mandou ativar ("pode ativar o cartão ... e acompanhar a minha entrada"), o Claude ativou às 09:20
+e acompanhou pela Sentinela: às 09:23 o Júlio entrou, com página, versão, dados e fotos liberados com a identidade dele e nenhum erro na Vercel.
+
 ## Decisões
 - 2026-10-19 (Claude): schema `inventario`, filiais 1/7/10/11/12, histórico desde 2025-01-01, valor ao custo financeiro de hoje,
   movimento ≥ 1 milhão de unidades fora das somas com aviso, sem KPI de "saldo do período" (o recebimento não aparece no livro),
@@ -60,7 +65,8 @@ abre com login. Faltam as variáveis (Júlio) e um novo deploy depois delas.
 
 ## Pendências
 - [x] GitHub (Júlio criou), Vercel e Sentinela (Claude) — 2026-10-20.
-- [ ] Júlio: as 5 variáveis `SUPABASE_DB_*` no projeto `movimentacao-inventario` (porta 5432) e um Redeploy; decidir quem abre o cartão.
+- [x] Júlio: as 5 variáveis `SUPABASE_DB_*` e o Redeploy; cartão ativado (Claude, a pedido dele) e entrada conferida — 2026-10-20 09:23.
+- [ ] Júlio: liberar o painel para quem não tem "Todos os sistemas" (logística), pelo painel admin.
 - [ ] Júlio: `INSTALAR TUDO.bat` na `SRV-IA`; Claude confere `inventario.controle_carga`.
 - [ ] Corrigir no WinThor os 17 milhões de paletes; levar a acurácia ao coordenador de logística.
 - [ ] Guardião vigiar a [[Inventário - Sync]]; avaliar o recebimento (1301) no livro.

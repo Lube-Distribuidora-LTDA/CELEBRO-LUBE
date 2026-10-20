@@ -92,8 +92,9 @@ tags: [tag1, tag2]
   programa grava os campos de um jeito**) e **1147** (inventário rotativo, conferido ao centavo contra o PCMOV). Schema `inventario`
   no DATA WAREHOUSE, carga [[Inventário - Sync]] com instalador em `P:\INTEGRAÇÃO BI\INVENTARIO` (**ainda não agendada**), painel de
   7 telas com análise livre, **publicado em 2026-10-20** em `movimentacao-inventario.vercel.app` (repositório público
-  `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO`, fechado pela Sentinela, cartão do portal **inativo**); **faltam as 5 variáveis
-  `SUPABASE_DB_*` (Júlio) e um novo deploy** — até lá, local pelo `Desktop\BI\16. INVENTARIO\INICIAR.bat` (porta 3102). Achados: acurácia do inventário rotativo 6,6% em 2026; 17 milhões de paletes
+  `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO`, fechado pela Sentinela), **em uso**: variáveis `SUPABASE_DB_*` cadastradas pelo
+  Júlio, cartão ativo no portal (GESTÃO OPERACIONAL) e entrada do Júlio conferida em 2026-10-20 09:23; local pelo
+  `Desktop\BI\16. INVENTARIO\INICIAR.bat` (porta 3102). Achados: acurácia do inventário rotativo 6,6% em 2026; 17 milhões de paletes
   desbloqueados por erro em 04/07/2025 (fora das somas, com aviso; a origem é um recebimento de 17 paletes lançado com 17 milhões
   bloqueados); R$ 3,01 mi bloqueados hoje. **Recebimento de compra (1301) no painel desde 2026-10-20**: o livro não registra o bloqueio
   do recebimento, a linha da nota no PCMOV registra (`QTBLOQUEADA`), provado contra a foto diária do estoque (`PCHISTEST`); tela

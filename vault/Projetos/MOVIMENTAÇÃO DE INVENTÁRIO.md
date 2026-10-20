@@ -22,8 +22,9 @@ Mais o `PCEST` de hoje (estoque, bloqueado, avaria, custo financeiro).
 
 - Pasta: `Desktop\BI\16. INVENTARIO` (README, `etl/`, `web/`, `INICIAR.bat`) · **GitHub:**
   [Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO](https://github.com/Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO) (**público**, criado
-  pelo Júlio em 2026-10-20; `main` = `b9554f9`) · **Vercel:** projeto `movimentacao-inventario` (`prj_xVuRpkvAQcpTQUW2LljQYqJiBj7O`),
-  **https://movimentacao-inventario.vercel.app**, fechado pela [[SENTINELA LUBE]] — ver "Publicação na Vercel".
+  pelo Júlio em 2026-10-20; `main` = `cf65b78`) · **Vercel:** projeto `movimentacao-inventario` (`prj_xVuRpkvAQcpTQUW2LljQYqJiBj7O`),
+  **https://movimentacao-inventario.vercel.app**, fechado pela [[SENTINELA LUBE]], **no ar e em uso** (cartão ativo no portal, Júlio
+  entrou em 2026-10-20 09:23) — ver "Publicação na Vercel".
 - Carga: `P:\INTEGRAÇÃO BI\INVENTARIO` (`1 - CONFIGURACAO` com o `ENV` copiado do de leitura do REPOSIÇÕES, `2 - SISTEMA INVENTARIO`,
   `3 - INSTALACAO`, `INSTALAR TUDO.bat`, `ATUALIZAR AGORA.bat`, `DIAGNOSTICO.bat`, `LEIA-ME.txt`). Rotina: [[Inventário - Sync]].
   **Ainda não agendada** (é o `INSTALAR TUDO.bat` na `SRV-IA`, com o Júlio).
@@ -84,13 +85,17 @@ movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/ver
 - **Registro antes do 1º deploy** (migração `registrar_movimentacao_inventario` no banco do portal): `sentinela.sistemas` (`exige_login = true`;
   `arquivos_proibidos`: `package*.json`, `vercel.json`, `db/`, README, `servidor_local.js`, os `.ts` do guarda), ícone novo `inventario`
   ("GESTÃO DE INVENTÁRIO") e o cartão `movimentacao-inventario` em `public.sistemas` ("MOVIMENTAÇÃO DE INVENTÁRIO", categoria GESTÃO OPERACIONAL,
-  ordem 10, **`ativo = false`** até o Júlio decidir quem abre).
+  ordem 10; nasceu com `ativo = false` e foi **ativado em 2026-10-20 às 09:20**, a pedido do Júlio — o portal só lista e abre cartão ativo).
+  Quem tem "Todos os sistemas" no portal passou a ver o painel (nome de funcionário e valor de estoque): em 2026-10-20, 6 contas
+  (a lista está no painel admin do portal).
 - **1º deploy de produção:** `dpl_2xag48pCjMwtPK5SZoRaPaEdyhAk`, commit `b9554f9`, `READY` em 2026-10-20 ~08:11. Daqui em diante, push na `main` publica sozinho.
 - **Provado de fora** (navegador do app, sem login, do escritório): `/` vai para o portal; `/api/versao` responde `{"erro":"login_necessario"}`;
   `/.sentinela/saude` com `oidc: true`, lista ok, modo proteger. A Sentinela registrou os acessos como `sem_login` (risco 0) e **não bloqueou o IP
   do escritório**; os robôs de captura de tela da própria Vercel foram barrados (`robo`/`lista`), como no Trade.
-- **Variáveis:** nenhuma ainda (conferido pelos nomes em 2026-10-20). Até o Júlio cadastrar as 5 `SUPABASE_DB_*` e publicar de novo, quem
-  entrar pelo portal vê "Faltam variáveis de ambiente".
+- **Variáveis:** as 5 `SUPABASE_DB_*` (porta 5432), cadastradas pelo Júlio em 2026-10-20 (Production, Sensitive), valem desde o deploy
+  `dpl_DAxsrSoibSCrWDGMyrYWwTWDYb8G` (`cf65b78`).
+- **Provado com login** (2026-10-20, 09:23, conta `cpd@`): a Sentinela liberou `/`, `/api/versao` e `/api/dados` com a identidade do Júlio,
+  o painel buscou 30 fotos (`/api/img`) e as telas de bloqueio e detalhe; nenhum erro na Vercel.
 
 ## Validação (2026-10-19)
 - **1147 × PCMOV:** a diferença de cada produto bate com os EI/SI que a 1147 lançou no PCMOV, **41 de 41 meses/tipos**, quantidade
@@ -155,8 +160,9 @@ movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/ver
 ## Pendências
 - [x] **GitHub** — Júlio criou `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO` (público) em 2026-10-20; o Claude subiu o `b9554f9` (varrido: sem senha, IP ou nome de pessoa).
 - [x] **Vercel e Sentinela** — Claude, 2026-10-20: projeto `movimentacao-inventario`, registro na Sentinela e cartão inativo antes do 1º deploy, deploy de produção `READY`, provado de fora.
-- [ ] **Júlio:** cadastrar no projeto `movimentacao-inventario` as 5 variáveis `SUPABASE_DB_HOST` (`aws-0-sa-east-1.pooler.supabase.com`), `SUPABASE_DB_PORT` (**5432**), `SUPABASE_DB_NAME` (`postgres`), `SUPABASE_DB_USER` (`postgres.ivcnotrynogaljrvvyes`), `SUPABASE_DB_PASSWORD` (a do ENV, Sensitive) — Production, Preview e Development — e **publicar de novo** (Redeploy), porque variável nova só vale em deploy novo.
-- [ ] **Júlio:** decidir quem abre o cartão no portal (hoje `ativo = false`; quem tem "Todos os sistemas" passaria a ver nome de funcionário e valor de estoque).
+- [x] **Variáveis `SUPABASE_DB_*`** — Júlio cadastrou e publicou de novo em 2026-10-20.
+- [x] **Cartão no portal** — Júlio decidiu abrir; Claude ativou em 2026-10-20 09:20 e acompanhou a entrada do Júlio (09:23, tudo liberado, sem erro).
+- [ ] **Júlio:** liberar o painel para quem não tem "Todos os sistemas" (logística, coordenador), pelo painel admin do portal.
 - [ ] **Júlio:** agendar na `SRV-IA` — `P:\INTEGRAÇÃO BI\INVENTARIO\INSTALAR TUDO.bat`; depois o Claude confere em `inventario.controle_carga`.
 - [x] **Commit do recebimento no ar** — o pacote das 08:30 (tipos 13 a 15) quebrava a tela publicada (`b9554f9`); a sessão principal
   testou o `cf65b78` e fez o push às ~09:00. **Regra daqui em diante:** pacote com formato novo só se grava avisando, para a tela
@@ -173,6 +179,7 @@ movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/ver
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20 (09:20)** — **Cartão ativado no portal** (Júlio pediu, Claude fez): `public.sistemas.ativo = true` para `movimentacao-inventario` no banco do [[PAINEL LUBE DISTRIBUIDORA]]. Às 09:23 o Júlio entrou pelo portal: a Sentinela liberou `/`, `/api/versao`, `/api/dados` e 30 fotos com a identidade `cpd@lube.com.br`, sem erro na Vercel. Passa a aparecer para as 6 contas com "Todos os sistemas" · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-20 (~09:00)** — **Variáveis e o recebimento no ar** (Júlio cadastrou as 5 `SUPABASE_DB_*` — Production, Sensitive — e fez o redeploy `dpl_4wjrZ8L4r14xv7NhD6PX4w1RyjVV`; Claude conferiu pelos nomes). O pacote do recebimento (tipos 13–15, gravado às 08:30) **quebraria a tela publicada** (`b9554f9` não conhece esses tipos); o Claude testou o `cf65b78` localmente (7 telas OK com o pacote `20261020-083045`) e fez o push: produção `dpl_DAxsrSoibSCrWDGMyrYWwTWDYb8G` (`cf65b78`) `READY`. Lição: **pacote com formato novo e tela publicada andam juntos** — gravar o pacote antes do push quebra quem abrir. **Falta:** ativar o cartão no portal (o portal só abre cartão ativo) e conferir com login · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-20** — **Recebimento de compra (1301) no painel** (sessão aberta pela conversa de origem; Claude fez): investigação só
   leitura no Oracle confirmou pela linha da nota (`PCMOV.QTBLOQUEADA`) e pela foto diária do estoque (`PCHISTEST`) que o recebimento
