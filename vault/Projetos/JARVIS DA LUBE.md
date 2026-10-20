@@ -86,6 +86,33 @@ fosse uma pessoa, respeitando quando eu interromper"). Conversa: [[2026-10-15 �
   Quem tem este computador destravado e uma foto ou vídeo do Júlio poderia passar. Proteção mais forte seria exigir o
   Windows Hello no "confirmar" do e-mail (não feito: o Júlio ainda não tem PIN do Hello).
 
+## O Jarvis que faz (desde 2026-10-20)
+O Júlio pediu "um sistema operacional que seja mais que leitura e resposta", e o Jarvis passou a **executar**, por voz
+([[2026-10-20 — Jarvis que executa, o sistema nativo]]). Especificação em `docs/JARVIS-ACOES.md`.
+- **Pasta própria:** cria e mexe **só** em `OneDrive - Lube\JARVIS` (Anotações, Planilhas, Prints, Projetos, Arquivos);
+  continua lendo o que já lia. Anotações dele ficam lá, não no vault.
+- **Aprovação por voz, sem clique:** criar é livre; **mudar, mover, renomear, apagar (sempre para a Lixeira), mandar
+  e-mail, preencher formulário, abrir um site que você não citou, abrir uma página feita por ele e começar uma
+  construção** mostram um cartão e esperam você dizer "aprovado" ou "não" (aceita a fala em pedaços: "Não, cancela",
+  "Aprovado, pode fazer", "Ok"). Só vale com ele calado. Uma ação por vez; vence em 5 min.
+- **Sites:** um Chrome escondido próprio (perfil `%LOCALAPPDATA%\CerebroLube\navegador-chrome`), sem login, sem senha,
+  sem download, sem alcançar o próprio computador nem a rede interna. Abre o site, mostra o **print numa janelinha**
+  (fica em `JARVIS\Prints`) e um **cartão com a página organizada**; "abre o link 2" segue um link. Conteúdo de site é
+  dado, nunca ordem.
+- **Planilhas:** `.xlsx` pelo `exceljs` 4.4.0 (cabeçalho, filtro, datas e dinheiro; código e ano não viram soma), a
+  partir de uma consulta aos dados ou de uma lista; cartão com a prévia e "Abrir no Excel".
+- **Câmera "Ver você":** liga quando você pede ("liga a câmera e me diz o que você está vendo") ou pelo botão; a
+  janelinha mostra a sua imagem e o Jarvis só **olha** (uma foto à API do Claude, ~US$ 0,00006 cada) quando a
+  conversa pede. Nada da câmera vai para disco ou log.
+- **Construtor (site, BI, programa):** um **Claude Code dentro do Jarvis** (`@anthropic-ai/claude-agent-sdk` 0.3.290,
+  Sonnet 5.5), numa pasta isolada `JARVIS\Projetos\<nome>`: só lê e escreve lá dentro, dados só de leitura, sem
+  `npm install`; **mostra o custo estimado e espera o "aprovado"**, tem teto de custo por construção e por dia, mostra o
+  andamento e, no fim, abre a prévia e mostra um print. Toda página feita por ele leva uma trava (CSP) que corta rede e
+  formulário. Prova real: um mini BI de 4 arquivos com gráfico custou US$ 0,03.
+- **Atalho Ctrl+Alt+J:** `Desktop\BI\13. CEREBRO\CRIAR ATALHO.bat` (o Júlio roda uma vez).
+- **Teto do construtor:** o custo estimado de cada construção vira o teto dela (o Agent SDK para em 80%), e há um teto
+  do dia de US$ 10 somando todas.
+
 ## Ferramentas
 | Ferramenta | App local | Link |
 |---|---|---|
@@ -111,8 +138,11 @@ Travas:
 - Código: `Desktop\BI\13. CEREBRO` (no GitHub `CELEBRO-LUBE` até o commit `62b5520`; o resto espera o repositório
   ficar privado): `web/` (painel do robô + `jarvis.js`, `jarvis-hud.js`, `jarvis-link.js`, `fala.js`, `bloqueio.js`,
   `ouvido-remoto.js`, `rosto.js`, `css/rosto.css`, `ouvido.html`), `servidor/` (Node: `servidor.js`, `cerebro.js`,
-  `conversa.js`, `prompts.js`, `ouvido.js`, `rosto.js`, `ferramentas/`), `docs/JARVIS.md` e `docs/OUVIDO-E-ROSTO.md`
-  (especificação e pesquisa), `ENV.example`.
+  `conversa.js`, `prompts.js`, `ouvido.js`, `rosto.js`, `navegador.js`, `construtor.js`, `acoes.js`, `ferramentas/`
+  com `pasta.js`, `planilha.js`, `web.js`, `construir.js`, `camera.js`, `acao.js`), `web/js/jarvis-acoes.js` e
+  `web/css/jarvis-acoes.css`, `docs/JARVIS.md`, `docs/OUVIDO-E-ROSTO.md` e `docs/JARVIS-ACOES.md` (especificação e
+  pesquisa), `ENV.example`, `CRIAR ATALHO.bat`.
+- O que ele cria: `OneDrive - Lube\JARVIS` (com o histórico de versões do OneDrive).
 - `ENV` (credenciais) na raiz da pasta, ao lado do `INICIAR.bat`; o Git ignora. **Quem preenche é o Júlio**; só o
   programa lê.
 - Arquivo único do painel (sem o Jarvis de voz): `dist\Cerebro da Lube.html`, gerado por
@@ -142,10 +172,14 @@ Travas:
 - [ ] Conferir no uso real: microfone com a voz dele, eco com alto-falante, tempo até a primeira palavra, piscar com óculos e pouca luz — Júlio
 - [ ] Copiar face-api, MediaPipe, SimpleWebAuthn e os modelos para `web/vendor/` com hash conferido (hoje vêm do jsdelivr, sem SRI) — Claude, quando o Júlio quiser
 - [ ] Opcional: apagar `%LOCALAPPDATA%\CerebroLube\ouvido-chrome-teste` (646 MB, perfil só dos testes) se precisar do espaço; os testes baixam de novo — Júlio
+- [ ] **Jarvis que faz, primeira vez:** fechar a janela preta e reabrir pelo `INICIAR.bat` (instala o `exceljs` e o Agent SDK, alguns minutos); rodar o `CRIAR ATALHO.bat` e testar o Ctrl+Alt+J — Júlio
+- [ ] Testar por voz: "anota que a reunião de compras ficou para quinta"; "cria uma planilha da venda por filial deste mês"; "abre o site do G1" (diga "aprovado", amplie o print, "pode fechar", "abre o link 2"); "move a anotação para Arquivos" e "Não, cancela"; "apaga a planilha" e "aprovado" (conferir na Lixeira); "liga a câmera e me diz o que você está vendo"; "constrói um BI pequeno de venda por filial" (gasta crédito; "aprovado" no custo) — Júlio
+- [ ] Conferir no uso real: aprovação por voz com alto-falante (meta: zero aprovações falsas em 2 min), "Mostrar na pasta", arquivo só na nuvem indo para a Lixeira, e o custo de uma construção média contra a estimativa — Júlio
 
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — **O Jarvis que faz** (Júlio pediu "um sistema nativo, execute muito mais"; Claude fez com um fluxo de 9 agentes: pesquisa, 4 construtores, integração, 2 revisões com 19 achados, correção): pasta própria `OneDrive - Lube\JARVIS`, anotações, planilhas (`exceljs` 4.4.0), navegador escondido com print em janelinha e página em cartão, câmera "Ver você" com a ferramenta `olhar_camera`, construtor de site/BI pelo Agent SDK 0.3.290 com Sonnet 5.5 e custo aprovado por voz, aprovação por voz para tudo o que muda ou apaga (Lixeira), atalho Ctrl+Alt+J; 33 ferramentas no cérebro. Provas custaram ~US$ 0,20. Testes, rodados de novo pelo Claude principal: 12 arquivos, todos passando (geral 128, cérebro 47, rosto 168, ouvido remoto 159, ouvido 81, integração 50, construtor 183, navegador 102 com Chrome de verdade, faz 90). Commits `5cf8dc2`, `f8c65cc`, `a176a37` e `78f1084` (local) · [[2026-10-20 — Jarvis que executa, o sistema nativo]]
 - **2026-10-20** — **Sem fone, um fala de cada vez** (Júlio pediu: "quando ele estiver falando o microfone feche, e só abra quando eu clicar o botão de interromper"; Claude fez): no primeiro uso real o Jarvis se ouvia pelo alto-falante. Agora, sem fone, o que o microfone ouve enquanto ele fala (e 0,45 s depois) é descartado, inclusive o trecho que começou com a voz dele no ar; o botão Parar virou **Interromper**, o Espaço também abre, e o botão do microfone mostra **Mudo**. De fone, segue a interrupção por voz. Testado no navegador do app com o simulador (falar por cima, eco atrasado, fala emendada, Interromper, Espaço, de fone), sem erro no console. `ferramentas/jarvis-teste.cmd` + configuração `jarvis-teste` no `.claude/launch.json` do vault (porta 8791, cérebro simulado, trava aberta). Commit `2af99ea` (local) · [[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]
 - **2026-10-19** — **Ouvido pelo Chrome escondido e trava do rosto** (Júlio pediu, Claude fez com um fluxo de 9 agentes: pesquisa, 4 construtores, integração, 2 revisões com 18 achados, correção). O Edge parou de transcrever (resultado vazio); um Chrome sem janela, por pipe, ouve offline. Na primeira conversa do dia o rosto é conferido no servidor (face-api + MediaPipe, limiar 0,45, piscar), com o Windows Hello de reserva; o turno, o confirmar e o ligar do ouvido dão 423 até liberar. CSP nova na página do app. Testes: geral 128/128, cérebro 37/37, rosto 168/168, ouvido 81/81, ouvido remoto 159/159, integração 49/49 (rodados de novo pelo Claude principal). Commits `599ee6b` e `efa3459` (local; nada subiu, o repositório segue público). O link do claude.ai continua na versão 8 (ouvido e rosto só existem no app local) · [[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]
 - **2026-10-15** — **E-mail no `ENV`** (Júlio pediu "me passe esses valores", Claude fez): os 11 campos `IMAP_*` e `SMTP_*` vieram do `Desktop\BI\5. GESTÃO TI\.env.local` por um script que só preenche linhas vazias, confere que o resto do arquivo ficou igual e que o Jarvis lê o mesmo valor que a Vercel usa; as senhas não foram mostradas. Valores que não são segredo: `email-ssl.com.br`, IMAP 993, SMTP 465 com TLS, usuário `cpd@lube.com.br`, pasta `INBOX`, nome "TI - Lube Distribuidora". O Jarvis passa a ler: cérebro Claude, banco, leitura e envio de e-mail · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]

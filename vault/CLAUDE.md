@@ -159,6 +159,11 @@ tags: [tag1, tag2]
   Na **primeira conversa do dia** o Jarvis confere o **rosto** do Júlio (câmera com animação, piscar; comparação no
   servidor; Windows Hello de reserva); dado biométrico só em `%LOCALAPPDATA%\CerebroLube\rosto\`. **Falta o Júlio:**
   baixar o pacote de voz, cadastrar o rosto e criar o PIN do Windows Hello (hoje não tem).
+  **Desde 2026-10-20 ele executa** ([[2026-10-20 — Jarvis que executa, o sistema nativo]]): cria e mexe **só** em
+  `OneDrive - Lube\JARVIS` (anotações, planilhas, prints, projetos); abre site num Chrome escondido e mostra o print numa
+  janelinha; câmera "Ver você"; constrói site e BI com um Claude Code embutido (Sonnet 5.5, custo aprovado antes, teto
+  de US$ 10 por dia). Tudo o que muda, apaga (Lixeira), manda ou gasta espera o **"aprovado" falado**. Atalho Ctrl+Alt+J
+  pelo `CRIAR ATALHO.bat`.
 - **Vídeo do Workshop Lube:** [[VÍDEO WORKSHOP LUBE]] (2026-10-01): as 23 logos de fornecedores
   sobre mármore branco, com abertura e encerramento da Lube. Em 2026-10-09 a pasta do projeto já não estava na Área
   de Trabalho; ver a nota antes de refazer.

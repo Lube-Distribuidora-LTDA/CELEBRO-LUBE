@@ -2,7 +2,7 @@
 tipo: conversa
 data: 2026-10-20
 projeto: "[[JARVIS DA LUBE]]"
-status: em andamento
+status: resumido
 tags: [conversa, jarvis, agente, camera, navegador, planilha, construtor]
 ---
 # 2026-10-20 — Jarvis que executa, o sistema nativo
@@ -38,6 +38,28 @@ curva."
 - 2026-10-20 (Claude): planilhas com `exceljs` 4.4.0; atalho do Windows **Ctrl+Alt+J** por um `CRIAR ATALHO.bat` que o
   Júlio roda.
 
+## O que foi construído
+Fluxo de 9 agentes, sem erro; detalhes em [[JARVIS DA LUBE]] (seção "O Jarvis que faz") e em `docs/JARVIS-ACOES.md`.
+- **Pesquisa (provas nesta máquina, ~US$ 0,14):** o Agent SDK 0.3.290 traz o próprio `claude.exe` (253 MB) e isola bem
+  com `settingSources: []`, ambiente mínimo e um gancho que barra caminho fora da pasta (19 de 19 casos, inclusive
+  junção e caminho curto 8.3). **Achado de segurança:** sem `verbatimPrompts: true`, um `@C:\caminho` no pedido anexava o
+  arquivo sem passar pelo gancho; ficou obrigatório. O teto `maxBudgetUsd` para entre chamadas (com US$ 0,01 gastou
+  US$ 0,018). Navegador escondido abre em ~0,5 s e o bloqueio de rede corta 127.0.0.1, rede interna, `SRV-IA` e
+  redirecionamento para o próprio computador. Uma olhada da câmera no Haiku custa ~609 tokens.
+- **Revisões:** 19 achados (2 graves: página HTML criada por ele abria direto no navegador do Júlio, sem trava; e a
+  aprovação por voz só aceitava a frase exata). Corrigidos: abrir página virou ação aprovada e toda página leva uma
+  trava (CSP); a aprovação aceita a fala em pedaços; a câmera só liga quando a fala pede; e outros 14.
+- **Testes, rodados de novo pelo Claude principal:** `npm run teste` com 12 arquivos, saída 0 (construtor 183, navegador
+  102 com o Chrome de verdade, faz 90 com o servidor de verdade numa pasta temporária); nenhum processo de teste vivo.
+  Nada de segredo, print, planilha ou `node_modules` no Git; versões fixas no `package.json`.
+- Commits `5cf8dc2`, `f8c65cc`, `a176a37` e `78f1084` no `Desktop\BI\13. CEREBRO` (só local: o `CELEBRO-LUBE` segue
+  público).
+
 ## Pendências
-- [ ] Construção pelo fluxo de 9 agentes (pesquisa, 4 construtores, integração, 2 revisões, correção) — Claude
-- [ ] Depois: reabrir pelo `INICIAR.bat`, rodar o `CRIAR ATALHO.bat` e testar cada coisa por voz — Júlio
+- [x] Construção pelo fluxo de 9 agentes — Claude
+- [ ] Fechar a janela preta e reabrir pelo `INICIAR.bat` (instala o `exceljs` e o Agent SDK; alguns minutos), rodar o
+  `CRIAR ATALHO.bat` e testar o Ctrl+Alt+J — Júlio
+- [ ] Testar por voz cada coisa (frases na nota do [[JARVIS DA LUBE]]) e conferir a aprovação por voz com alto-falante
+  (meta: zero aprovações falsas em 2 min) — Júlio
+- [ ] Risco que fica: uma página feita pelo construtor que monte um endereço escondido por código pode tentar mudar de
+  site; segura a trava e a aprovação no cartão — ficar de olho — Claude
