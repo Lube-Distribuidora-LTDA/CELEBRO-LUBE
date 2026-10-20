@@ -182,6 +182,10 @@ do caminho "eu preciso de apenas algumas regiões". O que ficou de padrão (esco
   topo era cesta de Natal e item de consumo sem preço em lugar nenhum.
 - **A carga se confere na mesma foto da origem.** Tabela que muda o dia inteiro (a 201) se extrai e se confere numa transação só de
   leitura do Oracle (`SET TRANSACTION READ ONLY`): sem isso, um preço mudado no meio da carga vira diferença que não existe (alarme falso).
+- **"Produto ativo" no WinThor da Lube não é um campo só** (pedido do Júlio: "apenas produtos ATIVOS ... como: CONSUMO, INATIVOS"):
+  em linha (`OBS2 <> 'FL'`), fora do fornecedor **INATIVOS** (658801) e sem item de consumo (descrição com "CONSUMO" ou departamento 9).
+  O tipo de mercadoria `MC` não serve (marca Guaraná Antarctica). Antes de tirar um grupo, medir quanto ele vende: os 66 de consumo
+  tinham zero venda em 12 meses.
 - **O painel abre com a cópia guardada e confere a versão por trás** (seção 8b do [[data-warehouse]], levada ao pé da letra): com o banco
   lento, o `/api/versao` levou 20 s, e a pessoa ficava olhando o caminhão. Carga nova é baixada por trás e o botão Atualizar acende.
   _O [[MOVIMENTAÇÃO DE INVENTÁRIO]] ainda espera o `/api/versao` ao abrir._

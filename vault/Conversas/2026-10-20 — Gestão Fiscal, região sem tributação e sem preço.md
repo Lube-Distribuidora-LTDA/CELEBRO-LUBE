@@ -39,6 +39,14 @@ repositório, registrou na Sentinela e no portal (cartão inativo) **antes** do 
 abre com login. O endereço `gestao-fiscal.vercel.app` é de outra conta: ficou `gestao-fiscal-olive.vercel.app` (corrigido na
 Sentinela e no cartão). Passou ao Júlio a lista das 5 variáveis (nomes e valores sem a senha).
 
+### Terceira parte: variáveis, primeira entrada e só ativos
+O Júlio cadastrou as variáveis e pediu o teste. Com o cartão ativado (ele escolheu "Ativar e acompanhar"), a entrada dele deu 502:
+o log da Vercel mostrou `EAUTHQUERY user not found` (o usuário do banco chegou diferente do esperado). O Claude fez a API aparar as
+variáveis e dizer o que chegou; às 12:01 versão, dados e fotos passaram com a identidade dele. Depois o Júlio pediu "apenas produtos
+ATIVOS ... como: CONSUMO, INATIVOS e etc.": o Claude mediu no WinThor (fora de linha, fornecedor INATIVOS, consumo pela descrição e
+pelo departamento; o tipo de mercadoria MC marca até Guaraná Antarctica) e o painel passou de 7.277 para 5.318 produtos. A VM rodou
+às 13:15 em ponto, ainda com o código antigo: falta o `ATUALIZAR AGORA.bat` lá.
+
 ## Decisões
 - 2026-10-20 (Júlio): só as regiões 18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40, 41, 42, 43, 45 e 46.
 - 2026-10-20 (Claude): fonte = `PCTABPR` (preço e CODST por região), não `PCTABTRIB`; universo = produtos de revenda não excluídos;
@@ -47,6 +55,7 @@ Sentinela e no cartão). Passou ao Júlio a lista das 5 variáveis (nomes e valo
 - 2026-10-20 (Claude): GitHub, Vercel e agendamento com o Júlio (mesmo combinado do Trade e do Inventário). _Na segunda parte o
   Júlio pediu que o Claude criasse o repositório e publicasse; as senhas continuam com ele._
 - 2026-10-20 (Claude): cartão do portal em **CONTABILIDADE** (a do [[PAINEL ICMS]]), nascido inativo, como o do Inventário.
+- 2026-10-20 (Júlio): **só produtos ativos**; a regra (em linha, fora do fornecedor INATIVOS, sem consumo) é do Claude, medida no WinThor.
 
 ## O que foi criado ou mudou
 - [[GESTÃO FISCAL]]: nota nova do projeto. [[Fiscal - Sync]]: rotina nova (ainda não instalada).
@@ -66,5 +75,6 @@ Sentinela e no cartão). Passou ao Júlio a lista das 5 variáveis (nomes e valo
 ## Pendências
 - [ ] Júlio: a região 1 (Espírito Santo) fica de fora mesmo?
 - [x] GitHub, Vercel e Sentinela (Claude, a pedido do Júlio); `INSTALAR TUDO.bat` (Júlio, 11:34; carga conferida).
-- [ ] Júlio: as 5 `SUPABASE_DB_*` no projeto `gestao-fiscal` e o Redeploy; depois, ativar o cartão no portal.
+- [x] Júlio: as 5 `SUPABASE_DB_*` e o Redeploy; cartão ativado (Claude, com o aceite dele).
+- [ ] Júlio: `ATUALIZAR AGORA.bat` na `SRV-IA` (regra dos ativos).
 - [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site).

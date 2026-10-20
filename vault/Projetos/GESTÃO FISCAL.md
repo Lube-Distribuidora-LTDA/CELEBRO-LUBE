@@ -55,7 +55,11 @@ entrou para contar quantos clientes compram em cada região.
 - **Regiões: só as 16 que o Júlio pediu** ("eu preciso de apenas algumas regiões"): 18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40,
   41, 42, 43, 45 e 46. No `ENV` (`FISCAL_REGIOES`) e no banco (`fiscal.regiao.no_painel`). **A região 1 (Espírito Santo), a que
   mais vende (517 mil linhas em 12 meses), não está na lista** — perguntado ao Júlio, sem resposta ainda.
-- **Produtos de revenda não excluídos** (7.277): o de uso e consumo (`REVENDA = 'N'`) não tem preço por região. Fora de linha entra.
+- **Só produtos ATIVOS** (5.318, desde 2026-10-20 13:16, pedido do Júlio: "apenas produtos ATIVOS e não todos, como: CONSUMO,
+  INATIVOS e etc."): não excluído, de revenda, **em linha** (`OBS2 <> 'FL'`), **fora do fornecedor "INATIVOS"** (cód. 658801, onde a Lube
+  guarda o que saiu de linha), **sem item de consumo** (descrição com "CONSUMO" ou departamento 9 Material Consumo) e com tipo de
+  mercadoria preenchido. O `TIPOMERC = 'MC'` **não** é critério: Guaraná Antarctica, Sukita e Água Tônica estão como MC e vendem.
+  _Até 13:16 eram os 7.277 de revenda não excluídos, com fora de linha._
 - **Venda:** `S` não cancelada, 12 meses, `QT × (PUNIT + VLOUTROS)`, todas as filiais.
 
 ## Banco: schema `fiscal` (DATA WAREHOUSE, ~17 MB)
@@ -114,9 +118,9 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 ## Pendências
 - [ ] **Júlio:** confirmar se a **região 1 (Espírito Santo)** fica mesmo de fora (é uma linha no `ENV`: `FISCAL_REGIOES`).
 - [x] **GitHub, Vercel e Sentinela** — Claude, 2026-10-20, a pedido do Júlio (repositório criado pelo Claude desta vez).
-- [ ] **Júlio:** cadastrar as 5 `SUPABASE_DB_*` no projeto `gestao-fiscal` (Production, Sensitive) e fazer o Redeploy.
-- [ ] **Júlio:** decidir quem vê — o cartão "GESTÃO FISCAL" (CONTABILIDADE) nasceu **inativo**; ativado, aparece para quem tem
-  "Todos os sistemas" e para quem o admin liberar.
+- [x] **Variáveis `SUPABASE_DB_*`** — Júlio, 2026-10-20 (com o conserto do usuário no `c32f5c1`).
+- [x] **Cartão ativo no portal** — Claude, 2026-10-20 11:57, com o aceite do Júlio; `cpd@` e `comercial@` já entraram.
+- [ ] **Júlio: `ATUALIZAR AGORA.bat` na `SRV-IA`** — para a VM pegar a regra dos ativos (senão a carga das 16:15 volta aos 7.277).
 - [x] **Agendar na `SRV-IA`** — Júlio, 2026-10-20 ~11:34 (`INSTALAR TUDO.bat`); Claude conferiu a carga em `fiscal.controle_carga` (7 de 7 `OK`).
 - [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site), depois do agendamento.
 - [ ] Fiscal/Compras: revisar os itens de consumo marcados como revenda e a tributação da região 27.
@@ -125,6 +129,8 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20 (13:16)** — **Só produtos ATIVOS** (Júlio pediu "apenas produtos ATIVOS e não todos, como: CONSUMO, INATIVOS e etc."; Claude fez): universo do ETL = não excluído, de revenda, **em linha** (`OBS2 <> 'FL'`, o ATIVO dos outros BIs), **fora do fornecedor INATIVOS** (658801), **sem item de consumo** (descrição com "CONSUMO" ou departamento 9) e com `TIPOMERC` preenchido: **7.277 → 5.318 produtos** (tirou 1.864 fora de linha, 26 do fornecedor INATIVOS, 66 de consumo — nenhum com venda em 12 meses — e 3 sem tipo). O `TIPOMERC = 'MC'` não serve: Guaraná Antarctica, Sukita e Água Tônica estão como MC e vendem. Carga das 13:16 com 7 de 7 `OK` (85.088 linhas da 201, conferência igual); tela sem o filtro "Situação do produto"; commit `86b8c4b`. **A VM ainda tem o código antigo** (a carga das 13:15 trouxe os 7.277): ETL copiado para `P:\INTEGRAÇÃO BI\FISCAL`, **falta o Júlio rodar o `ATUALIZAR AGORA.bat` na `SRV-IA`** antes das 16:15 · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
+- **2026-10-20 (12:01)** — **Conserto: "user not found" na 1ª entrada** (Claude): com as variáveis cadastradas pelo Júlio, a API respondia 502 — o pooler recusava o `SUPABASE_DB_USER` (`EAUTHQUERY user not found in the database`; o código só conferia o final do nome). A `_db.js` passou a aparar espaço e aspas das variáveis e a dizer, se o usuário não bater, exatamente o que chegou (usuário e host no log; da senha, só o tamanho). Commit `c32f5c1`; às 12:01 a entrada do Júlio (`cpd@`) leu versão, dados e fotos; às 13:06 `comercial@lube.com.br` também abriu. Cartão **ativado** no portal às 11:57 (Júlio autorizou: "Ativar e acompanhar") · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **2026-10-20 (11:32–11:45)** — **No GitHub, na Vercel e na Sentinela** (Júlio pediu "faça um repositório no Github e suba para Vercel"; Claude fez): repositório **público** `Lube-Distribuidora-LTDA/GESTAO-FISCAL` criado pela API do GitHub com a credencial do Git da máquina (a `Lube-Distribuidora-LTDA` é conta de usuário, não organização; o `gh` não está instalado), push do `5e39a30` (varrido: sem ENV, IP ou senha em todo o histórico); projeto Vercel `gestao-fiscal` (`prj_YF4fRNaCEaKmEmjbVTN5ZIpUTjMl`, Root `web`, Other, `gru1`, Node 22.x, Vercel Authentication Standard) ligado ao repositório; registro **antes** do 1º deploy no banco do portal (migração `registrar_gestao_fiscal`: `sentinela.sistemas` com `exige_login`, ícone `fiscal` "GESTÃO FISCAL", cartão **inativo** em CONTABILIDADE); 1º deploy de produção `dpl_BrewyhYaE1EyJHMfQYT6Kr3jebDh` `READY`. O endereço `gestao-fiscal.vercel.app` é de outra conta: o projeto ficou com **`gestao-fiscal-olive.vercel.app`**, corrigido na Sentinela e no cartão (migração `gestao_fiscal_endereco_olive`). Provado de fora, sem login: `/` vai para o portal, `/api/versao` dá `login_necessario`, `/.sentinela/saude` com `oidc: true`, lista ok, modo proteger; IP do escritório sem bloqueio. Push do `ff6776b` (README) publicou sozinho. **Faltam as 5 `SUPABASE_DB_*` (Júlio) e um Redeploy** · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **2026-10-20 (11:34)** — **Agendado** (Júlio rodou o `INSTALAR TUDO.bat`; esperado na `SRV-IA`, a tela do instalador não mostra a máquina): a carga que o instalador dispara entrou com **7 de 7 `OK`** em ~16 s (preço 9,8 s, conferência igual ao WinThor nas 16 regiões, pacote `20261020-113428`), conferida em `fiscal.controle_carga` · [[Fiscal - Sync]]
 - **2026-10-20** — **Sistema criado** (Júlio pediu, Claude fez): schema `fiscal` no DATA WAREHOUSE (migrações `fiscal_01_schema`,

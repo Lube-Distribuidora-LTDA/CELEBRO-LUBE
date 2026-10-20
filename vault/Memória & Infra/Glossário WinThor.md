@@ -67,6 +67,10 @@ Tabelas `PC*` do [[WinThor]] ([[Oracle]]) usadas nos BIs. Levantado na análise 
   na **266**, devolução de cliente (1303/1346/1361) e o **recebimento de compra (1301) — este sem registro no livro**; sai pelo
   desbloqueio da 266 (inclusive o "Conferido pelo recebimento" das filiais sem WMS) e pela liberação do **WMS da Kaizen** depois
   da armazenagem. A **1316** (cancelar devolução) estorna a entrada sem mexer no bloqueado. Ver [[MOVIMENTAÇÃO DE INVENTÁRIO]].
+- **Produto ativo** (Lube): não excluído, `REVENDA <> 'N'`, `OBS2 <> 'FL'`, fornecedor diferente de **658801 "INATIVOS"** (onde vão os
+  produtos que saíram de linha) e sem ser item de consumo (descrição com "CONSUMO", ex.: "(LUBE-CONSUMO)", ou departamento **9 MATERIAL
+  CONSUMO**). `PCPRODUT.TIPOMERC` (`L` linha, `MC` material de consumo, `CB` cesta) **não é confiável**: Guaraná Antarctica e Sukita estão
+  como `MC`. Ver [[GESTÃO FISCAL]].
 - **Tributação e preço por região:** a **201** (Precificar Produto) grava preço de venda e tributação de saída (`CODST`) na
   `PCTABPR`, região a região; a **574** (Cadastrar Tributação nos Produtos) e a **271** também mexem na tributação; a **514**
   cadastra os tipos (`PCTRIBUT`). "Região sem tributação" = CODST vazio; "sem preço" = `PVENDA` zero ou vazio. Ver [[GESTÃO FISCAL]].
