@@ -629,9 +629,9 @@ const ICO = {
 const CANTOS = '<span class="canto ce" aria-hidden="true"></span><span class="canto cd" aria-hidden="true"></span><span class="canto be" aria-hidden="true"></span><span class="canto bd" aria-hidden="true"></span>';
 // o que dizer na tela de ligar o microfone e nos ajustes, conforme quem ouve (OUVIDO-E-ROSTO.md §8)
 const CONSENT_EDGE = `<p>Para conversar por voz eu uso o reconhecimento de fala do navegador. No Edge, o áudio do microfone vai para o serviço de fala da Microsoft e volta como texto. As vozes “Online” também mandam o texto que eu falo.</p>
-        <p>O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. <b>Use fone de ouvido</b>: com alto-falante eu posso me ouvir.</p>`;
+        <p>O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. Sem fone, eu fecho o microfone enquanto falo (aparece “Mudo”); para me cortar, clique em <b>Interromper</b> ou segure Espaço.</p>`;
 const CONSENT_CHROME = `<p>O reconhecimento de voz agora roda neste computador, no Google Chrome, sem internet. A primeira vez ele baixa um pacote de voz (cerca de 300 MB). O Windows vai mostrar que o Chrome está usando o microfone.</p>
-        <p>A voz do Jarvis (Edge) manda o texto para a Microsoft virar áudio, e o que você fala vai para a API do Claude virar resposta. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. <b>Use fone de ouvido</b>: com alto-falante eu posso me ouvir.</p>`;
+        <p>A voz do Jarvis (Edge) manda o texto para a Microsoft virar áudio, e o que você fala vai para a API do Claude virar resposta. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso. Sem fone, eu fecho o microfone enquanto falo (aparece “Mudo”); para me cortar, clique em <b>Interromper</b> ou segure Espaço.</p>`;
 const PRIV_EDGE = 'No Edge, o reconhecimento de voz manda o áudio do microfone para o serviço de fala da Microsoft e recebe o texto de volta. As vozes “Online” também mandam o texto que eu falo. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso.';
 const PRIV_CHROME = 'Quem ouve é um Google Chrome escondido, neste computador, sem internet: o áudio do microfone não sai daqui. O texto que você fala vai para a API do Claude virar resposta, e as vozes “Online” do Edge mandam o texto que eu falo para a Microsoft. O microfone só fica aberto no modo Jarvis, com o ponto vermelho aceso.';
 function marcacao() {
@@ -690,7 +690,7 @@ function marcacao() {
         <span class="jv-medidor" aria-hidden="true"><i></i></span>
       </button>
       <input class="jv-entrada" type="text" placeholder="Fale ou digite para o Jarvis…" aria-label="Mensagem para o Jarvis" enterkeyhint="send" autocomplete="off" spellcheck="true">
-      <button class="btn jv-parar" type="button" hidden>${ICO.parar}<span>Parar</span></button>
+      <button class="btn jv-parar" type="button" title="Corta a minha fala e abre o microfone" hidden>${ICO.parar}<span>Interromper</span></button>
       <button class="btn principal jv-enviar" type="submit" aria-label="Enviar">${ICO.enviar}<span>Enviar</span></button>
     </form>
     <p class="jv-dica"><span class="jv-dica-voz">Segure <kbd>Espaço</kbd> para falar e para me interromper · </span><kbd>Esc</kbd> sai</p>
@@ -703,7 +703,7 @@ function marcacao() {
       <label class="faixa"><span>Tom <b class="jv-tom-v">0,92</b></span><input class="jv-tom" type="range" min="0.6" max="1.3" step="0.02" value="0.92"></label>
       <p class="jv-obs">O Edge ignora o tom nas vozes “Online”; a velocidade vale.</p>
       <label class="chave"><span>Sons do HUD</span><input class="jv-sons" type="checkbox" checked></label>
-      <label class="chave"><span>Estou de fone de ouvido <small class="jv-obs">sem eco: uma palavra já me interrompe</small></span><input class="jv-fone" type="checkbox"></label>
+      <label class="chave"><span>Estou de fone de ouvido <small class="jv-obs">ligado: o microfone fica aberto enquanto eu falo e uma palavra já me interrompe. Desligado: fecho o microfone enquanto falo, e você me corta pelo botão Interromper ou pelo Espaço</small></span><input class="jv-fone" type="checkbox"></label>
     </section>
     <section class="jv-sec-ouvido" hidden><h3 class="hud-rot">Ouvido</h3>
       <label class="jv-campo"><span>Quem reconhece a sua fala</span><select class="jv-ouvido-sel">
@@ -728,7 +728,7 @@ function marcacao() {
         <li>Pode falar por cima de mim: eu paro e respondo ao que você disse. “Para”, “espera”, “chega” ou “Jarvis” sozinhos só me fazem parar.</li>
         <li>Para enviar e-mail eu sempre peço confirmação na tela: diga “pode enviar” ou “cancela” depois que eu terminar de falar, ou use os botões.</li>
         <li>“Pode fechar” ou <kbd>Esc</kbd> sai do modo Jarvis.</li>
-        <li><b>Use fone de ouvido.</b> Com alto-falante o microfone me ouve, e o filtro de eco faz o possível.</li>
+        <li><b>Sem fone, um fala de cada vez.</b> Enquanto eu falo o microfone fica fechado (aparece “Mudo”); para me cortar, clique em <b>Interromper</b> ou segure <kbd>Espaço</kbd>. Quando eu termino, ele abre sozinho. De fone (marque nos Ajustes), dá para me interromper falando.</li>
       </ul>
     </section>
     <section><h3 class="hud-rot">Privacidade</h3>
@@ -1038,6 +1038,26 @@ export function criarJarvis(opts = {}) {
   }
   // sem som (mudo, "sem voz", voz do navegador caída) ou de fone de ouvido, não existe eco
   const semEco = () => J.fone || voz.tipo === 'relogio';
+  // sem fone, um fala de cada vez (pedido do Júlio em 2026-10-20: "quando ele estiver falando o microfone feche, e só
+  // abra quando eu clicar o botão de interromper"): enquanto eu falo, e um instante depois (o fim do som no
+  // alto-falante), o que o microfone ouve é jogado fora. Para me cortar: o botão Interromper ou o Espaço. O microfone
+  // continua ligado por baixo (volta na hora, sem religar o Chrome a cada frase); de fone, nada disso: a voz interrompe
+  const CAUDA_VOZ = 450;
+  const microfoneFechado = () => !semEco() && !J.mic.ptt && (falandoAgora() || agora() - (J.ultimoFimVoz || 0) < CAUDA_VOZ);
+  // o trecho do reconhecimento que começou com a minha voz no ar sai inteiro: até o resultado final dele, ou 1 s depois
+  // que o microfone abriu. Se o Júlio emendou e o trecho não fechou, o que vale daí em diante é sem o começo que era o
+  // meu eco (o mesmo corte de prefixo do Espaço)
+  function descartarEco(final, texto) {
+    if (J.mic.ptt) { J.trechoEco = 0; J.ecoParcial = ''; return false; }
+    if (microfoneFechado()) { J.trechoEco = agora(); if (!final && texto) J.ecoParcial = texto; return true; }
+    if (!J.trechoEco) return false;
+    if (final) { J.trechoEco = 0; J.ecoParcial = ''; return true; }
+    if (agora() - J.trechoEco < 1000) return true;
+    J.trechoEco = 0;
+    if (J.ecoParcial) ignorarPrefixo(J.ecoParcial);
+    J.ecoParcial = '';
+    return false;
+  }
   function conjuntoEco() {
     const s = new Set();
     if (semEco()) return s;
@@ -1292,6 +1312,7 @@ export function criarJarvis(opts = {}) {
   function aoParcial(t) {
     const bruto = String(t || '');
     if (!bruto.trim()) { if (J.falaJulio) J.falaJulio.parcial = ''; return; }
+    if (descartarEco(false, bruto)) return;   // eu estou falando (sem fone): o microfone está fechado
     t = tirarPrefixo(bruto);
     if (!t.trim()) return;
     seguirConfirmacao();
@@ -1300,6 +1321,7 @@ export function criarJarvis(opts = {}) {
     avaliarFala();
   }
   function aoFinal(t) {
+    if (String(t || '').trim() && descartarEco(true, String(t))) { J.prefixo = null; return; }   // fechou o trecho do meu eco
     t = tirarPrefixo(String(t || ''));
     J.prefixo = null;   // o trecho do reconhecimento fechou: o que vier depois é fala nova
     if (!t.trim()) return;
@@ -1526,15 +1548,18 @@ export function criarJarvis(opts = {}) {
   }
   function atualizarMic() {
     const ligado = !!(J.mic.querLigado && ouvido.ativo);
+    const mudo = ligado && microfoneFechado();   // eu falando, sem fone: ligado, mas fechado até eu terminar
+    J.micMudoVisto = mudo;
     raiz.classList.toggle('mic-ligado', ligado);
+    raiz.classList.toggle('mic-mudo', mudo);
     el.mic.setAttribute('aria-pressed', String(ligado));
-    el.mic.setAttribute('aria-label', ligado ? 'Microfone ligado. Clique para pausar.' : 'Microfone pausado. Clique para ligar.');
-    el.mic.title = ligado ? 'Pausar o microfone' : 'Ligar o microfone';
-    el.micIco.innerHTML = ligado ? ICO.mic : ICO.micOff;
-    el.micRot.textContent = J.mic.ptt ? 'Falando…' : ligado ? 'Ouvindo' : 'Microfone';
+    el.mic.setAttribute('aria-label', mudo ? 'Microfone fechado enquanto o Jarvis fala. Clique em Interromper para falar.' : ligado ? 'Microfone ligado. Clique para pausar.' : 'Microfone pausado. Clique para ligar.');
+    el.mic.title = mudo ? 'Fechado enquanto eu falo: clique em Interromper' : ligado ? 'Pausar o microfone' : 'Ligar o microfone';
+    el.micIco.innerHTML = ligado && !mudo ? ICO.mic : ICO.micOff;
+    el.micRot.textContent = J.mic.ptt ? 'Falando…' : mudo ? 'Mudo' : ligado ? 'Ouvindo' : 'Microfone';
     el.mic.hidden = !micDisponivel();
     el.dicaVoz.hidden = !micDisponivel();
-    if (!J.portao) leitura('mic', ligado ? 'LIGADO' : J.mic.erro ? 'BLOQUEADO' : micDisponivel() ? 'PAUSADO' : '—');
+    if (!J.portao) leitura('mic', mudo ? 'MUDO' : ligado ? 'LIGADO' : J.mic.erro ? 'BLOQUEADO' : micDisponivel() ? 'PAUSADO' : '—');
     atualizarEstado();
   }
   // o aceite do microfone vale para o ouvido da vez: o do Chrome tem o seu (o texto e o pacote de voz são outros)
@@ -2097,7 +2122,9 @@ export function criarJarvis(opts = {}) {
     const fr = F.frases.find((f) => f.estado === 'falando');
     if (fr) revelar(fr);
     if (J.digitando) digitar();
-    if (J.mic.querLigado && ouvido.ativo && !falandoAgora()) {
+    // o microfone fechou (comecei a falar) ou abriu (terminei, ou fui interrompido): o botão e a leitura acompanham
+    if (!!(J.mic.querLigado && ouvido.ativo && microfoneFechado()) !== !!J.micMudoVisto) atualizarMic();
+    if (J.mic.querLigado && ouvido.ativo && !falandoAgora() && !microfoneFechado()) {
       const n = ouvido.nivel();
       if (n) {
         hud.nivel(n.bandas, n.db);

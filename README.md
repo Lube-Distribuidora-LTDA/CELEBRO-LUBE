@@ -63,8 +63,11 @@ Edge pelo servidor. Especificação: `docs/OUVIDO-E-ROSTO.md`.
   velho (sem a instalação do pacote) pede "Atualize o Google Chrome".
 - **Ajustes › Ouvido:** "Chrome (offline)" ou "Edge". O padrão é o Chrome quando ele existe. No Edge, se o reconhecimento
   devolver vazio 3 vezes com você falando, o Jarvis avisa.
-- **Eco:** o Chrome não ouve a voz do Jarvis (quem toca é o Edge), então o cancelador de eco não ajuda aqui. O filtro de
-  eco por texto continua; **use fone de ouvido**.
+- **Eco:** o Chrome não ouve a voz do Jarvis (quem toca é o Edge), então o cancelador de eco não ajuda aqui.
+  **Sem fone, um fala de cada vez** (desde 2026-10-20, pedido do Júlio): enquanto o Jarvis fala, e 0,45 s depois, o que
+  o microfone ouve é jogado fora (o botão mostra "Mudo"); o trecho do reconhecimento que começou com a voz dele no ar
+  sai inteiro. Para cortar a fala: o botão **Interromper** ou segurar **Espaço**; quando ele termina, o microfone abre
+  sozinho. Com "Estou de fone de ouvido" marcado nos Ajustes, o microfone fica aberto e a voz interrompe.
 
 ## A trava do rosto
 

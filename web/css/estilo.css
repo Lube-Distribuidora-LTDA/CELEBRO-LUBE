@@ -1383,6 +1383,10 @@ button.s-inc:hover,button.s-inc.mao-hover{border-color:var(--c-s); background:co
 .jarvis.mic-ligado .jv-mic{border-color:var(--vermelho); color:var(--ink); background:color-mix(in srgb, var(--vermelho) 12%, var(--surface))}
 .jarvis.mic-ligado .jv-mic-pt{background:var(--vermelho); box-shadow:0 0 10px var(--vermelho); animation:jvMicPt 1.6s ease-out infinite}
 .jarvis.mic-ligado .jv-medidor{opacity:1}
+/* sem fone, enquanto o Jarvis fala: ligado, mas fechado (o ponto apaga, a borda fica tracejada) */
+.jarvis.mic-mudo .jv-mic{border-style:dashed; border-color:var(--line-forte); color:var(--muted); background:var(--surface)}
+.jarvis.mic-mudo .jv-mic-pt{background:var(--line-forte); box-shadow:none; animation:none}
+.jarvis.mic-mudo .jv-medidor{opacity:0}
 .jv-dica{margin:0; text-align:center; font:600 10.5px/1.4 var(--mono); color:var(--muted)}
 .jv-dica kbd{font-size:10px}
 
