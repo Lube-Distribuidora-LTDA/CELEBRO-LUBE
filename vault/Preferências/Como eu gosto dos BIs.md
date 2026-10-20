@@ -131,6 +131,8 @@ Pedido do Júlio: o sistema vai ser **apresentado ao gestor comercial** — "pre
 - **A foto aparece inteira dentro da moldura, qualquer que seja o formato** (Júlio, 2026-10-20, [[GESTÃO FISCAL]]: "acerte os tamanho das
   imagens corretamente", com o print de uma garrafa passando da moldura). Regra técnica: a imagem ocupa o quadro inteiro
   (`width/height: 100%`) com `object-fit: contain`; `max-height: 100%` dentro de grid não segura produto alto e fino.
+  O Júlio pediu de novo no [[MOVIMENTAÇÃO DE INVENTÁRIO]] no mesmo dia ("acerte o enquadramento das imagens dos produtos"):
+  vale para a miniatura da lista, a foto ampliada e a do relatório. O [[GESTÃO COMERCIAL TRADE]] ainda tem o CSS antigo.
 - **Produto aparece com a foto, não só com o nome** (pedido do Júlio em 2026-10-15: "coloque as fotos nos produtos no painel"): miniatura antes do nome em toda lista de produto, foto maior ao passar o mouse, quadradinho cinza quando não há foto (a linha não desalinha). A foto vem do banco, nunca de uma pasta de rede ([[Pasta de fotos FOTOS_ION]]).
 - **Tela de espera tem a cara da Lube** (pedido do Júlio em 2026-10-15, "um caminhão catando painel de maneira animada, usando o mesmo design do painel da Lube"): o caminhão do [[PAINEL LUBE DISTRIBUIDORA]] animado, com painéis caindo no baú, em vez do relógio puro; o relógio e o motivo continuam embaixo.
 - **Dado classificado à mão que falta não vira "sem classificação" no topo do ranking.** Produto novo herda o departamento da
