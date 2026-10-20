@@ -29,11 +29,14 @@ de **produto** (`PCPRODUT`; cliente é a 302), e a 201 grava a **`PCTABPR`**. A 
 produto, filial 1 × ES, quase toda com CODST 0. A tributação de saída que vale é o `CODST` da `PCTABPR`, por região. O PCCLIENT
 entrou para contar quantos clientes compram em cada região.
 
-- Pasta: `Desktop\BI\17. FISCAL` (README, `etl/`, `web/`, `INICIAR.bat`) · Git local (`main` = `5e39a30`) · **ainda não está no
-  GitHub nem na Vercel** (precedente do Trade e do Inventário: o Júlio cria o repositório e cadastra as senhas).
+- Pasta: `Desktop\BI\17. FISCAL` (README, `etl/`, `web/`, `INICIAR.bat`) · **GitHub:**
+  [Lube-Distribuidora-LTDA/GESTAO-FISCAL](https://github.com/Lube-Distribuidora-LTDA/GESTAO-FISCAL) (**público**, criado pelo Claude a
+  pedido do Júlio em 2026-10-20; `main` = `ff6776b`) · **Vercel:** projeto `gestao-fiscal` (`prj_YF4fRNaCEaKmEmjbVTN5ZIpUTjMl`),
+  **https://gestao-fiscal-olive.vercel.app** (o `gestao-fiscal.vercel.app` é de outra conta), fechado pela [[SENTINELA LUBE]]; push na
+  `main` publica sozinho. **Falta o Júlio cadastrar as 5 `SUPABASE_DB_*`** (sem elas a API responde `configuracao_incompleta`).
 - Carga: `P:\INTEGRAÇÃO BI\FISCAL` (`1 - CONFIGURACAO` com o `ENV` copiado do de leitura do Inventário, `2 - SISTEMA FISCAL`,
   `3 - INSTALACAO`, `INSTALAR TUDO.bat`, `ATUALIZAR AGORA.bat`, `DIAGNOSTICO.bat`, `LEIA-ME.txt`). Rotina: [[Fiscal - Sync]]
-  (**ainda não agendada**).
+  (**agendada pelo Júlio em 2026-10-20 ~11:34**, `INSTALAR TUDO.bat`).
 - Para ver hoje: **`INICIAR.bat`** na pasta do projeto (`http://localhost:3103`, só esta máquina) ou a configuração `fiscal` do
   `.claude/launch.json` do cérebro.
 
@@ -110,9 +113,11 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 
 ## Pendências
 - [ ] **Júlio:** confirmar se a **região 1 (Espírito Santo)** fica mesmo de fora (é uma linha no `ENV`: `FISCAL_REGIOES`).
-- [ ] **Júlio:** criar o repositório no GitHub (público, como os outros, para o deploy do Hobby) — o Claude sobe o código, cria o
-  projeto `gestao-fiscal` na Vercel e registra na [[SENTINELA LUBE]]; o Júlio cadastra as 5 `SUPABASE_DB_*`.
-- [ ] **Júlio:** `P:\INTEGRAÇÃO BI\FISCAL\INSTALAR TUDO.bat` na `SRV-IA`; o Claude confere em `fiscal.controle_carga`.
+- [x] **GitHub, Vercel e Sentinela** — Claude, 2026-10-20, a pedido do Júlio (repositório criado pelo Claude desta vez).
+- [ ] **Júlio:** cadastrar as 5 `SUPABASE_DB_*` no projeto `gestao-fiscal` (Production, Sensitive) e fazer o Redeploy.
+- [ ] **Júlio:** decidir quem vê — o cartão "GESTÃO FISCAL" (CONTABILIDADE) nasceu **inativo**; ativado, aparece para quem tem
+  "Todos os sistemas" e para quem o admin liberar.
+- [x] **Agendar na `SRV-IA`** — Júlio, 2026-10-20 ~11:34 (`INSTALAR TUDO.bat`); Claude conferiu a carga em `fiscal.controle_carga` (7 de 7 `OK`).
 - [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site), depois do agendamento.
 - [ ] Fiscal/Compras: revisar os itens de consumo marcados como revenda e a tributação da região 27.
 - [ ] Ideias (não pedidas): tela de **Tributações** (o mesmo produto com CODST diferente em regiões da mesma UF); NCM × tributação.
@@ -120,6 +125,8 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20 (11:32–11:45)** — **No GitHub, na Vercel e na Sentinela** (Júlio pediu "faça um repositório no Github e suba para Vercel"; Claude fez): repositório **público** `Lube-Distribuidora-LTDA/GESTAO-FISCAL` criado pela API do GitHub com a credencial do Git da máquina (a `Lube-Distribuidora-LTDA` é conta de usuário, não organização; o `gh` não está instalado), push do `5e39a30` (varrido: sem ENV, IP ou senha em todo o histórico); projeto Vercel `gestao-fiscal` (`prj_YF4fRNaCEaKmEmjbVTN5ZIpUTjMl`, Root `web`, Other, `gru1`, Node 22.x, Vercel Authentication Standard) ligado ao repositório; registro **antes** do 1º deploy no banco do portal (migração `registrar_gestao_fiscal`: `sentinela.sistemas` com `exige_login`, ícone `fiscal` "GESTÃO FISCAL", cartão **inativo** em CONTABILIDADE); 1º deploy de produção `dpl_BrewyhYaE1EyJHMfQYT6Kr3jebDh` `READY`. O endereço `gestao-fiscal.vercel.app` é de outra conta: o projeto ficou com **`gestao-fiscal-olive.vercel.app`**, corrigido na Sentinela e no cartão (migração `gestao_fiscal_endereco_olive`). Provado de fora, sem login: `/` vai para o portal, `/api/versao` dá `login_necessario`, `/.sentinela/saude` com `oidc: true`, lista ok, modo proteger; IP do escritório sem bloqueio. Push do `ff6776b` (README) publicou sozinho. **Faltam as 5 `SUPABASE_DB_*` (Júlio) e um Redeploy** · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
+- **2026-10-20 (11:34)** — **Agendado** (Júlio rodou o `INSTALAR TUDO.bat`; esperado na `SRV-IA`, a tela do instalador não mostra a máquina): a carga que o instalador dispara entrou com **7 de 7 `OK`** em ~16 s (preço 9,8 s, conferência igual ao WinThor nas 16 regiões, pacote `20261020-113428`), conferida em `fiscal.controle_carga` · [[Fiscal - Sync]]
 - **2026-10-20** — **Sistema criado** (Júlio pediu, Claude fez): schema `fiscal` no DATA WAREHOUSE (migrações `fiscal_01_schema`,
   `fiscal_02_situacao_e_funcao`, `fiscal_03_regioes_escolhidas` — esta pelo pedido do Júlio de só 16 regiões), ETL de 5 consultas
   com conferência × `PCTABPR` na mesma transação de leitura, pacote comprimido, `P:\INTEGRAÇÃO BI\FISCAL` com instalador (**não

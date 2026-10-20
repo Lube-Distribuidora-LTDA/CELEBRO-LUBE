@@ -7,7 +7,8 @@ tags: [bi, fiscal, agendador]
 ---
 # Fiscal - Sync
 
-**Quando:** 07:15, 10:15, 13:15, 16:15 e 19:15 — **ainda não agendada** (2026-10-20: falta o Júlio rodar o `INSTALAR TUDO.bat` na `SRV-IA`).
+**Quando:** 07:15, 10:15, 13:15, 16:15 e 19:15 — **agendada pelo Júlio em 2026-10-20 ~11:34** (`INSTALAR TUDO.bat`; esperado na `SRV-IA`:
+a tela do instalador não mostra a máquina). A carga que o instalador dispara entrou às 11:34 com 7 de 7 `OK` em ~16 s.
 **Onde:** Agendador de Tarefas do Windows, na VM `SRV-IA`, rodando de `C:\BI\FISCAL` (tarefa `Fiscal - Sync`).
 **O que atualiza:** o [[GESTÃO FISCAL]] — preço de venda e tributação de saída por região (rotina 201, `PCTABPR`), cadastros de
 produto, região e tributação, venda por produto × região dos últimos 12 meses — confere o banco contra a `PCTABPR` e deixa pronto o
@@ -29,7 +30,11 @@ mesmo banco. A 201 é usada o dia inteiro: uma carga antes do expediente e outra
    - **Se falhar:** a tela segue com o pacote anterior
 7. **Entrega** · painel do [[GESTÃO FISCAL]]: a tela abre com a cópia guardada no navegador e baixa o pacote novo por trás (o botão Atualizar acende)
 
-## Duração medida (2026-10-20, esta máquina, banco do Supabase lento)
+## Duração medida
+**2026-10-20, 11:34 (carga do instalador, fora desta máquina):** ~16 s, 7 de 7 `OK` — preço 9,8 s (116.432), venda 2,3 s,
+produto 1,0 s, conferência 0,5 s (igual ao WinThor nas 16 regiões), pacote 1,6 s (versão `20261020-113428`).
+
+**2026-10-20, esta máquina, banco do Supabase lento:**
 - **10:45 (50 regiões, antes do recorte):** ~16 min, 7 de 7 `OK` — preço 590 s (644.433 linhas), produto 106 s, venda 76 s, conferência 36 s, pacote 142 s.
 - **11:04 (16 regiões):** ~9 min, 7 de 7 `OK` — produto 136 s (7.277), venda 61 s (18.924), preço 263 s (116.432), conferência 28 s
   (igual ao WinThor nas 16 regiões), pacote 62 s (JSON de 3 MB, 473 KB comprimido). A extração no Oracle leva ~5 s; o resto é o banco

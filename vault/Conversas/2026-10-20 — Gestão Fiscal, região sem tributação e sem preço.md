@@ -31,12 +31,22 @@ integração com instalador e o painel de 4 telas (local; GitHub, Vercel e agend
 5. **Prova:** tela × banco (7.277 produtos, 6.686 com região sem tributação, 7.133 sem preço) e tela × WinThor no cód. 15722, região
    a região.
 
+### Segunda parte: agendamento, GitHub e Vercel
+O Júlio rodou o `INSTALAR TUDO.bat` (carga das 11:34: 7 de 7 `OK`, ~16 s na VM) e pediu: "faça um repositório no Github e suba
+para Vercel e me passe as variáveis". O Claude criou o repositório público `GESTAO-FISCAL` pela API do GitHub (o `gh` não está
+instalado; usou a credencial do Git da máquina, sem exibir), subiu o código, criou o projeto `gestao-fiscal` na Vercel ligado ao
+repositório, registrou na Sentinela e no portal (cartão inativo) **antes** do 1º deploy, publicou (`READY`) e provou de fora que só
+abre com login. O endereço `gestao-fiscal.vercel.app` é de outra conta: ficou `gestao-fiscal-olive.vercel.app` (corrigido na
+Sentinela e no cartão). Passou ao Júlio a lista das 5 variáveis (nomes e valores sem a senha).
+
 ## Decisões
 - 2026-10-20 (Júlio): só as regiões 18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40, 41, 42, 43, 45 e 46.
 - 2026-10-20 (Claude): fonte = `PCTABPR` (preço e CODST por região), não `PCTABTRIB`; universo = produtos de revenda não excluídos;
   conferência na mesma transação de leitura do Oracle; sistema "GESTÃO FISCAL" (schema `fiscal`, pasta `17. FISCAL`); cargas aos :15.
   Motivos em [[GESTÃO FISCAL]].
-- 2026-10-20 (Claude): GitHub, Vercel e agendamento com o Júlio (mesmo combinado do Trade e do Inventário).
+- 2026-10-20 (Claude): GitHub, Vercel e agendamento com o Júlio (mesmo combinado do Trade e do Inventário). _Na segunda parte o
+  Júlio pediu que o Claude criasse o repositório e publicasse; as senhas continuam com ele._
+- 2026-10-20 (Claude): cartão do portal em **CONTABILIDADE** (a do [[PAINEL ICMS]]), nascido inativo, como o do Inventário.
 
 ## O que foi criado ou mudou
 - [[GESTÃO FISCAL]]: nota nova do projeto. [[Fiscal - Sync]]: rotina nova (ainda não instalada).
@@ -55,5 +65,6 @@ integração com instalador e o painel de 4 telas (local; GitHub, Vercel e agend
 
 ## Pendências
 - [ ] Júlio: a região 1 (Espírito Santo) fica de fora mesmo?
-- [ ] Júlio: criar o repositório no GitHub; Claude publica na Vercel e registra na Sentinela; Júlio cadastra as `SUPABASE_DB_*`.
-- [ ] Júlio: `INSTALAR TUDO.bat` na `SRV-IA`; Claude confere `fiscal.controle_carga` e liga no [[GUARDIÃO DA LUBE]].
+- [x] GitHub, Vercel e Sentinela (Claude, a pedido do Júlio); `INSTALAR TUDO.bat` (Júlio, 11:34; carga conferida).
+- [ ] Júlio: as 5 `SUPABASE_DB_*` no projeto `gestao-fiscal` e o Redeploy; depois, ativar o cartão no portal.
+- [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site).
