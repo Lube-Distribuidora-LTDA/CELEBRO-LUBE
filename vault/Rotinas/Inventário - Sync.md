@@ -37,6 +37,14 @@ galpão mexe o dia inteiro.
 livro 517 s, pacote 227 s (JSON de 11,2 MB, 1,47 MB comprimido). O banco estava lento por CPU naquela hora; o normal é perto dos 31 s
 de 19/10. O `statement_timeout` do pacote é 300 s: se o banco piorar, o passo `pacote` falha e a tela fica com o pacote anterior.
 
+**2026-10-20, 10:03–10:20 (1ª carga rodada pelo Júlio fora desta máquina, provavelmente a `SRV-IA`):** 17 min, **10 passos `OK`** —
+produto 212 s, recebimento 147 s (55.588), livro 440 s (201.188), conferência 1147 igual ao PCMOV, pacote 166 s (versão
+`20261020-101950`). O Júlio disse "rodei o ATUALIZAR TUDO", nome que não existe na pasta: **falta confirmar se foi o `INSTALAR TUDO`**
+(tarefa criada) ou o `ATUALIZAR AGORA` (só uma carga). A prova é a carga das 11:05 aparecer em `controle_carga`.
+
+**Vigia:** ainda **fora** do [[GUARDIÃO DA LUBE]] (2026-10-20): se a carga falhar, nada chega no Telegram. Ligar só depois de a
+tarefa existir (horário cadastrado sem tarefa = alarme falso).
+
 **A carga entrou?** Responde `inventario.controle_carga` (um registro por passo, mais a `conferencia_1147` e o `pacote`), não o log.
 
 ## Atualizar agora e diagnóstico

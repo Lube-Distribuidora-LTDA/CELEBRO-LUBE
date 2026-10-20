@@ -40,6 +40,10 @@ recebimento, gravado às 08:30 pela outra sessão, quebraria a tela publicada; o
 O portal só abre cartão ativo: o Júlio mandou ativar ("pode ativar o cartão ... e acompanhar a minha entrada"), o Claude ativou às 09:20
 e acompanhou pela Sentinela: às 09:23 o Júlio entrou, com página, versão, dados e fotos liberados com a identidade dele e nenhum erro na Vercel.
 
+Depois o Júlio disse "rodei o ATUALIZAR TUDO" (nome que não existe; `INSTALAR TUDO` ou `ATUALIZAR AGORA`): o Claude acompanhou a carga
+das 10:03 passo a passo em `controle_carga` (10 de 10 `OK`, 17 min). O Júlio perguntou se a carga está ligada ao Guardião para avisar
+no Telegram: **ainda não** — o Claude propôs ligar rotina, tarefa e site como no Trade, mas só a rotina depois de confirmada a tarefa.
+
 ## Decisões
 - 2026-10-19 (Claude): schema `inventario`, filiais 1/7/10/11/12, histórico desde 2025-01-01, valor ao custo financeiro de hoje,
   movimento ≥ 1 milhão de unidades fora das somas com aviso, sem KPI de "saldo do período" (o recebimento não aparece no livro),
