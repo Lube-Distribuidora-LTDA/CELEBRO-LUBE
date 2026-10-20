@@ -23,6 +23,7 @@ const NOMES = [
   'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM_NOME',
   'VAULT_DIR', 'ARQUIVOS_RAIZES',
   'JARVIS_SIMULADO', 'JARVIS_PORTA', 'JARVIS_BUSCA_HAIKU',
+  'JARVIS_PASTA', 'JARVIS_TETO_DIA_USD',
 ];
 
 /* Onde procurar o ENV, nesta ordem: JARVIS_ENV (caminho explícito), a raiz do repositório, a pasta servidor/. */
@@ -70,6 +71,8 @@ export function carregarConfig(argv = process.argv.slice(2)) {
     .map(s => s.trim()).filter(Boolean).map(s => path.resolve(s));
   const simuladoPedido = argv.includes('--simulado') || v.JARVIS_SIMULADO === '1';
   const semChave = !tem('ANTHROPIC_API_KEY') && v.JARVIS_SIMULADO !== '0';
+  // o teto de gasto do construtor por dia (docs/JARVIS-ACOES.md §7.5): padrão US$ 10, no máximo US$ 50
+  const teto = Number(String(v.JARVIS_TETO_DIA_USD || '').replace(',', '.'));
   const cfg = {
     arquivoEnv: arquivo,
     porta,
@@ -80,6 +83,9 @@ export function carregarConfig(argv = process.argv.slice(2)) {
     motivoSimulado: simuladoPedido ? 'Cérebro simulado (pedido com --simulado ou JARVIS_SIMULADO=1).'
       : semChave ? 'Sem ANTHROPIC_API_KEY no ENV: o Jarvis roda com o cérebro simulado.' : null,
     buscaHaiku: v.JARVIS_BUSCA_HAIKU === '1' ? true : v.JARVIS_BUSCA_HAIKU === '0' ? false : null,
+    // a pasta do Jarvis (o único lugar onde ele cria, muda, move e apaga): padrão <OneDrive - Lube>\JARVIS (pasta.js)
+    jarvisDir: tem('JARVIS_PASTA') ? path.resolve(v.JARVIS_PASTA) : null,
+    tetoDiaUsd: Number.isFinite(teto) && teto > 0 ? Math.min(teto, 50) : 10,
     anthropic: { apiKey: tem('ANTHROPIC_API_KEY') ? v.ANTHROPIC_API_KEY : undefined },
     banco: tem('SUPABASE_DB_HOST') && tem('SUPABASE_DB_USER') && tem('SUPABASE_DB_PASSWORD') ? {
       host: v.SUPABASE_DB_HOST,

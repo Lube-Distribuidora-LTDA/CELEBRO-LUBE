@@ -17,7 +17,7 @@ export const consultarDados = {
   rotulo: 'Consultando o banco',
   async executar({ sql }, ctx) {
     if (!ctx.banco.configurado) throw new ErroFerramenta('O banco não está configurado no ENV deste computador (faltam as SUPABASE_DB_).', 'sem-banco');
-    const r = await ctx.banco.consultar(sql, { signal: ctx.signal });
+    const { tipos: _oids, ...r } = await ctx.banco.consultar(sql, { signal: ctx.signal });   // os OIDs são da planilha
     return {
       conteudo: { ...r, aviso: r.mais_linhas ? 'Vieram só as primeiras 200 linhas: agregue no SQL para ver o total.' : undefined },
       resumo: `${r.linhas_devolvidas}${r.mais_linhas ? '+' : ''} linha${r.linhas_devolvidas === 1 ? '' : 's'}`,

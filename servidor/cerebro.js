@@ -11,8 +11,14 @@
    - Ferramentas: eager_input_streaming em todas as nossas; o input é validado contra o schema antes de rodar; erro de
      ferramenta volta como tool_result com is_error; stop_reason 'refusal' e 'max_tokens' são conferidos antes.
    - Interrupção: fechar a conexão do SSE aborta o turno (AbortController até a chamada do Claude e das ferramentas).
+   - O Jarvis que FAZ (docs/JARVIS-ACOES.md, 2026-10-20): o ctx das ferramentas leva a pasta do Jarvis (jarvis), o
+     navegador escondido (navegador), o construtor (construtor) e o quadro da câmera "Ver você" deste turno
+     (quadroCamera). O quadro só vai ao Claude quando olhar_camera é chamada: a ferramenta devolve `blocos` (texto +
+     imagem) e o tool_result vira uma lista. No histórico a imagem vira uma linha de texto (conversa.js).
+   - Os sites que a pesquisa citou ficam liberados para o abrir_site (navegador.lembrarHosts).
    Eventos para a interface (SSE): texto {delta} · ferramenta {id, nome, rotulo, estado, resumo} · cartao {tipo, dados}
-   · acao {id, tipo, resumo, detalhe} · modelo {nome:'haiku'|'sonnet'} · fim {motivo, …} · erro {mensagem}. */
+   · acao {id, tipo, rotulo, resumo, detalhe, expira_em} · camera {acao} · modelo {nome:'haiku'|'sonnet'} · fim {motivo,
+   …} · erro {mensagem}. */
 import Anthropic from '@anthropic-ai/sdk';
 import { BASE, DELEGAR, definicoesApi, acharFerramenta, inputDoBloco, executarFerramenta } from './ferramentas/index.js';
 import { promptHaiku, promptSonnet, contextoDaLube } from './prompts.js';
@@ -35,10 +41,29 @@ const MAX_PEDIDOS_SONNET = 10;
 const ROTULOS = Object.fromEntries([...BASE, DELEGAR].map(f => [f.nome, f.rotulo]));
 ROTULOS.web_search = 'Pesquisando na internet';
 
+const nomeArq = (c) => cortar(String(c || '').split(/[\\/]/).filter(Boolean).pop() || '', 60);
+const siteDe = (u) => { try { return new URL(/^[a-z]+:/i.test(String(u)) ? String(u) : `https://${u}`).hostname.replace(/^www\./, ''); } catch (_) { return ''; } };
+
 /** Rótulo do cartão de atividade, quando o input já é conhecido. */
-function rotuloCom(nome, input) {
+export function rotuloCom(nome, input) {
   const i = input || {};
   switch (nome) {
+    case 'anotar': return i.titulo ? `Anotando: ${cortar(i.titulo, 60)}` : ROTULOS[nome];
+    case 'alterar_texto': return i.caminho ? `Preparando a mudança em ${nomeArq(i.caminho)}` : ROTULOS[nome];
+    case 'listar_pasta': return i.pasta ? `Olhando a pasta ${nomeArq(i.pasta)}` : ROTULOS[nome];
+    case 'criar_pasta': return i.caminho ? `Criando a pasta ${nomeArq(i.caminho)}` : ROTULOS[nome];
+    case 'criar_arquivo': return i.nome ? `Criando o arquivo ${cortar(i.nome, 60)}` : ROTULOS[nome];
+    case 'copiar_para_jarvis': return i.de ? `Copiando ${nomeArq(i.de)}` : ROTULOS[nome];
+    case 'mover': return Array.isArray(i.itens) && i.itens.length ? `Preparando para mover ${i.itens.length === 1 ? nomeArq(i.itens[0]?.de) : `${i.itens.length} itens`}` : ROTULOS[nome];
+    case 'renomear': return i.caminho ? `Preparando para renomear ${nomeArq(i.caminho)}` : ROTULOS[nome];
+    case 'apagar': return Array.isArray(i.itens) && i.itens.length ? `Preparando a Lixeira: ${i.itens.length === 1 ? nomeArq(i.itens[0]) : `${i.itens.length} itens`}` : ROTULOS[nome];
+    case 'abrir_no_windows': return i.caminho ? `Abrindo ${nomeArq(i.caminho)} no Windows` : ROTULOS[nome];
+    case 'criar_planilha': return i.nome ? `Criando a planilha ${cortar(i.nome, 60)}` : ROTULOS[nome];
+    case 'abrir_site': return siteDe(i.url) ? `Abrindo ${siteDe(i.url)}` : ROTULOS[nome];
+    case 'print_site': return siteDe(i.url) ? `Tirando o print de ${siteDe(i.url)}` : ROTULOS[nome];
+    case 'seguir_link': return Number.isInteger(i.numero) ? `Abrindo o link ${i.numero}` : ROTULOS[nome];
+    case 'construir': return i.nome ? `Preparando a construção: ${cortar(i.nome, 50)}` : ROTULOS[nome];
+    case 'olhar_camera': return i.motivo ? `Olhando pela câmera: ${cortar(i.motivo, 50)}` : ROTULOS[nome];
     case 'ler_nota': return i.nome ? `Lendo a nota ${cortar(i.nome, 60)}` : ROTULOS[nome];
     case 'buscar_notas': return i.consulta ? `Procurando nas notas: ${cortar(i.consulta, 50)}` : ROTULOS[nome];
     case 'consultar_dados': return i.objetivo ? `Banco: ${cortar(i.objetivo, 60)}` : ROTULOS[nome];
@@ -83,6 +108,28 @@ function fontesDe(content) {
   }
   return [...out.values()].slice(0, 8);
 }
+/* Os endereços que a pesquisa trouxe (citações e resultados): ficam liberados para o abrir_site (docs/JARVIS-ACOES.md §6.4). */
+function urlsDaPesquisa(content) {
+  const out = new Set();
+  for (const b of content || []) {
+    if (b.type === 'text' && Array.isArray(b.citations)) for (const c of b.citations) { if (c && typeof c.url === 'string') out.add(c.url); }
+    if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) for (const r of b.content) { if (r && typeof r.url === 'string') out.add(r.url); }
+  }
+  return [...out].slice(0, 60);
+}
+function lembrarPesquisa(ctx, content) {
+  const urls = urlsDaPesquisa(content);
+  if (urls.length && ctx.navegador && typeof ctx.navegador.lembrarHosts === 'function') {
+    try { ctx.navegador.lembrarHosts(urls, { origem: 'pesquisa' }); } catch (_) { /* o navegador é extra */ }
+  }
+}
+/* O conteúdo do tool_result: texto, ou (com blocos: a imagem da câmera ou do print) a lista com o texto primeiro. */
+function conteudoResultado(r) {
+  if (!r.blocos || !r.blocos.length) return r.texto;
+  const lista = [...r.blocos];
+  if (!(lista[0].type === 'text' && lista[0].text === r.texto)) lista.unshift({ type: 'text', text: r.texto });
+  return lista;
+}
 
 /* Depois de um fallback no meio do turno: só o que vem depois do último bloco `fallback` vale por inteiro; antes
    dele ficam só texto e pares completos de ferramenta de servidor (skill claude-api, refusal fallbacks). */
@@ -114,7 +161,7 @@ async function rodarStream(criar, aoEvento, signal) {
   }
 }
 
-export function criarCerebro({ cfg, vault, banco }) {
+export function criarCerebro({ cfg, vault, banco, jarvis = null, navegador = null, construtor = null }) {
   const client = new Anthropic({ apiKey: cfg.anthropic.apiKey, maxRetries: 2, timeout: 120000 });
   const lube = contextoDaLube(cfg.vaultDir);
   let buscaHaiku = null;            // decidido uma vez
@@ -188,8 +235,9 @@ export function criarCerebro({ cfg, vault, banco }) {
           const t = content.filter(b => b.type === 'text').map(b => b.text).join(' ').trim();
           return { ok: !!t, texto: t ? `${t} (o relatório foi cortado no limite de tamanho)` : 'O relatório passou do limite de tamanho e veio cortado.', resumo: 'cortado' };
         }
-        if (msg.stop_reason === 'pause_turn') { msgs.push({ role: 'assistant', content }); continue; }
+        if (msg.stop_reason === 'pause_turn') { lembrarPesquisa(ctx, content); msgs.push({ role: 'assistant', content }); continue; }
         if (msg.stop_reason === 'tool_use' && usos.length) {
+          lembrarPesquisa(ctx, content);
           msgs.push({ role: 'assistant', content });
           const blocos = await Promise.all(usos.map(b => rodarFerramenta(b, BASE, ctx)));
           if (marcado) delete marcado.cache_control;
@@ -201,6 +249,7 @@ export function criarCerebro({ cfg, vault, banco }) {
         const texto = content.filter(b => b.type === 'text').map(b => b.text).join(' ').replace(/\s+/g, ' ').trim();
         const fontes = fontesDe(content);
         if (fontes.length) ctx.emitir('cartao', { tipo: 'lista', dados: { titulo: 'Fontes', itens: fontes } });
+        lembrarPesquisa(ctx, content);
         return { ok: !!texto, texto: texto || 'O modelo de análise terminou sem relatório.', resumo: 'pronto' };
       }
       return { ok: false, texto: 'A análise passou do número de passos e parou sem concluir.', resumo: 'parou' };
@@ -243,15 +292,15 @@ export function criarCerebro({ cfg, vault, banco }) {
     }
     fim(r.ok ? 'fim' : 'erro', r.resumo, r.extra);
     return r.ok
-      ? { type: 'tool_result', tool_use_id: bloco.id, content: r.texto }
+      ? { type: 'tool_result', tool_use_id: bloco.id, content: conteudoResultado(r) }
       : { type: 'tool_result', tool_use_id: bloco.id, is_error: true, content: r.texto };
   }
 
   /* ---------- O turno ---------- */
-  async function turno({ conversa, contexto }, emitir, signal) {
+  async function turno({ conversa, contexto, quadroCamera = null, pedirQuadro = null }, emitir, signal) {
     await garantirDecisao();
     const ent = limparConversa(conversa);
-    const linhaTela = linhaContexto(contexto);
+    const linhaTela = linhaContexto(contexto) + (quadroCamera ? ' A câmera Ver você está ligada: olhar_camera vê a imagem de agora (só olhe se a conversa pedir).' : '');
     const aba = abaDe(contexto);
     const avisos = tirarAvisos(aba);
     const sistemaTurno = [linhaTela, ...(avisos.length ? [`Desde a sua última fala: ${avisos.join(' ')}`] : [])].join('\n');
@@ -260,7 +309,10 @@ export function criarCerebro({ cfg, vault, banco }) {
     const t0 = Date.now();
     let primeiraFala = null, nFerramentas = 0, motivo = 'fim';
     const extraFim = {};
-    const ctx = { cfg, vault, banco, emitir, signal, conversa: ent, linhaTela, aba };
+    // o quadro da câmera morre com o turno: fica só neste ctx (nunca em log, disco ou histórico)
+    // falaJulio: a fala deste turno (a câmera só liga quando ela pede); estadoTurno: o que as ferramentas do turno contam
+    // umas para as outras (o ctx chega copiado em cada uma); pedirQuadro: um quadro novo da câmera, só na memória
+    const ctx = { cfg, vault, banco, emitir, signal, conversa: ent, linhaTela, aba, jarvis, navegador, construtor, quadroCamera, falaJulio: ent[ent.length - 1].texto, estadoTurno: {}, pedirQuadro };
     let marcado = null;
     let pendente = null;          // {conteudo, ini} de uma rodada cujas ferramentas ainda não voltaram
     let rodada = null;
@@ -327,6 +379,7 @@ export function criarCerebro({ cfg, vault, banco }) {
         const sr = msg.stop_reason;
         const fontes = fontesDe(content);
         if (fontes.length) emitir('cartao', { tipo: 'lista', dados: { titulo: 'Fontes', itens: fontes } });
+        lembrarPesquisa(ctx, content);
 
         if (sr === 'refusal') {               // descarta o parcial: a interface para de falar e diz a frase neutra
           motivo = 'recusado'; extraFim.mensagem = FRASE_RECUSA;

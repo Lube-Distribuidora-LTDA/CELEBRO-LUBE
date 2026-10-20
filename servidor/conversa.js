@@ -82,9 +82,16 @@ export function blocosParaRegistro(content, { semFerramentas = false } = {}) {
   return out.filter(b => b.type !== 'server_tool_use' || comResultado.has(b.id));
 }
 
+/* Imagem (o quadro da câmera do olhar_camera, o print do abrir_site com olhar: true) vai ao Claude SÓ no turno dela:
+   no registro vira uma linha de texto. O histórico muda uma vez, sem pensamento atravessando turnos: o cache recalcula
+   dali para a frente e o quadro nunca fica guardado (docs/JARVIS-ACOES.md §10). */
+export const IMAGEM_NO_HISTORICO = '[imagem enviada neste ponto; não fica guardada]';
 export function resultadosParaRegistro(blocos) {
   return blocos.map(b => {
     const { cache_control, ...resto } = b;   // eslint-disable-line no-unused-vars
+    if (Array.isArray(resto.content)) {
+      resto.content = resto.content.map(x => (x && x.type === 'image' ? { type: 'text', text: IMAGEM_NO_HISTORICO } : x));
+    }
     return JSON.parse(JSON.stringify(resto));
   });
 }

@@ -171,14 +171,16 @@ const tipos = {
     return pg.types.getTypeParser(oid, formato);
   },
 };
-function celula(v) {
+function celula(v, max = MAX_CELULA) {
   if (v == null) return null;
   if (typeof v === 'number' || typeof v === 'boolean') return v;
   if (v instanceof Date) return fmtTz.format(v);
   if (Buffer.isBuffer(v)) return `[binário, ${v.length} bytes]`;
   const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-  return s.length > MAX_CELULA ? s.slice(0, MAX_CELULA - 1) + '…' : s;
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
+// a planilha (criar_planilha) pede mais linhas e células maiores; a conversa fica nas 200 linhas e 300 caracteres
+const TETO_LINHAS = 100000, TETO_CELULA = 2000;
 
 export function criarBanco(cfgBanco) {
   let pool = null;
@@ -251,17 +253,22 @@ export function criarBanco(cfgBanco) {
     }
   }
 
-  async function consultar(sql, { signal } = {}) {
+  /* maxLinhas e celulaMax: a planilha pede até 100 mil linhas e 2 mil caracteres por célula; as travas são as mesmas.
+     tipos: o OID do Postgres de cada coluna (a planilha escolhe o formato: inteiro, número, data). */
+  async function consultar(sql, { signal, maxLinhas = MAX_LINHAS, celulaMax = MAX_CELULA } = {}) {
     const limpo = conferirSql(sql);
+    const nMax = Math.max(1, Math.min(TETO_LINHAS, Math.floor(Number(maxLinhas) || MAX_LINHAS)));
+    const cMax = Math.max(20, Math.min(TETO_CELULA, Math.floor(Number(celulaMax) || MAX_CELULA)));
     return emLeitura(async c => {
       const ex = await c.query({ text: `EXPLAIN (VERBOSE, FORMAT JSON) ${limpo}`, queryMode: 'extended' });
       const plano = ex.rows?.[0]?.['QUERY PLAN'];
       const tocados = conferirPlano(plano);
       await c.query({ text: `DECLARE jarvis_c NO SCROLL CURSOR FOR ${limpo}`, queryMode: 'extended' });
-      const r = await c.query({ text: `FETCH ${MAX_LINHAS + 1} FROM jarvis_c`, rowMode: 'array', queryMode: 'extended' });
+      const r = await c.query({ text: `FETCH ${nMax + 1} FROM jarvis_c`, rowMode: 'array', queryMode: 'extended' });
       const colunas = (r.fields || []).map(f => f.name);
-      const linhas = r.rows.slice(0, MAX_LINHAS).map(l => l.map(celula));
-      return { colunas, linhas, linhas_devolvidas: linhas.length, mais_linhas: r.rows.length > MAX_LINHAS, schemas: tocados };
+      const tipos = (r.fields || []).map(f => f.dataTypeID);
+      const linhas = r.rows.slice(0, nMax).map(l => l.map(v => celula(v, cMax)));
+      return { colunas, tipos, linhas, linhas_devolvidas: linhas.length, mais_linhas: r.rows.length > nMax, schemas: tocados };
     }, { signal, timeoutMs: 15000 });
   }
 
