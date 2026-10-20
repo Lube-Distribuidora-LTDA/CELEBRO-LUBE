@@ -1,0 +1,246 @@
+/* Cérebro da Lube — css/jarvis-acoes.css  (parte D do docs/JARVIS-ACOES.md §8.8)
+   O visual do js/jarvis-acoes.js: os cartões novos da Exibição (print, página, arquivo, pasta, planilha, anotação,
+   construção), o detalhe do cartão de aprovação de cada tipo, a janelinha do print, a câmera "Ver você", o botão dela e
+   o chip da construção na barra de cima. O js/jarvis-acoes.js põe este arquivo no <head> (o index.html e o estilo.css
+   não mudam). Só tokens do estilo.css; prefixo .ja- em tudo, dentro de #jarvis. Números em --mono com tabular-nums. */
+
+.jarvis{--ja-cam:132px; --ja-cam-alt:156px}
+
+/* ---------- Cartões novos (o .jv-cartao do jarvis.js por fora; aqui o miolo) ---------- */
+.jarvis .ja-c{display:grid; gap:7px; min-width:0}
+.jarvis .ja-c > *,.jarvis .ja-c p{margin:0; min-width:0}
+.ja-bts{display:flex; flex-wrap:wrap; gap:6px; padding-top:2px}
+.jarvis .ja-bt{height:28px; padding:0 9px; gap:6px; font-size:12px}
+.ja-bt svg{flex:none}
+.ja-bt[data-st="ok"]{border-color:var(--ok); color:var(--ok)}
+.ja-bt[aria-busy="true"]{opacity:.7; cursor:progress}
+.ja-url{font:600 10.5px/1.45 var(--mono); color:var(--muted); overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.ja-falta,.ja-mais{font:600 11px/1.4 var(--mono); color:var(--muted)}
+.ja-nota{font:500 12px/1.45 var(--body); color:var(--muted)}
+.ja-nota-rever{color:var(--rever)}
+.ja-mono-tit{font:700 13.5px/1.35 var(--mono); overflow-wrap:anywhere}
+
+/* miniatura do print: clicável (abre a janelinha); a página inteira mostra o topo e um degradê embaixo */
+.ja-mini{position:relative; display:block; width:100%; padding:0; border:1px solid var(--line-forte); border-radius:3px; background:var(--bg); overflow:hidden; cursor:zoom-in;
+  transition:border-color .15s, box-shadow .15s}
+.ja-mini img{display:block; width:100%; height:auto; max-height:210px; object-fit:cover; object-position:top center}
+.ja-mini-inteira::after{content:""; position:absolute; left:0; right:0; bottom:0; height:38px; pointer-events:none; background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg) 85%, transparent))}
+.ja-mini:hover,.ja-mini:focus-visible{border-color:var(--holo); box-shadow:0 0 0 1px var(--holo-medio), 0 0 18px var(--holo-fraco)}
+
+/* página organizada: títulos, trechos, tabela e links numerados ("abre o link 3") */
+.ja-titulos{list-style:none; padding:0 0 0 10px; display:grid; gap:3px; border-left:1px solid var(--holo-medio)}
+.ja-titulos li{font:600 12.5px/1.4 var(--body); color:var(--ink); overflow-wrap:anywhere}
+.ja-trecho{padding-left:10px; border-left:2px solid var(--line-forte); font:500 12.5px/1.5 var(--body); color:var(--muted); overflow-wrap:anywhere}
+.ja-links{list-style:none; padding:0; display:grid; gap:4px}
+.ja-links li{display:grid; grid-template-columns:24px minmax(0,1fr); gap:8px; align-items:baseline; font:500 12.5px/1.4 var(--body); overflow-wrap:anywhere}
+.ja-links b{display:inline-grid; place-items:center; min-width:22px; height:18px; border:1px solid var(--holo-medio); border-radius:2px; font:800 10.5px/1 var(--mono); color:var(--holo); font-variant-numeric:tabular-nums}
+
+/* itens de pasta: ícone de pasta ou de arquivo, nome, tamanho e quando */
+.ja-itens{list-style:none; padding:0; display:grid}
+/* o nome numa linha e o tamanho e a data embaixo (na coluna estreita, lado a lado o nome sumia) */
+.ja-itens li{display:grid; grid-template-columns:16px minmax(0,1fr); column-gap:8px; row-gap:1px; align-items:center; padding:5px 4px; border-bottom:1px solid var(--line); font:500 12.5px/1.35 var(--body)}
+.ja-itens li .ja-mt{grid-column:2}
+.ja-itens li .ja-mt:empty{display:none}
+.ja-itens li:last-child{border-bottom:0}
+/* os botões de cada linha (a lista dos projetos: Prévia e Pasta) */
+.ja-it-bts{grid-column:2; display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
+.ja-bt-it{height:26px; padding:0 8px; gap:5px; font-size:11.5px}
+/* o tipo de cada coluna da planilha */
+.ja-tipos{display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:6px; font:500 11px/1.4 var(--mono); color:var(--muted)}
+.ja-tipos b{font-weight:700; color:var(--ink)}
+.ja-ico{position:relative; width:14px; height:12px; border:1.5px solid var(--holo-medio); border-radius:1px}
+.ja-itens li[data-tipo="pasta"] .ja-ico{border-color:var(--rever); border-radius:1px 2px 2px 2px; background:var(--rever-fraco)}
+.ja-itens li[data-tipo="pasta"] .ja-ico::before{content:""; position:absolute; left:-1.5px; top:-4px; width:6px; height:3px; border:1.5px solid var(--rever); border-bottom:0; border-radius:1px 1px 0 0}
+.ja-itens li[data-tipo="arquivo"] .ja-ico{width:11px; height:14px; margin-left:1px}
+.ja-nm{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
+.ja-mt{font:600 10.5px/1.2 var(--mono); color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+.ja-c-arquivo .ja-nome{font-family:var(--mono); font-size:14px; font-weight:700}
+.ja-c-arquivo[data-acao="lixeira"] > .hud-rot{color:var(--rever)}
+.ja-c-arquivo[data-acao="lixeira"] .ja-nome{text-decoration:line-through; text-decoration-color:var(--rever); text-decoration-thickness:1.5px}
+.ja-trecho-nota{white-space:pre-line; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden}
+
+/* ---------- Construção: estado, etapa, custo contra o teto, tempo, arquivos, avisos, o print do fim ---------- */
+.ja-cons-rot{display:flex; justify-content:space-between; align-items:center; gap:8px}
+.ja-est{--c:var(--holo); display:inline-flex; align-items:center; padding:3px 8px; border:1px solid color-mix(in srgb, var(--c) 50%, transparent); border-radius:999px;
+  color:var(--c); color:color-mix(in srgb, var(--c) 80%, var(--branco)); font:700 9.5px/1 var(--mono); letter-spacing:.12em; white-space:nowrap}
+.ja-c-construcao[data-estado="pronto"] .ja-est{--c:var(--ok)}
+.ja-c-construcao[data-estado="parado"] .ja-est{--c:var(--muted)}
+.ja-c-construcao[data-estado="teto"] .ja-est{--c:var(--rever)}
+.ja-c-construcao[data-estado="erro"] .ja-est{--c:var(--alerta)}
+.ja-etapa{display:flex; align-items:center; gap:8px; font:500 13px/1.4 var(--body); color:var(--ink); overflow-wrap:anywhere}
+.ja-etapa i{flex:none; width:14px; height:14px; border-radius:50%; border:2px solid var(--holo-fraco); border-top-color:var(--holo); animation:jvGira .8s linear infinite}
+.ja-custo{display:grid; gap:5px}
+.ja-custo-txt{display:flex; justify-content:space-between; gap:8px; font:600 11.5px/1.2 var(--mono); color:var(--muted); font-variant-numeric:tabular-nums}
+.ja-custo-txt b{color:var(--ink); font-weight:800}
+.ja-tempo{color:var(--ink)}
+.ja-barra{position:relative; display:block; height:6px; border-radius:1px; background:var(--holo-tenue); overflow:hidden}
+.ja-barra i{position:absolute; left:0; top:0; bottom:0; width:calc(var(--v, 0) * 100%); background:linear-gradient(90deg, var(--azul), var(--holo)); box-shadow:0 0 10px var(--holo-medio); transition:width .3s ease}
+.ja-c-construcao[data-perto] .ja-barra i{background:var(--rever); box-shadow:0 0 10px var(--rever-fraco)}
+.ja-c-construcao[data-estado="teto"] .ja-barra i{background:var(--alerta)}
+.ja-arqs{list-style:none; padding:0; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:3px 12px; font:600 11px/1.35 var(--mono); font-variant-numeric:tabular-nums}
+.ja-arqs li{display:flex; justify-content:space-between; gap:6px; min-width:0}
+.ja-arqs span{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
+.ja-arqs b{flex:none; font-weight:600; color:var(--muted)}
+.ja-avisos{list-style:none; padding:0; display:grid; gap:4px}
+.ja-avisos li{padding:6px 9px; border:1px solid var(--rever); border-radius:3px; background:var(--rever-fraco); font:500 12px/1.45 var(--body); color:var(--ink); overflow-wrap:anywhere}
+.jv-cartao.ja-pisca{animation:jaPisca .6s ease-out 1}
+
+/* ---------- O chip da construção na barra de cima (enquanto roda; o desfecho fica 6 s) ---------- */
+.jarvis .jv-botoes{position:relative}
+.ja-chip-cons{--c:var(--holo); flex:none; display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 12px 0 10px; border:1px solid var(--line-forte);
+  border-color:color-mix(in srgb, var(--c) 45%, var(--line)); border-radius:999px; background:var(--vidro); color:var(--c); color:color-mix(in srgb, var(--c) 80%, var(--branco));
+  font:600 10.5px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; font-variant-numeric:tabular-nums; cursor:pointer; transition:border-color .15s, background-color .15s}
+.ja-chip-cons[hidden]{display:none}
+.ja-chip-cons:hover{border-color:var(--c); background:var(--surface-2)}
+.ja-chip-cons i{width:7px; height:7px; border-radius:50%; background:var(--c); box-shadow:0 0 8px var(--c); animation:pulsoPt 1.4s ease-out infinite}
+.ja-chip-cons b{font-weight:800; color:var(--ink); letter-spacing:.04em}
+.ja-cc-pt{color:var(--muted)}
+.ja-chip-cons[data-estado="pronto"]{--c:var(--ok)}
+.ja-chip-cons[data-estado="parado"]{--c:var(--muted)}
+.ja-chip-cons[data-estado="teto"]{--c:var(--rever)}
+.ja-chip-cons[data-estado="erro"]{--c:var(--alerta)}
+.ja-chip-cons:not([data-estado="preparando"]):not([data-estado="construindo"]):not([data-estado="conferindo"]) i{animation:none}
+
+/* ---------- O botão "Ver você" (ligado: vermelho, como o microfone aberto) ---------- */
+.jarvis .ja-ver{height:36px; gap:8px; padding:0 12px 0 10px}
+.ja-ver[aria-pressed="true"]{border-color:var(--vermelho); color:var(--ink); background:color-mix(in srgb, var(--vermelho) 14%, var(--surface))}
+.ja-ver[aria-pressed="true"]:hover:not(:disabled){border-color:var(--vermelho); background:color-mix(in srgb, var(--vermelho) 22%, var(--surface))}
+.ja-ver.ja-ligando svg{animation:jaPulsa 1s ease-in-out infinite}
+.jarvis.rs-travado .ja-ver{visibility:hidden}
+/* o Jarvis quis ligar a câmera sem o Júlio pedir: o botão pisca, quem liga é o clique */
+.ja-ver.ja-pede{border-color:var(--holo); box-shadow:0 0 0 1px var(--holo), 0 0 18px var(--holo-medio); animation:jaPede 1.1s ease-in-out 6}
+
+/* ---------- A câmera "Ver você": a lente redonda no canto de cima à direita (a Exibição desce para dar lugar) ---------- */
+.ja-camera{position:absolute; z-index:5; top:var(--jv-topo); right:var(--g); width:var(--jv-pd); height:var(--ja-cam-alt);
+  display:flex; flex-direction:row-reverse; align-items:center; gap:16px; padding-right:6px; pointer-events:none}
+.ja-camera[hidden]{display:none}
+.ja-camera > *{pointer-events:auto}
+.ja-camera.ja-entra{animation:jvConfirma .3s cubic-bezier(.2,.8,.2,1) both}
+.ja-cam-lente{position:relative; flex:none; width:var(--ja-cam); height:var(--ja-cam)}
+.ja-cam-video{position:absolute; inset:0; width:100%; height:100%; display:block; object-fit:cover; border-radius:50%; clip-path:circle(50%);
+  transform:scaleX(-1); background:var(--bg); filter:saturate(.92) contrast(1.04)}
+.ja-cam-anel{position:absolute; inset:-5px; border-radius:50%; border:2px solid var(--holo); pointer-events:none;
+  box-shadow:0 0 18px var(--holo-medio), inset 0 0 12px var(--holo-fraco); transition:border-color .15s, box-shadow .15s}
+.ja-cam-ponto{position:absolute; left:50%; bottom:-10px; translate:-50% 0; display:inline-flex; align-items:center; gap:5px; height:19px; padding:0 8px;
+  border:1px solid var(--vermelho); border-radius:999px; background:var(--vidro-forte); font:700 9px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--ink); white-space:nowrap}
+.ja-cam-ponto i{width:6px; height:6px; border-radius:50%; background:var(--vermelho); box-shadow:0 0 8px var(--vermelho); animation:jvMicPt 1.6s ease-out infinite}
+.ja-cam-olhei{position:absolute; left:50%; top:50%; translate:-50% -50%; padding:4px 9px; border:1px solid var(--ink); border-radius:2px;
+  background:color-mix(in srgb, var(--bg) 72%, transparent); font:800 12px/1 var(--mono); letter-spacing:.24em; color:var(--branco); opacity:0; transition:opacity .12s; pointer-events:none}
+.ja-camera.ja-olhou .ja-cam-olhei{opacity:1}
+/* ao olhar: o anel pisca --ink por 150 ms (sem pisca com movimento reduzido: fica só o OLHEI) */
+.ja-camera.ja-olhou .ja-cam-anel{animation:jaPiscaAnel .15s steps(1) 1}
+.ja-camera.ja-calmo .ja-cam-anel{animation:none}
+.ja-cam-x{position:absolute; top:-3px; left:-3px; width:26px; height:26px; display:grid; place-items:center; padding:0; border:1px solid var(--line-forte); border-radius:50%;
+  background:var(--vidro-forte); color:var(--muted); cursor:pointer; transition:border-color .15s, color .15s}
+.ja-cam-x:hover{border-color:var(--holo); color:var(--ink)}
+.ja-cam-txt{flex:1; min-width:0; display:grid; gap:5px; text-align:right}
+.ja-cam-txt p{margin:0}
+.ja-cam-tit{font:700 10.5px/1.2 var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--jv-tinta)}
+.ja-cam-nota{font:500 12px/1.45 var(--body); color:var(--muted); text-shadow:0 0 6px var(--bg); overflow-wrap:anywhere}
+.jarvis.rs-travado .ja-camera,.jarvis.saindo .ja-camera{visibility:hidden}
+@media (min-width:1024px){
+  .jarvis.ja-com-camera .jv-exibicao{top:calc(var(--jv-topo) + var(--ja-cam-alt)); max-height:calc(100% - var(--jv-topo) - var(--ja-cam-alt) - var(--jv-pe-alt) - 16px)}
+}
+@media (min-width:1024px) and (max-width:1279px){ .jarvis{--ja-cam:116px; --ja-cam-alt:140px} }
+@media (max-height:719px) and (min-width:1024px){ .jarvis{--ja-cam:104px; --ja-cam-alt:126px} }
+
+/* ---------- Detalhe do cartão de aprovação (dentro do .jv-conf-detalhe do jarvis.js) ---------- */
+.ja-ad{display:grid; gap:9px; min-width:0}
+.ja-ad > *,.ja-ad p{margin:0}
+.ja-ad .ja-ad-conta,.ja-ad .ja-ad-mais{font:600 11px/1.4 var(--mono); letter-spacing:.04em; color:var(--muted); font-variant-numeric:tabular-nums}
+.ja-ad-lista{list-style:none; margin:0; padding:0; display:grid; gap:4px; max-height:10.5em; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--line-forte) transparent}
+.ja-ad-lista li{display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 8px; padding:6px 10px; background:var(--surface); border:1px solid var(--line); border-radius:3px;
+  font:600 12px/1.4 var(--mono); overflow-wrap:anywhere; min-width:0}
+.ja-ad-itens li{justify-content:space-between}
+.ja-ad .ja-de{color:var(--muted)}
+.ja-ad .ja-para{color:var(--ink)}
+.ja-seta{color:var(--holo); font-weight:800}
+.ja-meta{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+.ja-ad .ja-ad-alerta{font:600 13px/1.45 var(--body); color:var(--vermelho); color:color-mix(in srgb, var(--vermelho) 78%, var(--branco))}
+.ja-ad .ja-ad-troca{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:3px;
+  font:600 14px/1.4 var(--mono); overflow-wrap:anywhere}
+.ja-ad-troca b{color:var(--branco); font-weight:800}
+.ja-ad .ja-ad-rot{font:600 10px/1.4 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+.ja-ad-bloco{margin:0; max-height:8.6em; overflow:auto; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:3px;
+  font:500 12px/1.5 var(--mono); color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; scrollbar-width:thin; scrollbar-color:var(--line-forte) transparent}
+.ja-ad-bloco i{color:var(--muted)}
+.ja-ad-depois{border-color:var(--holo-medio)}
+.ja-ad .ja-ad-site{font:800 18px/1.25 var(--display); color:var(--branco); overflow-wrap:anywhere}
+.ja-ad .ja-ad-url{max-height:6.2em; overflow:auto; padding:7px 10px; background:var(--bg); border:1px solid var(--line-forte); border-radius:3px;
+  font:600 12px/1.45 var(--mono); color:var(--ink); overflow-wrap:anywhere; word-break:break-all}
+.ja-ad .ja-ad-botao,.ja-ad .ja-ad-nota{font:500 12.5px/1.5 var(--body); color:var(--muted)}
+.ja-ad .ja-ad-linha{margin-top:-5px; font:600 11px/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--jv-tinta)}
+.ja-ad-construir .ja-ad-bloco{max-height:5.4em}
+/* o cartão de aprovação fica centrado no núcleo do HUD (estilo.css): com um detalhe alto ele passava da borda de cima.
+   Aqui ele não passa de 2 × a altura do centro (só nas telas largas; nas estreitas ele já fica preso embaixo) */
+@media (min-width:1024px){ .jarvis .jv-confirma{max-height:min(calc(100% - 40px), calc(var(--jv-cy) * 2 - 24px))} }
+.ja-ad-botao b{color:var(--ink); font-weight:600}
+.ja-ad-custo{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.ja-ad-custo div{display:grid; gap:6px; padding:9px 12px; background:var(--surface); border:1px solid var(--line); border-radius:3px}
+.ja-ad-custo span{font:600 10px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+.ja-ad-custo b{font:800 22px/1 var(--mono); color:var(--branco); font-variant-numeric:tabular-nums}
+.ja-mono{font-family:var(--mono); font-size:12.5px; overflow-wrap:anywhere}
+.ja-tag{display:inline-block; margin-left:4px; padding:0 6px; border:1px solid var(--holo-medio); border-radius:2px; font:700 9px/1.6 var(--mono); font-style:normal;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--holo); white-space:nowrap; vertical-align:1px}
+
+/* ---------- A janelinha do print em tamanho grande (por cima do HUD, por baixo do cartão de aprovação) ---------- */
+/* flex (não grid): a caixa fica presa à altura da tela e a imagem rola dentro dela */
+.ja-janela{position:absolute; inset:0; z-index:7; display:flex; align-items:center; justify-content:center; padding:var(--g); background:color-mix(in srgb, var(--bg) 80%, transparent);
+  animation:jaFundo .2s ease-out both}
+.ja-jan-caixa{position:relative; width:min(1180px, 100%); max-height:100%; display:flex; flex-direction:column; gap:10px; padding:16px 18px 14px;
+  background:var(--vidro-forte); border:1px solid var(--holo-medio); border-radius:3px; box-shadow:0 30px 90px var(--sombra), 0 0 0 1px var(--holo-tenue), 0 0 60px var(--holo-tenue);
+  animation:jvConfirma .3s cubic-bezier(.2,.8,.2,1) both}
+.ja-jan-caixa .canto{width:16px; height:16px}
+.ja-jan-cab{display:grid; gap:4px; flex:none; min-width:0}
+.ja-jan-cab > *{margin:0}
+.ja-jan-cab h3{font:800 19px/1.3 var(--display); overflow-wrap:anywhere; text-wrap:balance}
+.ja-jan-img{flex:1 1 auto; min-height:120px; overflow:auto; border:1px solid var(--line); border-radius:3px; background:var(--bg); scrollbar-width:thin; scrollbar-color:var(--line-forte) transparent}
+.ja-jan-img img{display:block; width:100%; height:auto}
+.ja-jan-st{flex:none; margin:0; font:600 12px/1.4 var(--mono); color:var(--muted)}
+.ja-jan-st:empty{display:none}
+.ja-jan-st[data-tom="rever"]{color:var(--rever)}
+.ja-jan-bts{flex:none; justify-content:flex-end; margin:0}
+.ja-jan-fechar kbd{margin:0 0 0 2px; font-size:10px}
+.jarvis.ja-com-janela .jv-sim{visibility:hidden}
+
+/* ---------- Telas médias e celular ---------- */
+@media (max-width:1099px){
+  .jarvis .ja-ver{width:36px; padding:0}
+  .ja-ver-rot{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+}
+@media (max-width:1023px){
+  .jarvis{--ja-cam:96px}
+  /* o HUD fica em cima e a Exibição embaixo: a lente vai para o canto de cima, com o aviso embaixo dela */
+  .ja-camera{top:calc(var(--jv-topo) + 6px); right:14px; width:auto; height:auto; flex-direction:column; align-items:flex-end; gap:14px; padding-right:4px}
+  .ja-cam-txt{flex:none; width:120px}
+  .ja-cam-tit{display:none}
+  .ja-cam-nota{padding:4px 7px; border:1px solid var(--line); border-radius:3px; background:var(--vidro); font-size:10.5px; line-height:1.35; text-shadow:none}
+  /* a leitura do canto de cima à direita do HUD fica embaixo da lente (o estado continua no chip da marca) */
+  .jarvis.ja-com-camera .jv-l-sd{visibility:hidden}
+  .ja-c-construcao .ja-arqs{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:759px){
+  /* o chip da construção vai para baixo dos botões (na mesma linha não cabe) e a lente desce junto */
+  .ja-chip-cons{position:absolute; top:calc(100% + 6px); right:0; height:24px; padding:0 9px 0 8px; gap:6px; font-size:9.5px}
+  .ja-cc-rot{display:none}
+  .jarvis.ja-construindo .ja-camera{top:calc(var(--jv-topo) + 30px)}
+  .ja-janela{padding:16px; align-items:stretch}
+  .ja-jan-caixa{width:100%; height:100%; padding:12px}
+  .ja-jan-cab h3{font-size:16px}
+  .ja-jan-fechar kbd{display:none}
+  .ja-ad-custo b{font-size:19px}
+}
+
+/* ---------- Movimento ---------- */
+@keyframes jaPiscaAnel{0%,100%{border-color:var(--ink); box-shadow:0 0 26px var(--ink), inset 0 0 14px var(--ink)}}
+@keyframes jaPisca{0%{box-shadow:0 0 0 2px var(--holo), 0 0 34px var(--holo-medio)}}
+@keyframes jaPulsa{50%{opacity:.35}}
+@keyframes jaFundo{from{opacity:0}}
+@keyframes jaPede{50%{box-shadow:0 0 0 2px var(--holo), 0 0 30px var(--holo)}}
+@media (prefers-reduced-motion: reduce){
+  .ja-camera.ja-entra,.ja-jan-caixa,.ja-janela,.jv-cartao.ja-pisca{animation:none}
+  .ja-camera.ja-olhou .ja-cam-anel{animation:none}
+  .ja-cam-ponto i,.ja-chip-cons i,.ja-ver.ja-ligando svg,.ja-ver.ja-pede{animation:none}
+  .ja-etapa i{animation:none; border-color:var(--holo-medio); border-style:dashed}
+  .ja-barra i,.ja-mini,.ja-cam-anel,.ja-cam-olhei{transition:none}
+}

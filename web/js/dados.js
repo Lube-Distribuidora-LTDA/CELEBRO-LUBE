@@ -563,16 +563,24 @@ export async function buscarVaultLocal(){ if (!emLocalhost()) return null; retur
 /**
  * Escuta /api/events (EventSource). A cada evento 'change' (debounce 350 ms) lê o vault de novo e chama onMudou(data).
  * onEstado('ao vivo') ao conectar; onEstado('reconectando') quando a conexão cai (ao voltar, relê o vault).
+ * onJarvis() quando o atalho Ctrl+Alt+J pede o Jarvis (evento 'jarvis' {acao:'abrir'}; só abrir, nunca fechar).
  * Devolve uma função que para de escutar.
  */
-export function ouvirMudancas(onMudou, onEstado){
+export function ouvirMudancas(onMudou, onEstado, onJarvis){
   if (typeof EventSource === 'undefined') return () => {};
-  let es = null, pend = null, caiu = false, parado = false;
+  let es = null, pend = null, caiu = false, parado = false, ultJarvis = 0;
   const recarregar = async () => { const d = await fetchVault(); if (d) { try { onMudou?.(d); } catch (e) { console.error(e); } } };
   function abrir(reler){
     if (es || parado) return;
     try { es = new EventSource('/api/events'); } catch (e) { es = null; return; }
     es.addEventListener('change', () => { clearTimeout(pend); pend = setTimeout(recarregar, 350); });
+    // o servidor guarda o pedido do atalho por 10 s (quem reconecta nesse tempo recebe de novo): um por vez
+    es.addEventListener('jarvis', (ev) => {
+      let d = {}; try { d = JSON.parse(ev.data || '{}'); } catch (e) { d = {}; }
+      if (d.acao !== 'abrir' || Date.now() - ultJarvis < 10000) return;
+      ultJarvis = Date.now();
+      try { onJarvis?.(); } catch (e) { console.error(e); }
+    });
     es.onerror = () => { if (!caiu){ caiu = true; try { onEstado?.('reconectando'); } catch (e) {} } };
     es.onopen = () => { const voltou = caiu; caiu = false; try { onEstado?.('ao vivo'); } catch (e) {} if (voltou) recarregar(); };
     if (reler) recarregar();   // o que mudou enquanto a aba estava escondida

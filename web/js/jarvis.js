@@ -37,10 +37,26 @@
      decide é o servidor: travado, o turno, o confirmar e o ligar do ouvido respondem 423 — e um 423 no meio da conversa
      (virou o dia) abre o portão por cima do HUD e refaz o pedido. Sem ação do Júlio (o vigia do ouvido à meia-noite,
      "Travar agora") o portão mostra só o cartão "Jarvis travado": a câmera liga no clique. Ajustes › Trava do rosto:
-     travar, cadastrar de novo, Windows Hello e "Apagar meu cadastro" (trocar ou apagar pede a confirmação de até 5 min). */
+     travar, cadastrar de novo, Windows Hello e "Apagar meu cadastro" (trocar ou apagar pede a confirmação de até 5 min).
+
+   O JARVIS QUE FAZ (docs/JARVIS-ACOES.md, 2026-10-20), só no app do computador: o js/jarvis-acoes.js (importado junto do
+   ouvido e do rosto) traz os cartões novos (print, página, arquivo, pasta, planilha, anotação, construção), a janelinha
+   do print, a câmera "Ver você" (o quadro mais recente vai em contexto.camera a cada turno, só com ela ligada), o canal
+   de eventos da aba (/api/jarvis/eventos: andamento da construção, fim das ações, a fala do fim) e as listas da
+   APROVAÇÃO POR VOZ. Mudar, mover, apagar, mandar, preencher site, abrir site não citado e construir viram um cartão
+   que o Júlio aprova falando ("aprovado", "pode fazer"…) ou recusa ("não", "cancela"…), sem clicar. Aprovar por voz só
+   vale com o cartão na tela há 1,5 s, a fala começando com o Jarvis calado há 1,5 s (sem eco), a fala inteira sendo a
+   frase e o silêncio depois (1,2 s; 1,8 s para palavra única: "pode… mudar o assunto?"). "Sim", "pode" e "isso"
+   sozinhos só valem antes de a conversa andar. O botão continua. */
 
 import { criarHud, criarSons } from './jarvis-hud.js';
 import { limparFala } from './fala.js';
+// as partes puras do Jarvis que faz (listas da aprovação por voz, cartões, detalhes das ações); o criarAcoesUi (a parte
+// que mexe na tela: câmera, janelinha, canal de eventos) só roda no app do computador
+import {
+  FRASES, respostaDeVoz, palavraUnica, rotuloAcao, detalheAcaoHtml as detalheAcaoNovo, cartaoHtml as cartaoHtmlNovo,
+  TEXTOS_ACOES, criarAcoesUi
+} from './jarvis-acoes.js';
 
 /* ---------- utilidades ---------- */
 const PREF = 'cerebro-robo:';
@@ -81,9 +97,14 @@ const SO_PARAR = new Set(['jarvis', 'para', 'pare', 'parar', 'espera', 'espere',
 // "não, não é isso": interrompe como fala e segue como pergunta (o Júlio vai dizer o que é)
 const CORRIGE = new Set(['nao nao', 'nao e isso', 'nao e esse', 'nao e essa', 'nao foi isso', 'errado', 'ta errado', 'esta errado']);
 const FECHAR = /^(jarvis )?(pode )?(fechar|fecha|sair|sai|encerrar|encerra|desligar|desliga)( o jarvis| jarvis| o modo jarvis)?$/;
-// "pode", "manda" e "envia" sozinhos não confirmam: "Pode… [pausa] …mudar o assunto?" não pode enviar o e-mail
-const SIM = new Set(['sim', 'pode sim', 'sim pode', 'confirmo', 'confirma', 'confirmar', 'pode confirmar', 'pode enviar', 'pode mandar', 'sim pode enviar', 'sim pode mandar', 'pode ir', 'confirmado', 'confirmo o envio']);
-const NAO = new Set(['nao', 'cancela', 'cancelar', 'cancelado', 'nao envia', 'nao manda', 'nao pode', 'nao pode enviar', 'nao quero', 'negativo', 'cancela o envio', 'nao nao']);
+// a aprovação por voz (docs/JARVIS-ACOES.md §4.2): as listas do js/jarvis-acoes.js. "Manda" e "envia" sozinhos não
+// aprovam; "pode", "sim", "faz" e "isso" sozinhos só valem antes de a conversa andar (o respostaDeVoz decide) e esperam
+// 1,8 s de silêncio ("Pode… [pausa] …mudar o assunto?" não pode aprovar nada). NAO = a lista de recusar, que também vale
+// no fim de uma fala misturada com o meu eco (comandoDe)
+const NAO = new Set(['nao nao', ...FRASES.recusar]);
+// "aprovar" | "recusar" | null para a fala inteira, já com a regra da conversa que andou
+const decisaoDeVoz = (texto, conversaAndou) => { const r = respostaDeVoz(texto, { conversaAndou }); return r === 'aprovar' ? 'confirmar' : r === 'recusar' ? 'recusar' : null; };
+const ehAprovar = (texto, conversaAndou) => decisaoDeVoz(texto, conversaAndou) === 'confirmar';
 const curto = (t) => palavrasDe(t).filter((w) => w !== 'jarvis' || palavrasDe(t).length === 1).join(' ');
 const VAZIO = new Set();
 const conteudo = (w) => w.length >= 3 && !VAZIAS.has(w) && !/^\d+$/.test(w);   // palavra que conta (número não: "três mil" vira "3.000")
@@ -119,11 +140,19 @@ const ROTULO_FERR = {
   ver_saude: 'Conferindo a saúde dos sistemas', consultar_dados: 'Consultando o banco', listar_emails: 'Lendo a caixa cpd@',
   ler_email: 'Abrindo o e-mail', preparar_email: 'Preparando o e-mail', buscar_arquivos: 'Procurando arquivos',
   ler_arquivo: 'Lendo o arquivo', delegar: 'Análise mais funda', web_search: 'Pesquisando na internet',
-  mostrar_na_tela: 'Mostrando na tela'
+  mostrar_na_tela: 'Mostrando na tela',
+  // o Jarvis que faz (docs/JARVIS-ACOES.md)
+  anotar: 'Anotando', alterar_texto: 'Preparando a mudança', listar_pasta: 'Olhando a pasta do Jarvis', criar_pasta: 'Criando a pasta',
+  criar_arquivo: 'Criando o arquivo', copiar_para_jarvis: 'Copiando para a pasta do Jarvis', mover: 'Preparando para mover',
+  renomear: 'Preparando para renomear', apagar: 'Preparando para mandar para a Lixeira', abrir_no_windows: 'Abrindo no Windows',
+  criar_planilha: 'Criando a planilha', abrir_site: 'Abrindo o site', print_site: 'Tirando o print', seguir_link: 'Abrindo o link',
+  preencher_formulario: 'Preparando o formulário', construir: 'Preparando a construção', ver_construcao: 'Vendo a construção',
+  parar_construcao: 'Parando a construção', listar_projetos: 'Listando os projetos', camera: 'Mexendo na câmera da tela',
+  olhar_camera: 'Olhando pela câmera'
 };
 const ESTADO_ROT = {
   repouso: 'Pronto', ouvindo: 'Ouvindo', pensando: 'Processando', falando: 'Falando', interrompido: 'Interrompido',
-  confirmando: 'Aguardando confirmação', 'sem-conexao': 'Sem conexão', travado: 'Travado'
+  confirmando: 'Aguardando aprovação', 'sem-conexao': 'Sem conexão', travado: 'Travado'
 };
 
 /* =============================================================================
@@ -408,6 +437,7 @@ function criarCerebroLocal(token) {
           case 'ferramenta': h.ferramenta && h.ferramenta(d); break;
           case 'cartao': h.cartao && h.cartao(d); break;
           case 'acao': h.acao && h.acao(d); break;
+          case 'camera': h.camera && h.camera(d); break;
           case 'modelo': h.modelo && h.modelo(d); break;
           case 'fim': terminar(d); break;
           case 'erro': falhar(String(d.mensagem || 'O cérebro não conseguiu responder.')); break;
@@ -459,16 +489,24 @@ function criarCerebroLocal(token) {
       })();
       return { cancelar() { acabou = true; clearTimeout(tPrazo); try { ctl.abort(); } catch { /* nada */ } } };
     },
-    // motivo (só na recusa automática): 'substituida' | 'expirou' | 'saiu' — o servidor conta ao modelo o motivo certo
-    async decidirAcao(id, decisao, motivo) {
+    // motivo (só na recusa automática): 'substituida' | 'expirou' | 'saiu' — o servidor conta ao modelo o motivo certo.
+    // via: 'voz' | 'clique' | 'teclado' (só para o aviso e o log). A resposta pode trazer um cartão (a pasta depois de
+    // mover, o print do site aprovado, a construção que começou)
+    async decidirAcao(id, decisao, motivo, via) {
       try {
-        const corpo = motivo && decisao === 'recusar' ? { decisao, motivo } : { decisao };
+        const corpo = { decisao, ...(motivo && decisao === 'recusar' ? { motivo } : {}), ...(via ? { via } : {}) };
         const r = await fetch(`/api/jarvis/acao/${encodeURIComponent(id)}`, { method: 'POST', headers: cab(), body: JSON.stringify(corpo), cache: 'no-store' });
         if (r.status === 401) return { ok: false, mensagem: REINICIADO };
         let j = {};
         try { j = await r.json(); } catch { j = {}; }
         if (r.status === 423) return { ok: false, trava: true, mensagem: String(j.mensagem || 'O Jarvis está travado. Faça o reconhecimento do rosto.') };
-        return { ok: r.ok && j.ok !== false, mensagem: String(j.mensagem || (r.ok ? '' : r.status === 404 ? 'Esse pedido já expirou.' : `O app do cérebro respondeu ${r.status}.`)) };
+        const umCartao = (c) => (c && typeof c === 'object' && typeof c.tipo === 'string' ? c : null);
+        const cartao = umCartao(j.cartao);
+        const cartoes = Array.isArray(j.cartoes) ? j.cartoes.map(umCartao).filter(Boolean).slice(0, 2) : [];
+        return {
+          ok: r.ok && j.ok !== false, mensagem: String(j.mensagem || (r.ok ? '' : r.status === 404 ? 'Esse pedido já expirou.' : `O app do cérebro respondeu ${r.status}.`)), cartao, cartoes,
+          fala: typeof j.fala === 'string' ? j.fala.slice(0, 300) : ''
+        };
       } catch { return { ok: false, mensagem: 'Não consegui falar com o app do cérebro.' }; }
     }
   };
@@ -671,12 +709,12 @@ function marcacao() {
   <div class="jv-confirma" role="alertdialog" aria-modal="false" aria-labelledby="jvConfTit" aria-describedby="jvConfTxt" hidden>
     ${CANTOS}
     <svg class="jv-conf-arco" viewBox="0 0 100 100" aria-hidden="true"><circle class="jv-conf-trilha" cx="50" cy="50" r="47"/><circle class="jv-conf-resta" cx="50" cy="50" r="47" pathLength="100"/></svg>
-    <p class="hud-rot jv-conf-rot">Ação pendente · <b class="jv-conf-tipo">enviar e-mail</b></p>
+    <p class="hud-rot jv-conf-rot"><span class="jv-conf-rot-txt">Aprovar por voz</span> · <b class="jv-conf-tipo">enviar e-mail</b></p>
     <h3 id="jvConfTit" class="jv-conf-tit"></h3>
     <div id="jvConfTxt" class="jv-conf-detalhe"></div>
-    <p class="jv-conf-voz"><span class="jv-conf-voz-txt">Diga <b>“pode enviar”</b> ou <b>“cancela”</b> depois que eu terminar de falar, ou use os botões.</span> Expira em <b class="jv-conf-tempo">5:00</b>.</p>
+    <p class="jv-conf-voz"><span class="jv-conf-voz-txt">Diga <b>“aprovado”</b> ou <b>“cancela”</b> depois que eu terminar de falar, ou use os botões.</span> Expira em <b class="jv-conf-tempo">5:00</b>.</p>
     <p class="jv-conf-res" role="status" hidden></p>
-    <div class="acoes"><button class="btn principal jv-conf-sim" type="button">Confirmar</button><button class="btn jv-conf-nao" type="button">Cancelar</button></div>
+    <div class="acoes"><button class="btn principal jv-conf-sim" type="button">Aprovar</button><button class="btn jv-conf-nao" type="button">Cancelar</button></div>
   </div>
   <footer class="jv-pe">
     <div class="jv-legenda" aria-hidden="true">
@@ -726,7 +764,7 @@ function marcacao() {
         <li>Fale normalmente. Quando você para, eu respondo.</li>
         <li>Segure <kbd>Espaço</kbd> para falar; isso também me interrompe na hora.</li>
         <li>Pode falar por cima de mim: eu paro e respondo ao que você disse. “Para”, “espera”, “chega” ou “Jarvis” sozinhos só me fazem parar.</li>
-        <li>Para enviar e-mail eu sempre peço confirmação na tela: diga “pode enviar” ou “cancela” depois que eu terminar de falar, ou use os botões.</li>
+        <li class="jv-ajuda-acoes">Para enviar e-mail eu sempre peço aprovação na tela: diga “aprovado” ou “cancela” depois que eu terminar de falar, ou use os botões.</li>
         <li>“Pode fechar” ou <kbd>Esc</kbd> sai do modo Jarvis.</li>
         <li><b>Sem fone, um fala de cada vez.</b> Enquanto eu falo o microfone fica fechado (aparece “Mudo”); para me cortar, clique em <b>Interromper</b> ou segure <kbd>Espaço</kbd>. Quando eu termino, ele abre sozinho. De fone (marque nos Ajustes), dá para me interromper falando.</li>
       </ul>
@@ -834,6 +872,9 @@ export function criarJarvis(opts = {}) {
   const LOCAL_APP = ehLocal() && !!tokenLocal();
   // M = os módulos só do app do computador (ouvido remoto e portão do rosto), importados na primeira abertura
   let M = null, pModulos = null, portao = null, ouvidoEdge = null, ouvidoChrome = null;
+  // a parte da tela do Jarvis que faz (js/jarvis-acoes.js): câmera "Ver você", janelinha do print, botões dos cartões e o
+  // canal de eventos da aba. Só no app do computador; nasce na primeira abertura
+  let acoesUi = null;
   const OUVIDO_NADA = { suportado: false, ativo: false, ouvindo: false, async ligar() { throw Object.assign(new Error('sem ouvido'), { codigo: 'sem-suporte' }); }, pausar() {}, nivel: () => null, destruir() {} };
   let ouvido = SIM_MODO ? criarOuvidoSimulado() : LOCAL_APP ? OUVIDO_NADA : (ouvidoEdge = criarOuvido(H_OUVIDO, sons));
 
@@ -1098,9 +1139,9 @@ export function criarJarvis(opts = {}) {
     texto = String(texto || '').replace(/\s+/g, ' ').trim();
     if (!texto || J.portao) return;   // com o portão do rosto na tela, nada vai para o cérebro
     if (J.acao && !jaFiltrada) {
-      // digitado com o cartão aberto: "pode enviar" / "cancela" seguem as mesmas regras da voz (menos a do eco)
-      const k = curto(texto), dec = SIM.has(k) ? 'confirmar' : NAO.has(k) ? 'recusar' : null;
-      if (dec && respostaAcao(dec, { texto })) return;
+      // digitado com o cartão aberto: "aprovado" / "cancela" seguem as mesmas regras da voz (menos a do eco)
+      const dec = decisaoDeVoz(texto, J.acao.nFalas !== J.nFalas);
+      if (dec && respostaAcao(dec, { texto, via: 'teclado' })) return;
     }
     J.nFalas++;   // a conversa andou: um cartão aberto antes daqui só se confirma pelo botão
     atualizarDicaAcao();
@@ -1151,6 +1192,8 @@ export function criarJarvis(opts = {}) {
       },
       cartao: (c2) => { if (!vivo()) return; evento(); soltarFrase(); mostrarCartao(c2 || {}); },
       acao: (a) => { if (!vivo()) return; evento(); soltarFrase(); abrirAcao(a || {}); },
+      // a câmera "Ver você" (ligar, desligar, conferir o rosto, "olhei"): quem mexe é o js/jarvis-acoes.js
+      camera: (d) => { if (!vivo()) return; evento(); aoEventoCamera(d || {}); },
       modelo: (m) => {
         if (!vivo()) return;
         evento(); soltarFrase();
@@ -1218,7 +1261,13 @@ export function criarJarvis(opts = {}) {
       }
     };
     const ctxTurno = contexto();
-    if (c.tipo === 'local') ctxTurno.aba = ABA;   // os desfechos das ações desta janela só voltam para ela
+    if (c.tipo === 'local') {
+      ctxTurno.aba = ABA;   // os desfechos das ações desta janela só voltam para ela
+      // a câmera "Ver você" ligada: o quadro mais recente vai junto (só na memória; o servidor só entrega ao Claude se
+      // ele chamar olhar_camera, e nunca guarda)
+      const q = acoesUi && acoesUi.camera.ligada() ? acoesUi.camera.quadro() : null;
+      if (q) ctxTurno.camera = q;
+    }
     try {
       J.turno = c.turno(conversaParaEnviar(), ctxTurno, h) || { cancelar() {} };
     } catch (err) {
@@ -1364,6 +1413,16 @@ export function criarJarvis(opts = {}) {
     if (suf && suf !== k && conjunto.has(suf) && !recente(suf)) return suf;
     return null;
   }
+  // a recusa ao cartão no fim de uma fala que pode ter o meu eco: a frase inteira das listas (comandoDe) ou em pedaços
+  // ("não, cancela", pelo respostaDeVoz), na fala toda ou no que veio depois do meu eco; nunca palavras que eu mesmo
+  // acabei de dizer. Recusar é o lado seguro
+  function recusaDe(texto, eco, fj) {
+    if (comandoDe(texto, eco, NAO, fj)) return true;
+    const recente = (s) => !(fj && fj.ptt) && ditaRecente(palavrasDe(s));
+    if (decisaoDeVoz(texto, true) === 'recusar' && !recente(texto)) return true;
+    const suf = sufixoNovo(texto, eco);
+    return !!suf && decisaoDeVoz(suf, true) === 'recusar' && !recente(suf);
+  }
   // uma confirmação por voz espera 1,2 s de silêncio: se o Júlio continua falando ("pode enviar… mas muda o assunto"),
   // não confirma, e o que ele disse vira o começo da fala nova (que vai para o cérebro)
   function seguirConfirmacao() {
@@ -1385,7 +1444,7 @@ export function criarJarvis(opts = {}) {
     if (falando && !fj.interrompeu) {
       // eu estou falando: o microfone pode estar ouvindo a minha voz
       if (comandoDe(texto, eco, SO_PARAR, fj)) { pararSo(); fj.descartar = true; mostrarJulio(texto, false); agendarFim(); return; }
-      if (J.acao && (SIM.has(curto(texto)) || comandoDe(texto, eco, NAO, fj))) { mostrarJulio(texto, false); agendarFim(); return; }
+      if (J.acao && (ehAprovar(texto, J.acao.nFalas !== J.nFalas) || recusaDe(texto, eco, fj))) { mostrarJulio(texto, false); agendarFim(); return; }
       if (comandoDe(texto, eco, CORRIGE, fj) || palavrasNovas(texto, eco) >= minimo) {
         fj.antes = texto;   // o que veio até aqui pode começar com o fim da minha frase (eco); o que vier depois é do Júlio
         interromper({ motivo: 'voz' }); fj.interrompeu = true;
@@ -1409,6 +1468,18 @@ export function criarJarvis(opts = {}) {
     const ps = palavrasDe(textoFala(fj)), conector = CONECTORES.has(ps[ps.length - 1] || '');
     fj.timer = setTimeout(concluirFala, fj.parcial ? (conector ? 1800 : 1200) : (conector ? 1500 : 700));
   }
+  // "fecha" com a janelinha do print aberta fecha só ela; o Jarvis inteiro fecha com "fecha o Jarvis" (ou com a
+  // janelinha já fechada). Devolve true se a fala era para fechar alguma coisa
+  const FECHAR_JANELA = /^(pode )?(fechar|fecha|feche)( (a|o) (janela|janelinha|print|imagem|foto))?$/;
+  function fecharPelaFala(texto) {
+    const ps = palavrasDe(texto), k = ps.join(' ');
+    if (acoesUi && acoesUi.janelaAberta() && !ps.includes('jarvis') && FECHAR_JANELA.test(k)) {
+      mostrarJulio(texto, true); acoesUi.fecharJanela(); limparJulio();
+      return true;
+    }
+    if (FECHAR.test(k) || FECHAR.test(curto(texto))) { fechar(); return true; }
+    return false;
+  }
   function concluirFala() {
     const fj = J.falaJulio; if (!fj) return;
     clearTimeout(fj.timer);
@@ -1419,10 +1490,12 @@ export function criarJarvis(opts = {}) {
     const eco = mesclarEco(fj);
     const parar = comandoDe(texto, eco, SO_PARAR, fj);
     if (fj.descartar && (parar || SO_PARAR.has(curto(texto)))) { limparJulio(); return; }   // "para" sozinho: já parei
-    // resposta ao cartão: "pode enviar" só pela fala inteira (e com as regras do respostaAcao); "cancela" também vale
+    // resposta ao cartão: "aprovado" só pela fala inteira (e com as regras do respostaAcao); "cancela" também vale
     // depois do meu eco, menos quando fui eu que acabei de dizer a palavra
-    const k0 = curto(texto), ecoPossivel = (fj.durante || fj.naJanela) && !fj.ptt;
-    const resposta = !J.acao ? null : SIM.has(k0) ? 'confirmar' : (ecoPossivel ? comandoDe(texto, eco, NAO, fj) : NAO.has(k0)) ? 'recusar' : null;
+    const ecoPossivel = (fj.durante || fj.naJanela) && !fj.ptt;
+    const andou = !!J.acao && J.acao.nFalas !== J.nFalas;
+    const resposta = !J.acao ? null : ehAprovar(texto, andou) ? 'confirmar'
+      : (ecoPossivel ? recusaDe(texto, eco, fj) : decisaoDeVoz(texto, andou) === 'recusar') ? 'recusar' : null;
     if (!fj.interrompeu && !fj.ptt && !parar && !resposta && !comandoDe(texto, eco, CORRIGE, fj) && !semEco()) {
       const novas = palavrasNovas(texto, eco), ecos = palavrasEco(texto, eco);
       // começou enquanto eu falava sem nenhuma palavra nova, ou com uma só no meio do que eu disse: era a minha voz
@@ -1437,8 +1510,8 @@ export function criarJarvis(opts = {}) {
       if (k === 'jarvis' && !falandoAgora() && !J.turno) { mostrarJulio(texto, true); falarLocal('Pois não?'); return; }
       pararSo(); limparJulio(); return;
     }
-    if (FECHAR.test(k)) { fechar(); return; }
-    if (resposta && respostaAcao(resposta, { fj, texto })) return;
+    if (fecharPelaFala(texto)) return;
+    if (resposta && respostaAcao(resposta, { fj, texto, via: 'voz' })) return;
     enviar(texto, { origem: 'voz', jaFiltrada: true });
   }
   // a fala que interrompeu pode começar com o fim da minha frase (eco): tira o começo que é eco, só no pedaço que veio
@@ -1692,10 +1765,47 @@ export function criarJarvis(opts = {}) {
     } catch (err) { portao = null; try { console.warn('[Jarvis] o portão do rosto não abriu.', err); } catch { /* nada */ } }
     return portao;
   }
+  /* ---------- o Jarvis que faz: a parte da tela (js/jarvis-acoes.js) ---------- */
+  function garantirAcoes() {
+    if (acoesUi || !LOCAL_APP) return acoesUi;
+    try {
+      acoesUi = criarAcoesUi({
+        raiz, barra: $('.jv-botoes'), token: tokenLocal(), aba: ABA, reduzido,
+        sons: { tocar: (n) => tocar(n) },   // vale o mudo e o ajuste de sons
+        // a frase do fim da construção (chega pelo canal, fora de um turno): só com o Jarvis aberto
+        falar: (f) => { if (J.aberto && !J.saindo && !J.portao) falarLocal(f); },
+        onCartao: (c) => { if (J.aberto) mostrarCartao(c); },
+        onAviso: (t, tom) => avisar(t, 5200, tom || ''),
+        onCamera: () => atualizarEstado(),
+        onAcao: (d) => aoEventoAcao(d),
+        conferirRosto: () => conferirRostoDepois(),
+        abrirAcao: (a) => abrirAcao(a)
+      });
+      const aj = raiz.querySelector('.jv-ajuda-acoes');
+      if (aj) aj.textContent = TEXTOS_ACOES.ajuda;
+    } catch (err) { acoesUi = null; try { console.warn('[Jarvis] a parte das ações não abriu.', err); } catch { /* nada */ } }
+    return acoesUi;
+  }
+  function aoEventoCamera(d) { if (acoesUi) acoesUi.aoEventoCamera(d); }
+  // "confere meu rosto" (a ferramenta camera): a conferência do portão, com o dia já liberado. Espera o turno e a fala
+  // acabarem (o portão corta a voz e o turno), no máximo 20 s
+  async function conferirRostoDepois() {
+    const t0 = agora();
+    while ((J.turno || falandoAgora()) && agora() - t0 < 20000) await esperar(250);
+    if (!J.aberto || J.saindo || J.portao) return;
+    if (!garantirPortao() || typeof portao.conferirAgora !== 'function') { avisar('A conferência do rosto não está disponível aqui.', 4000, 'rever'); return; }
+    const r = await comPortao(() => portao.conferirAgora(), 'conferir');
+    if (!J.aberto || J.saindo) return;
+    // conferido = o rosto (ou o Hello) passou agora; liberado sozinho só diz que o dia continua liberado
+    falarLocal(r && r.conferido ? 'Conferi: é você, Júlio.' : r && r.sem_cadastro ? 'Ainda não tem rosto cadastrado para conferir.' : 'Não deu para conferir o rosto agora.');
+  }
+
   // um fluxo do portão (conferir, cadastrar, Windows Hello, apagar) com o Jarvis parado: microfone fechado, voz e turno
   // cortados, ajustes fechados; o microfone volta no fim se estava ligado (menos depois de "não liberou")
   async function comPortao(fn, tipo = 'outro') {
     if (J.portaoP) return J.portaoP;
+    // o portão abre a câmera dele: a "Ver você" desliga antes (e a janelinha do print fecha)
+    if (acoesUi) { try { acoesUi.camera.desligar(); acoesUi.fecharJanela(); } catch { /* nada */ } }
     // dono: o fechar() do Jarvis solta o portão na hora; o fluxo velho, quando enfim terminar, não mexe no estado do novo
     const dono = {};
     J.portaoDono = dono;
@@ -1819,8 +1929,7 @@ export function criarJarvis(opts = {}) {
     }, 650);
   }
 
-  /* ---------- confirmação de ação ---------- */
-  const TIPO_ACAO = { enviar_email: 'enviar e-mail' };
+  /* ---------- aprovação de ação (por voz ou no botão) ---------- */
   const CAMPO = { de: 'De', para: 'Para', cc: 'Cópia', cco: 'Cópia oculta', assunto: 'Assunto', corpo: 'Texto', em_resposta_a: 'Em resposta a', anexos: 'Anexos', observacao: 'Observação' };
   const DICA_VOZ = el.confVozTxt ? el.confVozTxt.innerHTML : '';
   const daLube = (e) => /@lube\.com\.br$/i.test(String(e || '').trim());
@@ -1849,29 +1958,37 @@ export function criarJarvis(opts = {}) {
   }
   function atualizarDicaAcao() {
     if (!el.confVozTxt) return;
-    el.confVozTxt.innerHTML = J.acao && J.acao.nFalas !== J.nFalas ? 'A conversa seguiu: agora este rascunho só se confirma pelo botão.' : DICA_VOZ;
+    el.confVozTxt.innerHTML = J.acao && J.acao.nFalas !== J.nFalas ? TEXTOS_ACOES.aprovacao.dicaAndou : DICA_VOZ;
   }
+  const ehEmail = (a) => !!a && a.tipo === 'enviar_email';
   function abrirAcao(a) {
     if (!a || !a.id) return;
-    const trocou = !!(J.acao && J.acao.id !== a.id);
-    if (trocou) {
-      // só um rascunho por vez: o anterior sai (o servidor já trocou; o aviso dele diz "trocado", não "cancelado")
+    // trocou: outra ação estava na tela (ou acabou de sair por troca, avisada pelo canal antes desta chegar)
+    const trocou = !!(J.acao && J.acao.id !== a.id) || agora() - (J.acaoTrocadaEm || 0) < 3000;
+    if (J.acao && J.acao.id !== a.id) {
+      // só uma ação por vez: a anterior sai (o servidor já trocou; o aviso dele diz "trocada", não "cancelada")
       const velha = J.acao; J.cerebro?.decidirAcao(velha.id, 'recusar', 'substituida').catch(() => {});
       clearTimeout(J.confVoz?.timer); J.confVoz = null;
     }
+    J.acaoTrocadaEm = 0;
     // a ação expira em 5 min (o servidor pode mandar a hora exata em expira_em)
     let resta = 5 * 60000;
     const exp = typeof a.expira_em === 'number' ? a.expira_em : Date.parse(a.expira_em || '');
     if (Number.isFinite(exp)) { const r = exp - Date.now(); if (r > 0 && r <= 10 * 60000) resta = r; }
     J.acao = { ...a, expira: agora() + resta, total: Math.max(resta, 1), desde: agora(), nFalas: J.nFalas, trocou };
     J.decidindo = false;
-    el.confTipo.textContent = TIPO_ACAO[a.tipo] || String(a.tipo || 'ação').replace(/_/g, ' ');
+    el.confTipo.textContent = rotuloAcao(a.tipo);
     el.confTit.textContent = String(a.resumo || 'Ação pendente');
-    el.confDet.innerHTML = detalheAcaoHtml(a.detalhe);
+    // o detalhe de cada tipo (mover, apagar, construir…) vem do js/jarvis-acoes.js; o do e-mail é o de sempre
+    const novo = detalheAcaoNovo(a.tipo, a.detalhe);
+    el.confDet.innerHTML = novo != null ? novo : detalheAcaoHtml(a.detalhe);
     el.confDet.scrollTop = 0;
-    el.confRes.hidden = !trocou; el.confRes.textContent = trocou ? 'O rascunho mudou: este é o novo. Confira antes de confirmar.' : ''; delete el.confRes.dataset.tom;
-    // rascunho trocado: Confirmar só depois de 1,5 s (ninguém confirma o novo achando que é o velho)
+    el.confRes.hidden = !trocou;
+    el.confRes.textContent = trocou ? (ehEmail(a) ? 'O rascunho mudou: este é o novo. Confira antes de aprovar.' : 'A ação mudou: esta é a nova. Confira antes de aprovar.') : '';
+    delete el.confRes.dataset.tom;
+    // ação trocada: Aprovar só depois de 1,5 s (ninguém aprova a nova achando que é a velha)
     el.confSim.disabled = trocou; el.confNao.disabled = false;
+    el.confSim.textContent = TEXTOS_ACOES.aprovacao.aprovar;
     clearTimeout(J.acaoLibera);
     if (trocou) J.acaoLibera = setTimeout(() => { if (J.acao && J.acao.id === a.id && !J.decidindo) el.confSim.disabled = false; }, 1500);
     atualizarDicaAcao();
@@ -1882,39 +1999,49 @@ export function criarJarvis(opts = {}) {
     J.acaoT = setInterval(tickAcao, 250); tickAcao();
     atualizarEstado();
   }
-  // "pode enviar" / "cancela" valem para o cartão aberto só se: é o mesmo rascunho de quando a fala começou, ninguém
-  // falou outra coisa desde que ele abriu (senão o "sim" é resposta a outra pergunta e vai para o cérebro) e, se o
-  // rascunho acabou de trocar, o novo já está na tela há 1,5 s. Para CONFIRMAR por voz, a fala ainda precisa ter começado com a minha voz calada há
-  // 1,5 s (ou pelo Espaço): o microfone nunca confirma o que o alto-falante disse. Devolve true se tratou a fala.
-  function respostaAcao(dec, { fj = null, texto = '' } = {}) {
+  // o canal de eventos da aba (/api/jarvis/eventos) diz que a ação da tela saiu por outro caminho: expirou no servidor,
+  // foi decidida (outra janela, ou a rota) ou trocada por uma nova. O cartão fecha mesmo se o relógio daqui parou
+  function aoEventoAcao(d) {
+    if (!d || !d.id) return;
+    if (d.evento === 'trocada') J.acaoTrocadaEm = agora();
+    if (!J.acao || d.id !== J.acao.id || J.decidindo) return;
+    if (d.evento === 'expirou') { fecharAcao(); falarLocal('O pedido de aprovação expirou e nada foi feito. Se ainda quiser, é só pedir de novo.'); }
+    else if (d.evento === 'decidida' || d.evento === 'trocada') fecharAcao();
+  }
+  // "aprovado" / "cancela" valem para o cartão aberto só se: é o mesmo cartão de quando a fala começou e, para APROVAR,
+  // ele está na tela há 1,5 s (ninguém aprova o que ainda nem leu; e o novo de uma troca). "Sim", "pode" e "isso"
+  // sozinhos só valem antes de a conversa andar (quem decide é o respostaDeVoz, antes de chegar aqui). Para APROVAR por
+  // voz, a fala ainda precisa ter começado com a minha voz calada há 1,5 s (ou pelo Espaço): o microfone nunca aprova o
+  // que o alto-falante disse. Devolve true se tratou a fala.
+  function respostaAcao(dec, { fj = null, texto = '', via = 'voz' } = {}) {
     const a = J.acao;
     if (!a) return false;
     if (J.decidindo) return true;
-    if (J.nFalas !== a.nFalas) return false;
     mostrarJulio(texto, true);
-    if (fj && fj.acaoId !== a.id) { dicaAcao('O rascunho mudou enquanto você falava. Confira e responda de novo.'); return true; }
-    if (a.trocou && agora() - a.desde < 1500) { dicaAcao('O rascunho acabou de mudar. Confira antes de responder.'); return true; }
+    if (fj && fj.acaoId !== a.id) { dicaAcao('A ação mudou enquanto você falava. Confira e responda de novo.'); return true; }
+    if (dec === 'confirmar' && agora() - a.desde < 1500) { dicaAcao(a.trocou ? 'A ação acabou de mudar. Confira antes de responder.' : 'O cartão acabou de aparecer. Confira e diga de novo.'); return true; }
     if (dec === 'confirmar' && fj && !fj.ptt && (fj.durante || fj.naJanela) && voz.tipo !== 'relogio') {
-      dicaAcao(fj.durante ? 'Para confirmar, use o botão ou diga de novo quando eu terminar de falar.'
+      dicaAcao(fj.durante ? 'Para aprovar, use o botão ou diga de novo quando eu terminar de falar.'
         : 'Você falou logo depois de mim e não dá para separar da minha voz: diga de novo ou use o botão.');
       return true;
     }
     if (dec === 'confirmar' && fj) { agendarConfirmacao(texto, fj); return true; }
-    decidir(dec);
+    decidir(dec, via);
     return true;
   }
-  // por voz, a confirmação espera mais 1,2 s de silêncio ("pode enviar… mas muda o assunto" não envia nada)
+  // por voz, a aprovação espera mais 1,2 s de silêncio ("aprovado… mas muda o assunto" não faz nada); palavra única
+  // ("pode", "sim") espera 1,8 s: "Pode… [pausa] …mudar o assunto?" não aprova
   function agendarConfirmacao(texto, fj) {
     clearTimeout(J.confVoz?.timer);
     const id = J.acao.id;
-    dicaAcao('Confirmando…');
+    dicaAcao(TEXTOS_ACOES.aprovacao.aprovando);
     J.confVoz = {
       texto, durante: fj.durante, naJanela: fj.naJanela, ptt: fj.ptt,
       timer: setTimeout(() => {
         J.confVoz = null;
-        if (J.acao && J.acao.id === id && !J.falaJulio) decidir('confirmar');
+        if (J.acao && J.acao.id === id && !J.falaJulio) decidir('confirmar', 'voz');
         else if (J.acao && J.acao.id === id) el.confRes.hidden = true;
-      }, 1200)
+      }, palavraUnica(texto) ? 1800 : 1200)
     };
   }
   function tickAcao() {
@@ -1925,42 +2052,63 @@ export function criarJarvis(opts = {}) {
     if (resta <= 0 && !J.decidindo) {
       const id = J.acao.id; fecharAcao();
       J.cerebro?.decidirAcao(id, 'recusar', 'expirou').catch(() => {});
-      falarLocal('O pedido de confirmação expirou. Se ainda quiser, eu preparo de novo.');
+      falarLocal('O pedido de aprovação expirou e nada foi feito. Se ainda quiser, é só pedir de novo.');
     }
   }
-  async function decidir(decisao) {
+  // a frase do desfecho para a VOZ: a mensagem do servidor é escrita para o modelo (caminho de arquivo, nome de
+  // ferramenta); a voz diz só o essencial. A tela mostra a mensagem inteira
+  function fraseDoDesfecho(msg, ok, decisao) {
+    let f = String(msg || '').replace(/\s*\([^)]*[\\/][^)]*\)/g, '');
+    // caminho de arquivo no meio da frase: "Anotações\2026-10-20 16h53 — a reunião.md" vira "o arquivo"; "Planilhas\Outubro"
+    // vira "a pasta Outubro" (a voz não lê barra nem extensão; a tela mostra a mensagem inteira)
+    f = f.replace(/[^\s\\/]*[\\/](?:[^\\/\n]*[\\/])*[^\\/\n]*?\.(?:md|txt|csv|json|html?|xlsx|png|jpe?g|webp|pdf|docx|js|css|svg)(?![a-z0-9])/gi, 'o arquivo')
+      .replace(/(?:[^\s\\/]+[\\/])+([^\s\\/.,;:)]+)/g, 'a pasta $1')
+      .replace(/([^\s\\/]+)\.(?:md|txt|csv|json|html?|xlsx|png|jpe?g|webp|pdf|docx|js|css|svg)(?![a-z0-9])/gi, '$1')
+      .replace(/\bem (a|o) (pasta|arquivo)\b/g, (_, a, b) => `${a === 'a' ? 'na' : 'no'} ${b}`)
+      .replace(/\bde (a|o) (pasta|arquivo)\b/g, (_, a, b) => `${a === 'a' ? 'da' : 'do'} ${b}`);
+    f = f.split(/(?<=[.!?])\s+/).filter((s) => s && !/\b[a-z]+_[a-z_]+\b/.test(s)).join(' ').trim();
+    if (f && f.length <= 170) return f;
+    return ok ? (decisao === 'confirmar' ? 'Pronto, feito.' : 'Cancelado. Nada foi feito.') : 'Não deu certo. O detalhe está na tela.';
+  }
+  async function decidir(decisao, via = 'clique') {
     const a = J.acao;
     if (!a || J.decidindo || !J.cerebro || J.portao) return;
     J.decidindo = true;
     clearTimeout(J.confVoz?.timer); J.confVoz = null;
-    // a decisão encerra o que eu estava dizendo ou ainda pensando sobre o rascunho
+    // a decisão encerra o que eu estava dizendo ou ainda pensando sobre a ação
     if (falandoAgora() || J.turno) interromper({ motivo: 'comando', silencioso: true });
     el.confSim.disabled = true; el.confNao.disabled = true;
-    el.confRes.hidden = false; el.confRes.textContent = decisao === 'confirmar' ? 'Enviando…' : 'Cancelando…';
+    el.confRes.hidden = false;
+    el.confRes.textContent = decisao === 'confirmar' ? (ehEmail(a) ? 'Enviando…' : TEXTOS_ACOES.aprovacao.aprovando) : 'Cancelando…';
     let r;
-    try { r = await J.cerebro.decidirAcao(a.id, decisao); } catch { r = { ok: false, mensagem: 'Não consegui falar com o cérebro.' }; }
+    try { r = await J.cerebro.decidirAcao(a.id, decisao, undefined, via); } catch { r = { ok: false, mensagem: 'Não consegui falar com o cérebro.' }; }
     if (J.acao !== a) return;
     if (r && r.trava) {
-      // a trava do rosto fechou antes do envio: nada saiu. O portão abre; liberado, o Júlio confirma de novo (no botão)
+      // a trava do rosto fechou antes de agir: nada aconteceu. O portão abre; liberado, o Júlio aprova de novo
       J.decidindo = false; el.confSim.disabled = false; el.confNao.disabled = false;
-      el.confRes.textContent = 'Nada foi enviado: o Jarvis travou. Confira o rosto e confirme de novo.'; el.confRes.dataset.tom = 'alerta';
+      el.confRes.textContent = 'Nada foi feito: o Jarvis travou. Confira o rosto e aprove de novo.'; el.confRes.dataset.tom = 'alerta';
       const lib = await pedirPortao({});
-      if (lib && lib.liberado && J.acao === a) dicaAcao('Liberado. Confira o rascunho e confirme de novo.');
+      if (lib && lib.liberado && J.acao === a) dicaAcao('Liberado. Confira a ação e aprove de novo.');
       return;
     }
     const ok = !!(r && r.ok);
-    const msg = String((r && r.mensagem) || (ok ? (decisao === 'confirmar' ? 'Pronto, enviado.' : 'Cancelado. Nada foi enviado.') : 'Não deu certo.'));
+    const msg = String((r && r.mensagem) || (ok ? (decisao === 'confirmar' ? 'Pronto, feito.' : 'Cancelado. Nada foi feito.') : 'Não deu certo.'));
     el.confRes.textContent = msg;
     el.confRes.dataset.tom = ok ? (decisao === 'confirmar' ? 'ok' : '') : 'alerta';
+    // o que a ação deixou para ver (a pasta depois de mover, o print e a página do site, a construção que começou)
+    for (const c of [r && r.cartao, ...((r && Array.isArray(r.cartoes)) ? r.cartoes : [])].filter(Boolean)) {
+      try { mostrarCartao(c); } catch { /* o cartão é extra */ }
+    }
     // o modelo precisa saber o que aconteceu. O app do computador já conta (o servidor põe o desfecho na mensagem de
     // sistema da próxima fala) e reconstrói cada turno pelo texto exato: lá a fala não pode ser editada. Nos outros
     // cérebros o resultado entra junto da última fala minha.
     if (J.cerebro.tipo !== 'local') {
       const ult = [...J.conversa].reverse().find((m) => m.papel === 'jarvis');
-      const nota = ok ? (decisao === 'confirmar' ? `(O Júlio confirmou na tela. ${msg})` : `(O Júlio cancelou na tela. ${msg})`) : `(A ação falhou: ${msg})`;
+      const nota = ok ? (decisao === 'confirmar' ? `(O Júlio aprovou na tela. ${msg})` : `(O Júlio cancelou na tela. ${msg})`) : `(A ação falhou: ${msg})`;
       if (ult) ult.texto = `${ult.texto} ${nota}`.trim(); else J.conversa.push({ papel: 'jarvis', texto: nota });
     }
-    falarLocal(msg);
+    // a frase curta que o servidor mandou para a voz (sem caminho nem extensão) ou a mensagem limpa aqui
+    falarLocal(r && typeof r.fala === 'string' && r.fala.trim() ? r.fala.trim() : fraseDoDesfecho(msg, ok, decisao));
     setTimeout(() => { if (J.acao === a) fecharAcao(); }, ok ? 1400 : 2600);
   }
   function fecharAcao() {
@@ -2040,8 +2188,12 @@ export function criarJarvis(opts = {}) {
     const tipo = String(c.tipo || ''), dados = c.dados || {};
     const art = document.createElement('article');
     art.className = `jv-cartao jv-tipo-${tipo.replace(/[^a-z]/gi, '')}`;   // jv-c-lista e jv-c-barras já são as listas de dentro (o cartão ficava sem padding)
-    art.innerHTML = `${CANTOS}${cartaoHtml(tipo, dados)}`;
+    // os cartões do Jarvis que faz (print, página, arquivo, pasta, planilha, anotação, construção) vêm do js/jarvis-acoes.js
+    const novo = cartaoHtmlNovo(tipo, dados);
+    art.innerHTML = `${CANTOS}${novo != null ? novo : cartaoHtml(tipo, dados)}`;
     el.cartoes.prepend(art);
+    // os botões (Abrir, Mostrar na pasta, Ampliar, Parar) e a construção atualizada no lugar
+    if (novo != null && acoesUi) { try { acoesUi.aoCartao({ tipo, dados }, art); } catch { /* o cartão fica sem botões */ } }
     el.cartoes.scrollTop = 0; el.cartoes.scrollLeft = 0;   // o cartão novo fica à vista (no celular a faixa rola de lado)
     raiz.classList.add('com-cartoes');
     while (el.cartoes.children.length > 4) el.cartoes.lastElementChild.remove();
@@ -2252,6 +2404,7 @@ export function criarJarvis(opts = {}) {
     if (LOCAL_APP) {
       await carregarModulos();
       if (!J.aberto || J.saindo) return;
+      garantirAcoes();
       const st = garantirPortao() ? await portao.consultar() : null;   // null = servidor fora: o cérebro avisa
       if (!J.aberto || J.saindo) return;
       if (st && !st.liberado) {
@@ -2279,6 +2432,8 @@ export function criarJarvis(opts = {}) {
     await (J.carregandoCerebro || Promise.resolve());
     if (!J.aberto || J.saindo) return;
     escolherOuvido();   // Chrome (offline) quando o servidor diz que ele existe; senão o Edge
+    // o canal da aba: o andamento da construção, o fim das ações e a fala do fim chegam fora de um turno
+    if (acoesUi && J.cerebro && J.cerebro.tipo === 'local') acoesUi.eventos.conectar();
     atualizarMic();
     // o reconhecimento só liga depois do "pronto" (~150 ms)
     setTimeout(() => {
@@ -2319,6 +2474,8 @@ export function criarJarvis(opts = {}) {
     clearTimeout(J.confVoz?.timer); J.confVoz = null; J.ferrAbertas.clear();
     pausarMic({ lembrar: false });
     fecharConsent(); fecharAjustes(); fecharPacote();
+    // a câmera "Ver você" nunca fica ligada sem o Jarvis na frente; o canal da aba fecha junto
+    if (acoesUi) { try { acoesUi.camera.desligar(); acoesUi.fecharJanela(); acoesUi.eventos.fechar(); } catch { /* nada */ } }
     // o portão do rosto aberto: cancela (a câmera desliga na hora; o abrir() dele resolve "não liberado") e o Jarvis
     // solta o portão já: a próxima abertura não herda a promessa nem o estado do fluxo velho
     try { portao && portao.fechar(); } catch { /* nada */ }
@@ -2371,8 +2528,7 @@ export function criarJarvis(opts = {}) {
     const t = el.entrada.value.trim();
     if (!t) return;
     el.entrada.value = '';
-    const k = curto(t);
-    if (FECHAR.test(k)) { fechar(); return; }
+    if (fecharPelaFala(t)) return;
     enviar(t, { origem: 'texto' });
   });
   el.entrada.addEventListener('input', () => { if (el.entrada.value && falandoAgora()) interromper({ motivo: 'digitando' }); });
@@ -2399,11 +2555,11 @@ export function criarJarvis(opts = {}) {
   el.ajustesBtn.addEventListener('click', () => (el.ajustes.hidden ? abrirAjustes() : fecharAjustes()));
   el.ajustesOk.addEventListener('click', () => { fecharAjustes(); try { el.ajustesBtn.focus({ preventScroll: true }); } catch { /* nada */ } });
   el.confSim.addEventListener('click', (e) => {
-    // o Modo Mãos dispara cliques sintéticos (e.daMao) no que está sob o cursor: envio só com mouse, toque ou teclado
-    if (!e.isTrusted || e.daMao) { dicaAcao('Para confirmar o envio, use o mouse ou o teclado: o gesto das mãos não confirma.'); return; }
-    decidir('confirmar');
+    // o Modo Mãos dispara cliques sintéticos (e.daMao) no que está sob o cursor: aprovar só com mouse, toque, teclado ou voz
+    if (!e.isTrusted || e.daMao) { dicaAcao('Para aprovar, use a voz, o mouse ou o teclado: o gesto das mãos não aprova.'); return; }
+    decidir('confirmar', e.detail === 0 ? 'teclado' : 'clique');
   });
-  el.confNao.addEventListener('click', () => decidir('recusar'));
+  el.confNao.addEventListener('click', (e) => decidir('recusar', e.detail === 0 ? 'teclado' : 'clique'));
   el.consSim.addEventListener('click', () => { gravarPref(chaveAceite(), '1'); fecharConsent(); ligarMic(); try { el.entrada.focus({ preventScroll: true }); } catch { /* nada */ } });
   // o pacote de voz do Chrome: só com o clique (o servidor só baixa por pedido explícito)
   el.pacSim.addEventListener('click', () => baixarPacote());
@@ -2447,6 +2603,8 @@ export function criarJarvis(opts = {}) {
     if (!J.aberto) return;
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation();
+      // a janelinha do print aberta: o Esc fecha só ela (o ouvinte dela vem depois deste, que captura na window)
+      if (acoesUi && acoesUi.teclaEsc()) return;
       // o portão do rosto: na trava do dia, Esc = "Agora não" (fecha o Jarvis, nada liberado); nos fluxos dos ajustes
       // (cadastrar de novo, Hello, apagar) só cancela o fluxo — o próprio portão também ouve o Esc
       if (J.portao) { if (J.portaoTipo === 'abrir') fechar(); else if (portao) portao.fechar(); return; }
@@ -2462,7 +2620,7 @@ export function criarJarvis(opts = {}) {
     if (e.code === 'Space' || e.key === ' ') {
       // na caixa de texto vazia, o Espaço também é "segure para falar" (o foco fica nela ao abrir e depois de cada envio)
       const a = document.activeElement, caixaVazia = a === el.entrada && !el.entrada.value.trim() && micDisponivel();
-      if ((emCampoTexto(a) && !caixaVazia && !J.mic.ptt) || !el.consent.hidden || !el.ajustes.hidden || !el.pacote.hidden) return;
+      if ((emCampoTexto(a) && !caixaVazia && !J.mic.ptt) || !el.consent.hidden || !el.ajustes.hidden || !el.pacote.hidden || (acoesUi && acoesUi.janelaAberta())) return;
       e.preventDefault(); e.stopPropagation();
       if (!e.repeat) pttInicio();
       return;
@@ -2520,7 +2678,7 @@ export function criarJarvis(opts = {}) {
     p.className = 'jv-sim';
     p.innerHTML = `<p class="hud-rot">Simulador <b>(teste local)</b></p>
       <form class="jv-sim-form"><input class="jv-sim-txt" type="text" placeholder="Fala do Júlio (simulada)" aria-label="Fala do Júlio, simulada" value="Jarvis, está tudo rodando?"><button class="btn pequeno" type="submit">Falar</button></form>
-      <div class="jv-sim-bts"><button class="btn pequeno" type="button" data-sim="eco" title="O microfone ouve a minha própria voz (não pode interromper)">Eco</button><button class="btn pequeno" type="button" data-sim="corta">Interromper</button><button class="btn pequeno" type="button" data-sim="para">“Para”</button><button class="btn pequeno" type="button" data-sim="sim">“Pode enviar”</button><button class="btn pequeno" type="button" data-sim="nao">“Cancela”</button></div>`;
+      <div class="jv-sim-bts"><button class="btn pequeno" type="button" data-sim="eco" title="O microfone ouve a minha própria voz (não pode interromper)">Eco</button><button class="btn pequeno" type="button" data-sim="corta">Interromper</button><button class="btn pequeno" type="button" data-sim="para">“Para”</button><button class="btn pequeno" type="button" data-sim="sim">“Aprovado”</button><button class="btn pequeno" type="button" data-sim="nao">“Cancela”</button></div>`;
     raiz.appendChild(p);
     const txt = p.querySelector('.jv-sim-txt');
     p.querySelector('.jv-sim-form').addEventListener('submit', (e) => { e.preventDefault(); const t = txt.value.trim(); if (t) ouvido.falar(t); });
@@ -2534,7 +2692,7 @@ export function criarJarvis(opts = {}) {
         ouvido.falar(ps);
       } else if (k === 'corta') ouvido.falar('espera, me mostra os e-mails da caixa');
       else if (k === 'para') ouvido.falar('para');
-      else if (k === 'sim') ouvido.falar('pode enviar');
+      else if (k === 'sim') ouvido.falar('aprovado');
       else if (k === 'nao') ouvido.falar('cancela');
     });
     p.addEventListener('keydown', (e) => { if (e.code === 'Space') e.stopPropagation(); });
@@ -2553,6 +2711,7 @@ export function criarJarvis(opts = {}) {
       hud.destruir(); sons.destruir();
       for (const o of [ouvidoEdge, ouvidoChrome]) { try { o && o.destruir(); } catch { /* nada */ } }
       try { portao && portao.destruir(); } catch { /* nada */ }
+      try { acoesUi && acoesUi.destruir(); } catch { /* nada */ }
     }
   };
   // teste local (localhost com ?debug): o estado cru em window.__jarvis (no Artifact e no app normal nunca liga)
@@ -2561,7 +2720,9 @@ export function criarJarvis(opts = {}) {
       J, F, enviar, interromper, hud, mostrarCartao, abrirAcao, aoFerramenta, aoParcial, aoFinal, concluirFala, conversa: () => conversaParaEnviar(),
       // o ouvido da vez (Edge, Chrome ou o simulado), o portão do rosto e os atalhos da integração
       get ouvido() { return ouvido; }, get portao() { return portao; }, get modulos() { return M; },
-      usarOuvido, pedirPortao, abrirPacote, abrirAjustes
+      usarOuvido, pedirPortao, abrirPacote, abrirAjustes,
+      // o Jarvis que faz: a parte da tela (câmera, janelinha, canal) e a decisão de uma ação
+      get acoes() { return acoesUi; }, decidir, respostaAcao
     };
     try { window.__jarvis = api._teste; } catch { /* nada */ }
   }

@@ -1420,7 +1420,9 @@ function iniciarAoVivo() {
   try {
     D.ouvirMudancas(
       (dados) => { aplicarAoVivo(dados); },
-      (estado) => { S.estadoVivo = estado === 'reconectando' ? 'reconectando' : 'ao vivo'; mostrarStats(false); }
+      (estado) => { S.estadoVivo = estado === 'reconectando' ? 'reconectando' : 'ao vivo'; mostrarStats(false); },
+      // o atalho Ctrl+Alt+J (ferramentas/chamar-jarvis.ps1) pediu o Jarvis: só abre (já aberto, fica)
+      () => { abrirJarvisSoAbrir(); }
     );
   } catch (err) { avisarFalha('ouvirMudancas', err); }
 }
@@ -2654,7 +2656,21 @@ async function alternarJarvis() {
   b?.removeAttribute('data-estado');
   if (j) j.abrir();
 }
+// o atalho Ctrl+Alt+J e o endereço /#jarvis (o app ligado pelo atalho): só ABRIR, nunca fechar
+async function abrirJarvisSoAbrir() {
+  if (JV.j && JV.j.aberto()) return;
+  const b = $('#jarvisBtn');
+  b?.setAttribute('data-estado', 'carregando');
+  const j = await carregarJarvis();
+  b?.removeAttribute('data-estado');
+  if (j && !j.aberto()) j.abrir();
+}
 function ligarEventosJarvis() {
+  // /#jarvis na carga: abre o Jarvis e tira o #jarvis do endereço (F5 não abre de novo)
+  if (location.hash === '#jarvis') {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch { /* nada */ }
+    setTimeout(() => { abrirJarvisSoAbrir(); }, 600);
+  }
   $('#jarvisBtn')?.addEventListener('click', () => alternarJarvis());
   // Ctrl+J (com o Jarvis aberto, ele mesmo cuida do atalho e do Esc)
   window.addEventListener('keydown', (e) => {

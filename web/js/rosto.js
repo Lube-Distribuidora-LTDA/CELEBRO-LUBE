@@ -1955,6 +1955,32 @@ export function criarPortao(opts = {}) {
       return false;
     }, false);
   }
+  // "confere meu rosto" (a ferramenta camera do Jarvis, docs/JARVIS-ACOES.md §8.7): a mesma conferência do dia, com a
+  // animação de confirmado, mesmo com o dia já liberado (o servidor só renova o "confirmado há pouco"; errar não trava
+  // o dia). Sem cadastro do rosto: o Windows Hello, se houver; sem nenhum, só avisa
+  function conferirAgora() {
+    return rodar('conferir', async () => {
+      const st = await consultar();
+      checar();
+      if (!st) return telaErro('servidor');
+      const temRosto = !!(st.cadastro && st.cadastro.rosto), temHello = !!(st.hello && st.hello.cadastrado);
+      if (!temRosto && !temHello) {
+        await cartao({ estado: 'travado', rot: 'Trava do Jarvis', tit: 'Sem cadastro', html: '<p>Ainda não tem rosto cadastrado para conferir. O cadastro fica em Ajustes › Trava do rosto.</p>', botoes: [{ id: 'ok', txt: 'Fechar', principal: true }] });
+        return { liberado: !!st.liberado, conferido: false, sem_cadastro: true };
+      }
+      let r;
+      if (temRosto) {
+        dizer('Vou conferir seu rosto.');
+        abrirLente();
+        r = await sessaoConferir(st);
+      } else {
+        dizer('Confirme no Windows Hello.');
+        r = await sessaoHelloSo(st);
+      }
+      if (r && r.liberado) await animarLiberado(r);
+      return { liberado: !!(r && r.liberado), conferido: !!(r && r.liberado), ...(r && r.metodo ? { metodo: r.metodo } : {}) };
+    }, { liberado: false, conferido: false });
+  }
   // pelos ajustes: o Windows Hello depois (pulado no cadastro)
   function cadastrarHello() {
     return rodar('hello', async () => {
@@ -2170,7 +2196,7 @@ export function criarPortao(opts = {}) {
 
   /* ---------- API ---------- */
   const api = {
-    consultar, abrir, recadastrar, apagarCadastro, cadastrarHello, travar, fechar, destruir,
+    consultar, abrir, conferirAgora, recadastrar, apagarCadastro, cadastrarHello, travar, fechar, destruir,
     aberto: () => S.aberto,
     get estado() { return S.estado; }
   };
