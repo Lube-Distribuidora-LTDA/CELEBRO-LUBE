@@ -53,6 +53,7 @@ Resumo do padrão que já está em produção. O manual completo está na skill 
 ### Padrão dos sistemas (definido em 2026-09-24)
 Todo sistema novo nasce com a **cara do [[GESTÃO TI]]**: fundo azul-marinho escuro da Lube, com o azul e o vermelho da marca como acento. Foi o que o Júlio pediu ao ver a primeira versão do [[SISTEMA FINANCEIRO]] em verde neon: *"puxe a ideia de criação de design da TI"*.
 
+- **Sistema antigo acompanha a cara atual** (Júlio, 2026-10-20, [[BI ABSENTEÍSMO RH]]: "atualize o design e filtros do sistema para o design dos sistemas atuais"). A referência é o código do sistema mais novo (o `base.css` e o `filtros.js` do [[MOVIMENTAÇÃO DE INVENTÁRIO]]), não a descrição. Em painel feito em Tailwind, dá para trocar a cara sem reescrever a marcação: tokens do tema + CSS gerado que reaponta as classes de cor usadas.
 - **Logo da Lube no cabeçalho**, sempre. Como o arquivo tem fundo branco, ela vai numa placa branca arredondada.
 - Cores: fundo `#050b1c`, superfícies `#0d1830`/`#132242`, azul da marca `#2a41c8`, vermelho da marca `#e5202c`.
 - Cor de estado é separada da cor da marca: verde `#34e89e` para conferido, âmbar `#ffb340` para revisar, vermelho claro `#ff6b74` para alerta, azul `#5fb2ff` para novo/corrigido.

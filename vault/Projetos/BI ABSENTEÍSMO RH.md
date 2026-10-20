@@ -12,7 +12,7 @@ Painel de gestão de pessoas da Lube (no menu e na aba do navegador: **GESTÃO R
 - Pasta local: `Desktop\BI\4. RH\ABSENTEÍSMO RH - DASHBOARD\assets` (é a raiz do repositório)
 - Banco: [[Supabase]] projeto **GESTÃO RH** (`jhznrwmwszpfogvbjnjx`, us-west-2). Nasceu em 2026-08-24 com o nome "RH Absenteísmo", que o README ainda usa.
 - Painel: [[Vercel]], projeto `rh-absentismo` (`prj_DVpjRACXDvWA5e3x87ettwPn1sJL`) → `rh-absentismo.vercel.app`. **Fechado pela [[SENTINELA LUBE]] desde 2026-10-06**: só entra quem tem acesso pelo [[PAINEL LUBE DISTRIBUIDORA]] (slug `rh-absenteismo`); sem login a página vai para o portal, e `/api/*` e as planilhas respondem 401.
-- Versão no ar: o rodapé do menu lateral mostra `versão AAAA-MM-DD (commit)` desde 2026-10-01. Em 2026-10-16 a produção é o commit `941cff4` (deploy `dpl_ouTEnVWhoeoKsda1tWPGcMekSTcN`, já pelo Git, com o repositório público).
+- Versão no ar: o rodapé do menu lateral mostra `versão AAAA-MM-DD (commit)` desde 2026-10-01. Em 2026-10-20 a produção é o commit `4d8406c` (deploy `dpl_FeRvuy9ekirPjjxWbcXz8Hnny3tj`, pelo Git).
 - Cadastrado no [[PAINEL LUBE DISTRIBUIDORA]] como "Controle RH (absenteísmo)"
 
 ## Arquitetura — onde difere do padrão
@@ -133,7 +133,8 @@ Desde 2026-08-28 o card conta só `tipo_absenteismo = 'Injustificado'`, o mesmo 
 ## Integração com o PontoMais — em andamento
 A ideia é puxar faltas, empregados e movimentações direto da API do PontoMais, sem importar planilha. Parada desde 2026-08-31: o token enviado pelo RH foi recusado (HTTP 403). Ver [[2026-08-31 — integração do BI de RH com o PontoMais]].
 
-## Filtros — múltipla escolha (2026-10-16)
+## Filtros — múltipla escolha (2026-10-16; faixa nova em 2026-10-20)
+Desde 2026-10-20 cada tela tem a **faixa de filtros dos outros painéis**: rótulo FILTROS, um botão por dimensão com a contagem do que está marcado (em ouro), popover com busca (trecho destacado, "Marcar os N", marcados primeiro), **pílulas** dos filtros ativos com × e "Limpar filtros" (usa o reset da própria tela, `data-limpar`). Absenteísmo, Hora Extra e InterJornadas têm **período rápido** (Último mês, 3 meses, 6 meses, Ano, Tudo) sobre o período de ponto. Empregados ganhou Empresa e Função de múltipla escolha. Turnover continua com escolha única, no visual da faixa.
 Todos os filtros do painel são de **múltipla escolha**, no contrato de [[Como eu gosto dos BIs]]: a partir de "Todas", o clique seleciona **só** aquela opção; depois cada clique soma ou tira; esvaziar volta para "Todas". **Conjunto vazio = tudo**, então nenhum filtro começa escondendo dado.
 
 - Lista acima de 10 opções ganha campo de busca (são 78 colaboradores na InterJornadas).
@@ -153,8 +154,19 @@ Todos os gráficos têm rótulo de dados (24 em 2026-09-17; 28 depois da aba Exa
 - **Eixo e rótulo usam o mesmo formato** (`fmtMoedaCurtaBR`, `fmtNumFlexBR`): "R$ 0 · R$ 2 mil · R$ 4 mil", sem casa decimal sobrando.
 - O botão sol/lua redesenha os gráficos de todas as abas (desde 2026-09-30; antes só Absenteísmo, Turnover e HEAD).
 
-## Modo claro
-O botão sol/lua só trocava o ícone até 2026-09-01: o painel tinha sido feito só com cores escuras. O modo claro é um bloco de CSS em `html:not(.dark)`; o modo escuro não foi tocado.
+## Visual: a cara dos sistemas atuais (2026-10-20)
+Pedido do Júlio: "atualize o design e filtros do sistema para o design dos sistemas atuais que estamos fazendo". O RH passou a ter a cara do [[GESTÃO COMERCIAL TRADE]], do [[MOVIMENTAÇÃO DE INVENTÁRIO]] e do [[GESTÃO FISCAL]] (o `base.css` deles foi a referência): azul-marinho com ouro, cor de estado separada da cor de dado, Archivo / IBM Plex Sans / JetBrains Mono servidas da pasta `fonts/`.
+- **Como foi feito sem reescrever 10 mil linhas:** o painel é todo em classes do Tailwind (inclusive o HTML que o JS monta). `css/tema-lube.css` tem os tokens dos dois temas e os componentes; `css/tema-utilitarios.css` reaponta as **184 classes de cor** que o arquivo usa (`text-cyan-300`, `bg-red-950/60`, `border-slate-800`...) para os tokens. Ele é **gerado** por `tools/gerar_tema_utilitarios.py`: mexeu em classe de cor, roda de novo. O `<style>` neon antigo e o bloco do modo claro saíram — os dois temas vêm dos mesmos tokens.
+- Mapa de cor: verde/âmbar/vermelho → tokens de estado; o **ciano antigo → azul da marca**; bordas ciano → linha neutra; cinzas → texto do tema.
+- **Gráficos:** o plugin `temaGraficos` lê cada cor quando o gráfico nasce e devolve o token (o cinza é reconhecido pelo **croma**, não pela saturação: o `#94a3b8` do Tailwind tem 20% de saturação e virava azul). Série que é categoria (empresas do Turnover) usa `corDadoGrafico(i)`, a paleta de dado. O degradê "3D" virou cor sólida. Tooltip em cartão.
+- **Número do cartão medido:** a JetBrains Mono é mais larga e cortava "R$ 115.240,…"; o valor encolhe até caber (`ajustarNumerosKpi`).
+- Menu agrupado: Ausências e jornada (Absenteísmo, InterJornadas, Hora Extra) · Quadro de pessoal (Empregados, HEAD, Turnover) · Saúde ocupacional (Exames). Topo com olho em ouro ("Gestão RH · grupo") e título da tela.
+- Explicações que ocupavam a tela (importação dos Exames e da InterJornadas, corte do ponto) viraram dica no controle.
+- Cuidado aprendido: regra de layout com duas classes (`.topo-rh .acoes`) vence o `hidden` do Tailwind; as ações do Absenteísmo apareceram nas outras telas até ganhar `.acoes.hidden { display: none }`.
+
+## Modo claro (histórico)
+_Até 2026-10-20 o modo claro era um bloco de CSS em `html:not(.dark)` sobre o painel escuro; desde então os dois temas saem dos tokens. As lições abaixo continuam valendo._
+O botão sol/lua só trocava o ícone até 2026-09-01: o painel tinha sido feito só com cores escuras.
 - **Chip escuro continua chip:** badge de fundo `-950` semitransparente com texto claro ganha fundo sólido e **mantém o texto claro**, em vez de ter o texto escurecido pela regra geral. A regra cobre as opacidades **/60 e /80** — usar sempre uma delas. Os atalhos de Exames usaram /70 e ficaram ilegíveis (contraste 3,09; corrigido para 9,09 em 2026-10-01).
 - Botão de fundo sólido (navy, gradiente) mantém texto branco.
 - Lição de 2026-09-01: ao acertar um contraste, não estragar o que já estava bom. A primeira correção escureceu o texto de destaque de forma geral e quebrou os badges, e o Júlio reclamou.
@@ -198,6 +210,7 @@ O schema inicial (tabelas, views, RLS e Realtime) foi aplicado em 2026-08-24, fo
 - [ ] **Fechar o banco:** o GESTÃO RH aceita leitura e gravação anônimas com a chave pública, e `pagamento_hora_extra` tem CPF e salário. O guarda da Sentinela não resolve isso — conserto à parte (políticas de RLS) — Júlio/Claude. Fechar o site também não esconde a chave: ela ficou escrita no `supabase-client.js` até 2026-08-24 (o commit `45e3dfd` a tirou), e esse histórico esteve num repositório público
 - [ ] **URGENTE — tirar os dados pessoais do repositório, que está público desde 2026-10-16:** conferido no mesmo dia, qualquer pessoa baixa sem login. `planilhas referencias/` (14 planilhas — hora extra com CPF e salário, empregados, HEAD, turnover, ponto e faltas — enviadas em 2026-09-15), `exames-periodicos-data.js`, `dashboard_dataset.json` e `powerbi_data.json` (ocorrências de falta por funcionário, desde 2026-08-21) estão versionados; o `data.js` cheio está no histórico. Apagar agora não limpa o histórico do Git — Júlio. Ver [[Como trabalhar comigo]] ("dado de pessoa não vai para o repositório")
 - [x] 2026-10-16 — Decidir o repositório: o Júlio **voltou a público** para destravar o deploy. Resolveu o `BLOCKED`, mas reabriu a exposição dos dados de pessoa (item acima, agora urgente)
+- [ ] Conferir logado a cara nova (2026-10-20): rodapé com `4d8406c`, tema claro e escuro, filtros de cada tela — Júlio
 - [ ] Dizer se quer múltipla escolha no **Turnover**, que pede refazer o gráfico (ano e setor montam a série, não filtram lista) — Júlio
 - [ ] Conferir logado a página publicada de 2026-10-16: rodapé deve mostrar `82c3ddc` e os filtros devem abrir com busca — Júlio. Com o guarda da [[SENTINELA LUBE]] ligado, o Claude não consegue abrir a página (308 para o portal, `.js` em 401)
 - [ ] Gráfico Top 10 Faltas Injustificadas e ficha do colaborador ainda somam `motivo = 'Falta'` (conferido em 2026-10-09) — alinhar ao critério do card — Claude, quando o Júlio pedir
@@ -217,6 +230,7 @@ O schema inicial (tabelas, views, RLS e Realtime) foi aplicado em 2026-08-24, fo
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — **Cara dos sistemas atuais** (Júlio pediu, Claude fez): tokens e fontes do Trade/Inventário/Fiscal, menu agrupado, topo novo, cores do Tailwind reapontadas por CSS gerado, gráficos no tema por plugin, faixa de filtros com pílulas e período rápido em todas as telas, Empregados com múltipla escolha, número do cartão medido, horas no padrão brasileiro. Conferido com os números de antes (Absenteísmo 1.282 / ENTREGA 451 / Segundas 434 / Injustificado 387 / dois meses 591; InterJornadas 186; Hora Extra 508 + 13 = 521; Exames 26 e 14). Commit `4d8406c`, deploy automático `READY` · [[2026-10-20 — BI de RH com a cara dos sistemas atuais]]
 - **2026-10-16** — Painel dos filtros abre por cima da página, sem ser cortado pelo card; clicar numa opção não fecha mais o painel (commit `941cff4`) · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]
 - **2026-10-16** — Repositório renomeado para `GESTAO-RH` e de volta a **público**, para destravar o deploy que vinha saindo `BLOCKED` · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]
 - **2026-10-16** — Filtros de múltipla escolha em todas as abas menos Turnover, e Excel com os dados filtrados e os filtros no cabeçalho (commits `a0601b6`, `82c3ddc`) · [[2026-10-16 — filtros de múltipla escolha no BI de RH e repositório de volta a público]]

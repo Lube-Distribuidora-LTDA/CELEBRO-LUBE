@@ -13,7 +13,7 @@ Sistema que controla o que a TI paga: contratos, notas fiscais, boletos e recibo
 - Pasta local: `Desktop\BI\5. GESTÃO TI`
 - Next.js 15 (App Router, TypeScript) + Tailwind v4 · [[Supabase]] `gestao-ti` (`mpupmrzcbygwpblrewrb`, sa-east-1, US$ 10/mês) · deploy na [[Vercel]] (projeto `gestao-ti`, plano Hobby, funções na região `gru1`, ao lado do banco)
 - No ar: https://gestao-ti-ruddy.vercel.app
-- Tema azul escuro da Lube, o mesmo do [[PAINEL LUBE DISTRIBUIDORA]], que dá acesso a ele
+- Visual no **padrão dos sistemas recentes** desde 2026-10-20 (fontes Archivo, IBM Plex Sans e JetBrains Mono, ouro como acento, faixa de filtros de múltipla escolha, carimbo de versão no menu) — [[2026-10-20 — Gestão TI no padrão visual e de filtros dos sistemas recentes]]
 
 ## Como funciona
 - **Fornecedor → contrato → competência.** Cada contrato gera uma competência por mês; o documento que chega se prende a ela.
@@ -22,7 +22,7 @@ Sistema que controla o que a TI paga: contratos, notas fiscais, boletos e recibo
 - **Cobrança por WhatsApp** para quem não responde e-mail: o botão abre a conversa com a mensagem já escrita, e esses fornecedores saem da cobrança automática.
 - **Exportação em Excel** com a marca da Lube e os filtros escritos na planilha.
 - **Alerta antes de vencer, em degraus:** atenção (entrou o mês), urgente (14 dias ou menos), hoje e vencida, as duas últimas piscando. O cálculo mora num lugar só (`alertaVencimento`), para o dashboard e a lista nunca discordarem.
-- **Faturas e notas abre no mês atual** (do dia 1º ao último) mais o que está atrasado e em aberto. Outro período, pelo seletor de mês de vencimento.
+- **Faturas e notas abre no mês atual** (do dia 1º ao último) mais o que está atrasado e em aberto ("Mês atual + atrasadas"). Outro período, pelos atalhos da faixa de filtros (Mês atual, 3 meses, Ano atual, 12 meses, Tudo) ou pelas datas livres; o Excel sai com o mesmo recorte.
 - **Fim do fluxo é "Assinado e entregue"** à contabilidade, não "pago": a TI confere, o Sergio assina e a contabilidade recebe; quem paga é o financeiro.
 - **Notas avulsas:** serviço fora dos contratos é lançado à mão, com anexo, e entra no custo do departamento.
 - **Link do portal:** para quem não manda anexo (a SAAM, pela ContaAzul), o robô guarda o link do e-mail como documento, e ele vale por nota e boleto.
@@ -169,6 +169,7 @@ Tabelas em 2026-10-09: categorias_custo, fornecedores, contas, faturas, document
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — Design e filtros no padrão dos sistemas recentes (Júlio pediu; Claude fez): fontes hospedadas, tokens do Fiscal, menu em ouro com carimbo de versão, KPI em mono com card zerado cinza; faixa de filtros de múltipla escolha com busca e pílulas em Faturas, Contas, Chamados, Inventário, Notas avulsas e Fornecedores; Excel de Faturas com o recorte da tela; `/fonts/` fora da Sentinela (commit `a13796b`, no ar 17:19) · [[2026-10-20 — Gestão TI no padrão visual e de filtros dos sistemas recentes]]
 - **2026-10-14** — RPC `public.saude_robo()` liberada a `anon` (a única exceção ao "anon revogado"), só com tipo, horários, sucesso e contagens do robô em 48 h, sem texto de erro, para o [[GUARDIÃO DA LUBE]] vigiar a leitura e a cobrança; nada mudou no código nem na Vercel (Claude; migração `saude_robo`, arquivo no repositório do Guardião). Primeira leitura real: "Leitura às 08:29 OK (332 e-mails lidos, 1 documento novo) · cobrança às 09:27 OK (nenhuma cobrança a enviar)" · [[2026-10-14 — Guardião, o robô que garante as rotinas]]
 - **2026-10-08** — Kanban no ar: commit vazio destravou o deploy `BLOCKED` do dia anterior; conferido pelo commit do deploy de produção e pelas rotas `/kanban` e `/api/kanban` no build (commit `9a866cc`) · [[2026-10-07 — Kanban TI e o mês que nunca abria]]
 - **2026-10-07** — Kanban TI: quadro dos problemas internos, colunas como dados, arrastar nativo, faixa no dashboard; `useAviso` estabilizado (o laço fazia 465 chamadas) (commit `11297c7`, migração `kanban_ti`) · [[2026-10-07 — Kanban TI e o mês que nunca abria]]
