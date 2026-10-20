@@ -55,6 +55,8 @@ entrou para contar quantos clientes compram em cada região.
 - **Regiões: só as 16 que o Júlio pediu** ("eu preciso de apenas algumas regiões"): 18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40,
   41, 42, 43, 45 e 46. No `ENV` (`FISCAL_REGIOES`) e no banco (`fiscal.regiao.no_painel`). **A região 1 (Espírito Santo), a que
   mais vende (517 mil linhas em 12 meses), não está na lista** — perguntado ao Júlio, sem resposta ainda.
+- **Com estoque nas filiais 1, 11 ou 12** (desde 2026-10-20 16:21, pedido do Júlio; `QTESTGER > 0` em pelo menos uma delas;
+  `FISCAL_FILIAIS_ESTOQUE`, que também soma o estoque da tela): **4.274 produtos**. _Até 16:21: 5.328 ativos, com e sem estoque._
 - **Só produtos ATIVOS** (5.318, desde 2026-10-20 13:16, pedido do Júlio: "apenas produtos ATIVOS e não todos, como: CONSUMO,
   INATIVOS e etc."): não excluído, de revenda, **em linha** (`OBS2 <> 'FL'`), **fora do fornecedor "INATIVOS"** (cód. 658801, onde a Lube
   guarda o que saiu de linha), **sem item de consumo** (descrição com "CONSUMO" ou departamento 9 Material Consumo) e com tipo de
@@ -111,6 +113,7 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
   meio da carga viraria alarme falso.
 - 2026-10-20 (Claude): listas de produto começam pelo **que mais vende** (por quantidade de pendência, o topo era cesta de Natal e
   item de consumo sem preço em lugar nenhum).
+- 2026-10-20 (Júlio): **só produtos com estoque nas filiais 1, 11 ou 12** (em pelo menos uma; "nas três" seriam 10 produtos).
 - 2026-10-20 (Júlio): **carga de 30 em 30 minutos**; o Claude pôs das 07:10 às 19:40, aos :10 e :40 (minutos sem outro ETL).
 - 2026-10-20 (Claude, substituída no mesmo dia): cargas aos :15, 07:15, 10:15, 13:15, 16:15 e 19:15 (Inventário :05, Trade :25, Reposições :35, Comercial
   :45, Compras :50). Carga medida em 2026-10-20 com o banco lento: ~9 min (produto 136 s, preço 263 s, pacote 62 s).
@@ -121,8 +124,8 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 - [x] **GitHub, Vercel e Sentinela** — Claude, 2026-10-20, a pedido do Júlio (repositório criado pelo Claude desta vez).
 - [x] **Variáveis `SUPABASE_DB_*`** — Júlio, 2026-10-20 (com o conserto do usuário no `c32f5c1`).
 - [x] **Cartão ativo no portal** — Claude, 2026-10-20 11:57, com o aceite do Júlio; `cpd@` e `comercial@` já entraram.
-- [ ] **Júlio: `INSTALAR TUDO.bat` de novo na `SRV-IA`** — recria a tarefa de 30 em 30 min **e** leva a regra dos ativos para a VM
-  (sem isso, a carga das 16:15 volta aos 7.277).
+- [x] **`INSTALAR TUDO.bat` de novo** — Júlio, 2026-10-20 ~16:00: tarefa de 30 em 30 min no ar (16:10:01 rodou; 16:15 não) e regra dos ativos na VM.
+- [ ] **Júlio: `ATUALIZAR AGORA.bat` na `SRV-IA`** — para a VM pegar a regra do estoque nas filiais 1, 11 e 12 (senão cada carga da VM volta aos ~5.328).
 - [x] **Agendar na `SRV-IA`** — Júlio, 2026-10-20 ~11:34 (`INSTALAR TUDO.bat`); Claude conferiu a carga em `fiscal.controle_carga` (7 de 7 `OK`).
 - [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site), depois do agendamento.
 - [ ] Fiscal/Compras: revisar os itens de consumo marcados como revenda e a tributação da região 27.
@@ -131,6 +134,7 @@ modo apresentação, foto do produto. **Abre na hora com a cópia guardada** e c
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20 (16:21)** — **Só produtos com estoque nas filiais 1, 11 ou 12** (Júlio pediu "preciso apenas dos produtos que tem estoque nas filiais 1, 11 e 12, de restante pode manter"; Claude fez): o universo ganha `EXISTS PCEST QTESTGER > 0` nas filiais de `FISCAL_FILIAIS_ESTOQUE` (padrão agora **1,11,12**, que também somam o estoque da tela); "nas três ao mesmo tempo" seriam só 10 produtos, então vale **em pelo menos uma**: **5.328 → 4.274**. Carga das 16:21 com 7 de 7 `OK`; tela sem o filtro de estoque; commit `52a3aa3`; ETL na pasta de rede. **Os 30 min funcionam** (a VM rodou às 16:10:01 e não às 16:15), mas a VM ainda tem o código sem o estoque: **falta o Júlio rodar o `ATUALIZAR AGORA.bat`** (a tarefa já está certa; só o código precisa chegar) · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **2026-10-20** — **Carga de 30 em 30 minutos** (Júlio pediu "preciso que seja a cada 30 min"; Claude fez): o instalador passa a criar 26 gatilhos, **07:10 a 19:40, aos :10 e :40** (nenhum outro ETL começa nesses minutos), com limite de 25 min por carga (antes 1 h) e `IgnoreNew`; commit `fa15c69`, instalador e `LEIA-ME` copiados para `P:\INTEGRAÇÃO BI\FISCAL`. **Só vale depois que o Júlio rodar o `INSTALAR TUDO.bat` de novo na `SRV-IA`** (que também leva a regra dos ativos para a VM); até lá seguem os 5 horários aos :15 · [[Fiscal - Sync]]
 - **2026-10-20 (13:16)** — **Só produtos ATIVOS** (Júlio pediu "apenas produtos ATIVOS e não todos, como: CONSUMO, INATIVOS e etc."; Claude fez): universo do ETL = não excluído, de revenda, **em linha** (`OBS2 <> 'FL'`, o ATIVO dos outros BIs), **fora do fornecedor INATIVOS** (658801), **sem item de consumo** (descrição com "CONSUMO" ou departamento 9) e com `TIPOMERC` preenchido: **7.277 → 5.318 produtos** (tirou 1.864 fora de linha, 26 do fornecedor INATIVOS, 66 de consumo — nenhum com venda em 12 meses — e 3 sem tipo). O `TIPOMERC = 'MC'` não serve: Guaraná Antarctica, Sukita e Água Tônica estão como MC e vendem. Carga das 13:16 com 7 de 7 `OK` (85.088 linhas da 201, conferência igual); tela sem o filtro "Situação do produto"; commit `86b8c4b`. **A VM ainda tem o código antigo** (a carga das 13:15 trouxe os 7.277): ETL copiado para `P:\INTEGRAÇÃO BI\FISCAL`, **falta o Júlio rodar o `ATUALIZAR AGORA.bat` na `SRV-IA`** antes das 16:15 · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]
 - **2026-10-20 (12:01)** — **Conserto: "user not found" na 1ª entrada** (Claude): com as variáveis cadastradas pelo Júlio, a API respondia 502 — o pooler recusava o `SUPABASE_DB_USER` (`EAUTHQUERY user not found in the database`; o código só conferia o final do nome). A `_db.js` passou a aparar espaço e aspas das variáveis e a dizer, se o usuário não bater, exatamente o que chegou (usuário e host no log; da senha, só o tamanho). Commit `c32f5c1`; às 12:01 a entrada do Júlio (`cpd@`) leu versão, dados e fotos; às 13:06 `comercial@lube.com.br` também abriu. Cartão **ativado** no portal às 11:57 (Júlio autorizou: "Ativar e acompanhar") · [[2026-10-20 — Gestão Fiscal, região sem tributação e sem preço]]

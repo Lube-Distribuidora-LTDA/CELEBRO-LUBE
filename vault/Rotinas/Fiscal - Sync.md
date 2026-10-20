@@ -8,8 +8,8 @@ tags: [bi, fiscal, agendador]
 # Fiscal - Sync
 
 **Quando:** **de 30 em 30 minutos, das 07:10 às 19:40** (26 cargas, aos :10 e :40; pedido do Júlio em 2026-10-20: "preciso que seja
-a cada 30 min") — **vale depois que o Júlio rodar o `INSTALAR TUDO.bat` de novo** (até lá, os 5 horários antigos: 07:15, 10:15, 13:15,
-16:15 e 19:15, **agendados pelo Júlio em 2026-10-20 ~11:34** (`INSTALAR TUDO.bat`; esperado na `SRV-IA`:
+a cada 30 min") — **no ar desde 2026-10-20 ~16:00** (Júlio rodou o `INSTALAR TUDO.bat` de novo; a VM disparou às 16:10:01 e não às 16:15). Antes:
+os 5 horários aos :15 (07:15, 10:15, 13:15, 16:15 e 19:15), **agendados pelo Júlio em 2026-10-20 ~11:34** (`INSTALAR TUDO.bat`; esperado na `SRV-IA`:
 a tela do instalador não mostra a máquina). A carga que o instalador dispara entrou às 11:34 com 7 de 7 `OK` em ~16 s.
 **Onde:** Agendador de Tarefas do Windows, na VM `SRV-IA`, rodando de `C:\BI\FISCAL` (tarefa `Fiscal - Sync`).
 **O que atualiza:** o [[GESTÃO FISCAL]] — preço de venda e tributação de saída por região (rotina 201, `PCTABPR`), cadastros de

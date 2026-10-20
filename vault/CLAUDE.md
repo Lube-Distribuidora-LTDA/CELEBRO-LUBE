@@ -104,13 +104,12 @@ tags: [tag1, tag2]
 - **Fiscal (tributação e preço por região):** [[GESTÃO FISCAL]] (2026-10-20): "Código | Descrição | Região sem tributação |
   Região sem preço de venda" da rotina **201** (`PCTABPR`: preço de venda e `CODST` por região; a `PCTABTRIB` é a tributação por UF,
   **desligada** no WinThor). Só as **16 regiões** que o Júlio pediu (18, 19, 23, 27, 31, 33, 35, 37, 38, 39, 40, 41, 42, 43, 45, 46;
-  `ENV` `FISCAL_REGIOES`; a região 1 ficou fora — perguntado) × **só produtos ativos** (5.318: em linha, fora do fornecedor INATIVOS
-  658801, sem item de consumo; pedido do Júlio). Schema `fiscal`, carga
-  [[Fiscal - Sync]] com instalador em `P:\INTEGRAÇÃO BI\FISCAL` (**de 30 em 30 min, 07:10 a 19:40**, depois de o Júlio rodar o
-  `INSTALAR TUDO.bat` de novo), conferida contra a PCTABPR em
+  `ENV` `FISCAL_REGIOES`; a região 1 ficou fora — perguntado) × **só produtos ativos com estoque nas filiais 1, 11 ou 12** (4.274: em linha, fora do
+  fornecedor INATIVOS 658801, sem item de consumo; pedidos do Júlio). Schema `fiscal`, carga
+  [[Fiscal - Sync]] com instalador em `P:\INTEGRAÇÃO BI\FISCAL` (**de 30 em 30 min, 07:10 a 19:40**, no ar desde 2026-10-20 16:10), conferida contra a PCTABPR em
   toda carga; painel de 4 telas em **`gestao-fiscal-olive.vercel.app`** (repositório público `Lube-Distribuidora-LTDA/GESTAO-FISCAL`,
   projeto `gestao-fiscal`, fechado pela Sentinela; o `gestao-fiscal.vercel.app` é de outra conta). Em uso desde 2026-10-20 (cartão
-  ativo em CONTABILIDADE). **Falta o Júlio:** `INSTALAR TUDO.bat` de novo na `SRV-IA` (30 em 30 min e a regra dos ativos). Local: `Desktop\BI\17. FISCAL\INICIAR.bat` (porta 3103).
+  ativo em CONTABILIDADE). **Falta o Júlio:** `ATUALIZAR AGORA.bat` na `SRV-IA` (a regra do estoque nas filiais 1, 11 e 12). Local: `Desktop\BI\17. FISCAL\INICIAR.bat` (porta 3103).
 - **Folha de pagamento:** [[SISTEMA FINANCEIRO]] (no ar desde 2026-09-25, `gestao-finaceiro.vercel.app`): Validação de
   Folha das cinco empresas (LUBE, LUBE RJ, L LOG, IMPÉRIO LOG, SERMAR) no schema `financeiro` do DATA WAREHOUSE. A
   folha entra em PDF do DP e só grava se bater com o resumo impresso. Rotina: [[Validação mensal da folha]].
