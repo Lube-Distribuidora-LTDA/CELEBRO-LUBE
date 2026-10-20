@@ -50,7 +50,7 @@ se subiram as informações corretamente… garanta a saúde do sistema… quem 
 | Vigia da VM (`guardiao_vm.py` 1.0.1) | VM `SRV-IA`, tarefa `Guardiao - Vigia` | batimento, tarefas do Agendador, servidor de margem, disco, relógio, aquecedor, conferência com o WinThor e a nova tentativa |
 | Painel | artifact do [[Cérebro da Lube]] (versão 7) e arquivo baixado | chip de saúde, painel Saúde, bolinha das rotinas, selo por etapa no funil, robô reagindo, `ver_saude` no "Pergunte ao cérebro" |
 
-## O que vigia (39 itens em 2026-10-14; 42 em 2026-10-19, com o Trade; 45 em 2026-10-20, com o Inventário; **46 desde 2026-10-20**, com o espaço do banco)
+## O que vigia (39 itens em 2026-10-14; 42 em 2026-10-19, com o Trade; 45 em 2026-10-20, com o Inventário; 46 com o espaço do banco; **47 desde 2026-10-20 11:52**, com o próprio Guardião)
 **Espaço do banco (desde 2026-10-20):** `servico:banco-espaco`, medido todo dia às 05:40 pela [[Guardião - Espaço do banco]]
 (atenção com mais de 1 GB sem dono no disco em 2 medições seguidas). Junto, a limpeza semanal do registro operacional.
 **Rotinas (14):** as 13 de `Rotinas/` (com o [[Trade - Sync]], desde 2026-10-19, e o [[Inventário - Sync]], desde 2026-10-20) e a ponte do [[PAINEL ICMS]].
@@ -98,6 +98,19 @@ falha. Essa rota da [[SENTINELA LUBE]] não registra evento.
 **VM `SRV-IA` (3):** batimento do vigia (mais de 35 min sem = falha; nenhum ainda = "sem dado", sem alarme), disco C:
 (menos de 10% livre = atenção, menos de 3% = falha) e relógio (diferença de 300 s ou mais para o banco, ou fuso
 diferente de UTC−3 = atenção: foi o que fez o COMPRAS rodar 4 h atrasado em 2026-09-28).
+
+**O próprio Guardião (1, desde 2026-10-20):** `servico:guardiao-nuvem`, "Guardião · Verificação na nuvem", julgado pelo
+banco a cada `saude.verificar()` (`saude._avaliar_guardiao`, migração `saude_v1_guardiao_parado`). Sem ele, função
+parada só deixava os sites "sem dado" — que não alarma — e nenhum aviso saía. Regras:
+- função `guardiao` sem rodar (o registro mais novo dos sites) há mais de **25 min** = atenção; mais de **45 min** = falha;
+- **3 ou mais falhas** dos jobs `saude-verificar`/`saude-guardiao` na última hora = atenção, com o motivo ("job startup
+  timeout" = banco sobrecarregado, não abre conexão a tempo); em alarme, **só fecha depois de 1 hora sem falha**;
+- **apagão:** se nada avaliou o item por mais de 25 min (nem o agendador nem a função rodaram), a primeira avaliação
+  depois conta o buraco ("ficou parado de HH:MM a HH:MM sem ninguém ver");
+- na volta, o texto conta a história ("ficou sem rodar de 10:30 a 11:38; o agendador falhou 31 vezes"). O aviso sai na
+  primeira rodada completa da função; se o incidente abrir e fechar antes, sai "teve um problema às HH:MM e já voltou".
+- Limites em `saude.alvo.config` (`atencao_min`, `falha_min`, `falhas_cron`, `janela_min`): mudam sem migração. Ninguém
+  de fora grava o item (a `registrar()` recusa).
 
 **Tarefas do Agendador (9):** `BI Compras - Sync rapidas`, `BI Compras - Sync faturamento`, `BI Comercial - Sync
 rapidas`, `BI Comercial - Sync margem`, `BI Comercial - Servidor de margem`, `BI Comercial - Agente de margem`,
@@ -179,6 +192,8 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
 - `select saude.chamar_guardiao('simular');` — roda a função inteira sem mandar Telegram; o resultado sai em
   `select status_code, content from net._http_response where id = <número devolvido>;`.
 - `select * from saude.batimento;` — o vigia da VM está de pé? (linha `vm:SRV-IA`).
+- `select status, resumo, detalhe from saude.verificacao where alvo_id = 'servico:guardiao-nuvem';` — o próprio Guardião
+  está conferindo? (última rodada da função, falhas do agendador na última hora, episódio em curso).
 - `select jobname, schedule, active from cron.job where jobname like 'saude-%';` e `cron.job_run_details` — o
   agendador está rodando?
 - Na VM: `P:\INTEGRAÇÃO BI\GUARDIAO\TESTAR SEM GRAVAR.bat` mostra o que o vigia faria, sem gravar nada.
@@ -236,10 +251,12 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
    agendador passa pela fila do pg_net). Não revogar o PUBLIC do schema `net` sem testar.
 
 ## Limitações (2026-10-14)
-- **Quem vigia o Guardião?** Se a função ou o pg_cron pararem, sites e Gestão TI só viram "sem dado" depois de 25 a
-  35 min, e **ninguém recebe Telegram** (quem manda é a própria função). O painel mostra "verificação atrasada" depois
-  de 20 min, mas não avisa. Sugestão (Claude): o vigia da VM conferir o `verificado_em` e avisar direto, pelo mesmo
-  caminho do "Supabase fora".
+- **Quem vigia o Guardião?** _Desde 2026-10-20 o próprio banco vigia_ (item "Verificação na nuvem", acima): função
+  parada ou agendador falhando viram atenção ou falha no painel na hora. **Mas o Telegram continua saindo pela própria
+  função:** com ela parada, o aviso só chega quando ela volta (com a história). O único aviso que não depende do banco
+  é o do vigia da VM, e ele está **sem Telegram no ENV** (`telegram_direto: false`, conferido em 2026-10-20): hoje nem o
+  "Supabase fora" dele avisaria. Sugestão (Claude): pôr o Telegram no ENV do vigia e ensiná-lo a avisar quando a função
+  ficar mais de 30 min sem rodar, pelo mesmo caminho do "Supabase fora".
 - **Ainda sem vigia:** as importações do [[BI ABSENTEÍSMO RH]] (PontoMais) e da [[GESTÃO DE SAÍDA DE VEÍCULOS]]
   (Getrak), que ficam em Supabase próprios; a ponte do [[PAINEL ICMS]] (aparece como desligada). O [[Trade - Sync]] entrou
   no catálogo em 2026-10-19 (as cargas vigiadas são as dos schemas `compras`, `comercial`, `reposicao` e `trade`; a
@@ -284,18 +301,24 @@ acima = falha. A `margem_item` (3,3 mi de linhas) fica fora da contagem no Oracl
   sozinho) — Claude
 - [x] Pôr o [[Trade - Sync]] no catálogo — feito em 2026-10-19, pedido do Júlio (migração `saude_v1_trade`)
 - [x] Pôr o [[Inventário - Sync]] no catálogo — feito em 2026-10-20, pedido do Júlio (migração `saude_v1_inventario`)
-- [ ] **Banco sobrecarregado deixa o Guardião cego** (achado em 2026-10-20 11:25, sem causa ainda): os jobs `saude-guardiao` e
-  `saude-verificar` do pg_cron falham com **"job startup timeout"** quase toda rodada (pelo menos de 08:25 a 11:25, menos 10:30 e
-  11:20); sem a função `guardiao`, os **12 sites** ficaram "sem checagem desde 10:30" — status `sem_dado`, que **não alarma**. No
-  mesmo período: 189 "canceling statement due to statement timeout" (06:46–11:26), conexões do MCP caindo por timeout, cargas lentas
-  (Inventário 17–18 min contra 31 s; Comercial rápidas 17 min 44 s) e uma consulta de `pg_stat_statements` de 15–17 s a cada poucos minutos.
-  Investigar a causa e fazer "função guardiao parada" virar alarme. Nada disso veio da migração do Inventário (as falhas começaram antes).
-- [ ] Decidir: o vigia da VM vigiar o próprio Guardião — Júlio
+- [x] **Banco sobrecarregado deixa o Guardião cego** (achado em 2026-10-20 11:25) — causa achada e alarme feito em
+  2026-10-20 (Claude): o `pg_stat_statements` incha com os lotes do `execute_values` dos ETLs, a consulta de métricas do
+  próprio Supabase passa a levar 14–16 s a cada minuto depois da margem das 03:45, e às 08:00 o banco satura e acaba
+  caindo (15, 16, 18, 19 e 20/10). Detalhe e proposta em [[2026-10-20 — Banco sobrecarregado e o Guardião que avisa quando para]]
+  e no [[Supabase]]. Alarme: item "Verificação na nuvem" (migração `saude_v1_guardiao_parado`).
+- [ ] **Decidir a correção do banco** (proposta de 2026-10-20): zerar o `pg_stat_statements` de hora em hora pelo pg_cron
+  (reversível) e trocar o `execute_values` por `COPY` nos ETLs (a raiz, uma sessão por sistema) — Júlio
+- [ ] Pôr `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` no ENV do vigia (`P:\INTEGRAÇÃO BI\GUARDIAO\1 - CONFIGURACAO`) e
+  reinstalar: sem eles nem o "Supabase fora" do vigia avisa — Júlio
+- [ ] Decidir: o vigia da VM vigiar o próprio Guardião (avisar quando a função ficar mais de 30 min sem rodar; é o único
+  aviso que não depende do banco; precisa do Telegram no ENV dele) — Júlio
+- [ ] Commit local do `db/11_guardiao_parado.sql` e do README (a sessão de 2026-10-20 não commitou) — Júlio pede, Claude faz
 - [ ] Remoto no GitHub para `Desktop\BI\12. GUARDIAO` (hoje só git local) — Júlio decide
 
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20 (11:52)** — **O Guardião avisa quando ele próprio para** (pedido da conversa do Inventário; Claude fez): migração **`saude_v1_guardiao_parado`** (`db/11_guardiao_parado.sql`, README; **sem commit**): função nova `saude._avaliar_guardiao` e item **`servico:guardiao-nuvem`** ("Guardião · Verificação na nuvem") → **47 alvos**; a `saude.verificar()` ganhou o ramo `fonte = 'guardiao'` e a `saude.registrar()` passou a recusar o item, **por âncora na definição do banco** (conferido: sem a linha nova, as duas têm o mesmo md5 de antes). Testada em transação desfeita (9 cenários) e reavaliada de 14/10 a 20/10 pelo pg_cron: 5 episódios, todos de banco degradado de verdade, nenhum em 14/10 e 19/10. Primeira avaliação real às 11:55: **atenção**, "o agendador do banco falhou 7 de 15 rodadas na última hora (job startup timeout)" (incidente 59); **Telegram entregue às 12:00:05** ("🟠 Guardião · Verificação na nuvem — … 5 de 16 rodadas …"), o primeiro aviso desde as 07:40. Na mesma conversa, a causa da sobrecarga (o `pg_stat_statements` inchado pelos lotes dos ETLs) e a proposta ao Júlio · [[2026-10-20 — Banco sobrecarregado e o Guardião que avisa quando para]]
 - **2026-10-20 (10:27)** — **Inventário no catálogo** (Júlio pediu "pode ligar o Inventário no Guardião: rotina, tarefa e site", Claude fez): migração **`saude_v1_inventario`** (`db/09_inventario.sql`, commit local no `12. GUARDIAO`): as três funções que leem o `controle_carga` por schema aceitam `inventario` — **desta vez trocando só a lista na definição que está no banco** (`pg_get_functiondef`), para não repetir o que o 08 fez; provado: sem o `inventario`, as três ficam com o mesmo md5 de antes. Catálogo novo: `rotina:inventario-sync` (8 horários, 10 consultas, tolerância 10 min, limite 25 min, tranca `carga:inventario:carga`, vigente desde 20/10 10:25), `tarefa:Inventario - Sync` e `site:movimentacao-inventario` → **45 alvos**. Testado: a carga das 10:03 avaliada como `ok` (10 de 10, 17 min), horário sem carga como `falha`; as outras 6 rotinas de carga seguem `ok`. Rodada das 10:30: tarefa vista pelo vigia na `SRV-IA` ("última execução hoje 10:03, sem erro; próxima 11:05"), site `ok` (53 ms), rotina `sem_dado` até a carga das 11:05 · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 
 - **2026-10-20** — **Limpeza na sexta e a conferência semanal do Claude** (Júlio: "toda sexta você tenha uma rotina de limpeza do banco, verificar se tem lixo e limpar, caso precisarmos de espaço com o ambiente limpo, a gente troca a máquina do banco"): migração `saude_v1_limpeza_na_sexta` (a `saude-manutencao-semanal` passa de domingo para **sexta 05:30**; commit `275e1ef`) e tarefa agendada do Claude `limpeza-semanal-banco`, **toda sexta às 08:11** (confere a limpeza, mede, procura quedas e tabela inchada, VACUUM simples só onde precisa, anota a semana em [[Guardião - Espaço do banco]] e recomenda: "tudo limpo", "lixo que só o Supabase limpa" ou, só com o ambiente limpo sem espaço, "trocar a máquina") · [[2026-10-20 — Limpeza semanal e o espaço do banco]]

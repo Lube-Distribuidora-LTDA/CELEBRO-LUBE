@@ -25,6 +25,7 @@ dentro da rede é o [[Guardião - Vigia da VM]].
 3. **Lê** · a função `guardiao` testa os 10 sites em `/.sentinela/saude` (8 s; guarda sem a lista da central ganha 2ª e 3ª pergunta) e lê a RPC `saude_robo` do [[GESTÃO TI]] com a chave publicável
 4. **Confere** · cada item é julgado: carga no horário, todas as consultas OK, sem queda forte de linhas, conferência da VM, entrega (`painel_cache` do Reposições, agregados do Comercial), folha, Gestão TI, VM, disco, relógio e fila da margem
    - **Atenção:** carga só é julgada depois da tolerância do horário; na dúvida, "sem dado" com o motivo, nunca alarme
+   - **Atenção:** desde 2026-10-20 julga também **a si mesmo** (item "Guardião · Verificação na nuvem"): função sem rodar há mais de 25 min = atenção, 45 min = falha; 3+ falhas do agendador na última hora = atenção (só fecha depois de 1 hora limpa); apagão contado na volta
 5. **Grava** · `saude.verificacao` (estado e frase de cada item), `saude.incidente` (abre, piora, fecha) e, numa falha corrigível, **um** `saude.pedido_correcao` para a VM
    - **Se falhar:** erro ao avaliar um item vira "sem dado" com o motivo e os outros seguem; etapa do banco falhando devolve HTTP 500 no `/rodar` (aparece em `net._http_response`)
    - **Atenção:** a nova tentativa só é pedida com o vigia da VM respondendo; até ele ser instalado, nenhum pedido sai
@@ -40,7 +41,12 @@ dentro da rede é o [[Guardião - Vigia da VM]].
 ## Como provar que rodou
 - `select jobname, status, start_time from cron.job_run_details order by start_time desc limit 10;`
 - `select saude.painel()->>'verificado_em';` — mais de 20 min atrás é sinal de agendador parado (o painel mostra
-  "verificação atrasada", mas **ninguém é avisado**: ver Limitações em [[GUARDIÃO DA LUBE]]).
+  "verificação atrasada").
+- `select status, resumo from saude.verificacao where alvo_id = 'servico:guardiao-nuvem';` — desde 2026-10-20 o
+  próprio banco julga se a função e o agendador estão rodando e alarma. O Telegram, porém, ainda sai pela função: com
+  ela parada, o aviso chega quando ela volta (ver Limitações em [[GUARDIÃO DA LUBE]]).
+- **Em 2026-10-20 o agendador falhou a manhã inteira** ("job startup timeout", banco sobrecarregado; falha todo dia
+  desde 15/10): [[2026-10-20 — Banco sobrecarregado e o Guardião que avisa quando para]].
 - Teste completo sem mandar nada: `select saude.chamar_guardiao('simular');` e depois
   `select status_code, content from net._http_response where id = <número devolvido>;`.
 

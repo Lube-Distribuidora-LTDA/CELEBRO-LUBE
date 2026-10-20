@@ -122,7 +122,8 @@ Editor (a única exceção combinada é ler a chave de leitura uma vez, ao criá
 - **Teste de ociosidade (conexão nova depois de N minutos sem tocar no pooler, 13:56–14:28):** 0 s → 0,21 s; 2 min → 0,15 s; 5 min → 0,15 s; 10 min → **falhou** (`ECHECKOUTTIMEOUT`, pool esgotado, a 56 s do reinício); depois do reinício, 15 min → 0,20 s. **Ficar parado não esfria o pooler**; a lentidão era saturação.
 - **O banco reiniciou às 14:14:09 (BRT)** — não foi por mim (o MCP não tem essa ação) — e tudo voltou ao normal:
   conexão nova em 0,2 s. O `pg_stat_statements` ficou com 27 entradas (zerado pelo reinício).
-- **Hipótese NÃO comprovada:** os ETLs usam `execute_values` com páginas de 2.000 a 50.000 linhas; o último lote
+- **Hipótese — provada em 2026-10-20** (ver o incidente de 15 a 20/10, abaixo; o motivo é um pouco diferente: quase
+  todo lote vira entrada nova, não só o último): os ETLs usam `execute_values` com páginas de 2.000 a 50.000 linhas; o último lote
   de cada carga tem um tamanho diferente, e cada tamanho vira uma consulta nova, com texto de centenas de KB, em
   `pg_stat_statements`. A consulta do exporter faz `regexp_replace` em até 10.000 caracteres de cada entrada — com
   milhares de entradas gigantes ela passa a custar ~15 s por minuto e sufoca uma instância pequena. **Como
@@ -168,8 +169,34 @@ Decidir (Júlio): *Reports → Database* (CPU, memória, Disk IO) e o tamanho do
   ([[Guardião - Espaço do banco]]); a limpeza semanal apaga só registro operacional velho. Diagnóstico completo e
   texto pronto para o suporte em [[2026-10-20 — Limpeza semanal e o espaço do banco]].
 
+## Incidente 2026-10-15 a 2026-10-20 — o `pg_stat_statements` inchado derruba o banco quase todo dia
+Investigado em 2026-10-20 (Claude, só leitura). Detalhe em [[2026-10-20 — Banco sobrecarregado e o Guardião que avisa quando para]].
+- **Quem pesa:** a consulta `with normalized_pg_stat_statements as (...)` (e a `SELECT sum(calls)...` irmã) é do
+  **`postgres_exporter` do próprio Supabase** (usuário `supabase_admin`): o coletor de métricas, a cada ~1 min, com ou
+  sem painel aberto. Ela lê o `pg_stat_statements` inteiro.
+- **Por que ficou cara:** os ETLs gravam com `execute_values` (lotes de 2.000/5.000; `bi_comum.py` de todos os sistemas
+  e `gravar_trade.py`). O tipo dos valores muda de lote para lote (inteiro, decimal, vazio) e **quase todo lote vira uma
+  entrada nova**, com 80 a 300 KB de texto (`reposicao.fato_chamado`: 14 entradas de 183 KB com 1 chamada cada). Depois
+  do reinício de 20/10: 4,9 MB em 5 min, 8,9 MB em 22 min (254 entradas, 56 gigantes). `pg_stat_statements.max` = 5000.
+- **O gatilho é a margem das 03:45** (3,4 mi de linhas, ~690 lotes de 19 colunas): às **03:53 de 19/10 e 03:52 de 20/10**
+  a consulta do exporter passa a levar 14–16 s, duas vezes por minuto, e fica assim. Às 08:00 o expediente soma as
+  cargas e o banco (Small) satura: `statement timeout` em série (149 dos ~190 de 20/10 são do exporter), pg_cron com
+  `job startup timeout` (o [[GUARDIÃO DA LUBE]] ficou cego), MCP com `connection timeout`.
+- **Quedas sem desligar direito:** 15/10 07:57, 16/10 15:06, 18/10 03:53, 19/10 09:57 (volta 10:02) e **20/10 11:22
+  (volta 11:30, recuperação automática)**. Cada queda zera o `pg_stat_statements` e o ciclo recomeça; e deixa os
+  arquivos sem dono da seção acima.
+- **Não é cliente descontrolado:** depois do reinício, 10 conexões, nenhuma ociosa presa, pooler normal.
+- **Proposta (Júlio decide):** (1) já, reversível: pg_cron `select extensions.pg_stat_statements_reset();` de hora em
+  hora aos :15 (o `postgres` pode; a tela *Query Performance* passa a mostrar só a última hora); (2) a raiz: `COPY` no
+  lugar do `execute_values` nos ETLs (texto sempre igual, uma entrada por tabela, e grava mais rápido), uma sessão por
+  sistema começando pelo COMERCIAL; (3) **não** subir o compute antes disso (só adia a queda).
+
 ## Registro de mudanças
 _Compilado em 2026-10-09 a partir do Git, da API do Supabase e das sessões._
+- **2026-10-20** — DATA WAREHOUSE: migração `saude_v1_guardiao_parado` (função `saude._avaliar_guardiao`, item
+  `servico:guardiao-nuvem`, ramo novo na `saude.verificar()` e item recusado na `saude.registrar()`, por âncora); causa
+  das quedas achada (o `pg_stat_statements` inchado pelos lotes dos ETLs) e proposta ao Júlio, sem mudar configuração
+  (Claude) · [[2026-10-20 — Banco sobrecarregado e o Guardião que avisa quando para]]
 - **2026-10-20** — DATA WAREHOUSE: migração `saude_v1_espaco_banco` (tabelas `saude.espaco_banco` e
   `saude.manutencao_banco`, funções `saude.medir_espaco()` e `saude.manutencao_semanal()`, tarefas do pg_cron
   `saude-espaco-banco` às 05:40/06:40 e `saude-manutencao-semanal` às sextas às 05:30 — no domingo até a migração

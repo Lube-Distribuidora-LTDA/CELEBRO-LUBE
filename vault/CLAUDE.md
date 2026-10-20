@@ -171,7 +171,10 @@ tags: [tag1, tag2]
   `saude` + pg_cron + função `guardiao` no DATA WAREHOUSE (no ar); estado em `select saude.painel()` e no chip do
   painel do robô. **Telegram ligado** e **vigia na `SRV-IA`** (2026-10-14); a instalação errada da LOGISTICA-55 já
   saiu (tarefa e pasta, conferido em 2026-10-15). **Falta o Júlio:** chave de leitura e travar `C:\BI` (para
-  comparar com o WinThor). Alarme falso é pior que nenhum alarme.
+  comparar com o WinThor). Alarme falso é pior que nenhum alarme. **Desde 2026-10-20 ele alarma quando ele próprio
+  para** (item "Verificação na nuvem": função sem rodar, agendador falhando), mas o Telegram ainda sai pela própria
+  função; o vigia da VM está sem Telegram no ENV. **O banco cai quase todo dia desde 15/10** (5 quedas em 6 dias): o
+  `pg_stat_statements` incha com os lotes do `execute_values` dos ETLs — ver [[Supabase]]; correção com o Júlio.
   **Espaço do banco** (desde 2026-10-20, [[Guardião - Espaço do banco]]): medição todo dia às 05:40 e limpeza semanal
   (**sexta 05:30**) só do registro operacional, e **toda sexta às 08:11 o Claude confere** (tarefa agendada
   `limpeza-semanal-banco`: limpa, mede, procura quedas e tabela inchada, anota a semana na nota da rotina). Regra do
