@@ -26,6 +26,12 @@
       "port": 8790
     },
     {
+      "name": "jarvis-teste",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "C:\\Users\\gti.julio.alves\\Desktop\\BI\\13. CEREBRO\\ferramentas\\jarvis-teste.cmd"],
+      "port": 8791
+    },
+    {
       "name": "trade",
       "runtimeExecutable": "node",
       "runtimeArgs": ["C:\\Users\\gti.julio.alves\\Desktop\\BI\\11. TRADE\\web\\servidor_local.js"],

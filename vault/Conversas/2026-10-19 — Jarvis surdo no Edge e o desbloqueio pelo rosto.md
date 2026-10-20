@@ -71,7 +71,18 @@ Detalhes em [[JARVIS DA LUBE]] (seções Ouvido e Trava do rosto).
 - O pesquisador abriu o microfone real duas vezes por 0,2 s, só para ver se o Chrome sem janela enxerga o microfone;
   nada foi gravado nem transcrito.
 
+## 2026-10-20 — O Jarvis se ouvindo
+- O Júlio perguntou onde abrir: `Desktop\BI\13. CEREBRO\INICIAR.bat`. No primeiro uso real: "o jarvis está escutando ele
+  mesmo falar kkk preciso que quando ele estiver falando o microfone feche, e só abra quando eu clicar o botão de
+  interromper". Ou seja, o ouvido do Chrome funcionou com a voz dele, mas sem fone o alto-falante voltava pelo microfone.
+- Decisão (Júlio): **sem fone, um fala de cada vez**. Feito pelo Claude: enquanto o Jarvis fala (e 0,45 s depois) o
+  que o microfone ouve é descartado; o botão Parar virou **Interromper**; o Espaço também abre; quando ele termina, o
+  microfone abre sozinho (decisão do Claude, para a conversa não travar). De fone, a voz continua interrompendo.
+- Testado no navegador do app com o simulador, num servidor de teste na porta 8791 (configuração nova `jarvis-teste`):
+  todos os casos certos, nenhum erro no console. Commit `2af99ea` (local).
+
 ## Pendências
+- [x] 2026-10-20 — Jarvis se ouvindo pelo alto-falante: microfone fecha enquanto ele fala — Claude
 - [x] Construção do ouvido no Chrome e da trava do rosto — Claude
 - [ ] Reabrir pelo `INICIAR.bat`, ligar o microfone e baixar o pacote de voz (cerca de 300 MB, uma vez) — Júlio
 - [ ] Cadastrar o rosto (aparece sozinho), com boa luz — Júlio

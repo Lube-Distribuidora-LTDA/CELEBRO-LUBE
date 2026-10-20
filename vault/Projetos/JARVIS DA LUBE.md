@@ -61,7 +61,12 @@ fosse uma pessoa, respeitando quando eu interromper"). Conversa: [[2026-10-15 �
   no disco). Só pt-BR não basta: sem o en-US toda sessão termina em `aborted`.
 - Consumo medido: 8,6% de um núcleo ouvindo silêncio, 42% ouvindo fala, 200 a 315 MB de memória.
 - Nos Ajustes: **Ouvido: Chrome (offline) / Edge**. No Edge fica um vigia: depois de 3 resultados vazios, avisa.
-- Use **fone**: o cancelador de eco do Chrome não ouve a voz que sai pelo Edge; o filtro de eco por texto continua.
+- **Sem fone, um fala de cada vez** (desde 2026-10-20, pedido do Júlio: "o jarvis está escutando ele mesmo falar"):
+  enquanto o Jarvis fala, e 0,45 s depois, o que o microfone ouve é descartado (o botão mostra **Mudo**). Para cortar a
+  fala: o botão **Interromper** (era "Parar") ou segurar **Espaço**; quando ele termina, o microfone abre sozinho. O
+  trecho do reconhecimento que começou com a voz dele no ar sai inteiro, para o eco atrasado não virar pergunta.
+- **De fone** (Ajustes › "Estou de fone de ouvido"), o microfone fica aberto enquanto ele fala e a sua voz o
+  interrompe. O cancelador de eco do Chrome não ouve a voz que sai pelo Edge, por isso sem fone o microfone fecha.
 
 ## Trava do rosto (desde 2026-10-19)
 - **Primeira conversa do dia** (fuso de Brasília): o Jarvis abre a câmera num visor redondo no estilo do HUD
@@ -141,6 +146,7 @@ Travas:
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — **Sem fone, um fala de cada vez** (Júlio pediu: "quando ele estiver falando o microfone feche, e só abra quando eu clicar o botão de interromper"; Claude fez): no primeiro uso real o Jarvis se ouvia pelo alto-falante. Agora, sem fone, o que o microfone ouve enquanto ele fala (e 0,45 s depois) é descartado, inclusive o trecho que começou com a voz dele no ar; o botão Parar virou **Interromper**, o Espaço também abre, e o botão do microfone mostra **Mudo**. De fone, segue a interrupção por voz. Testado no navegador do app com o simulador (falar por cima, eco atrasado, fala emendada, Interromper, Espaço, de fone), sem erro no console. `ferramentas/jarvis-teste.cmd` + configuração `jarvis-teste` no `.claude/launch.json` do vault (porta 8791, cérebro simulado, trava aberta). Commit `2af99ea` (local) · [[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]
 - **2026-10-19** — **Ouvido pelo Chrome escondido e trava do rosto** (Júlio pediu, Claude fez com um fluxo de 9 agentes: pesquisa, 4 construtores, integração, 2 revisões com 18 achados, correção). O Edge parou de transcrever (resultado vazio); um Chrome sem janela, por pipe, ouve offline. Na primeira conversa do dia o rosto é conferido no servidor (face-api + MediaPipe, limiar 0,45, piscar), com o Windows Hello de reserva; o turno, o confirmar e o ligar do ouvido dão 423 até liberar. CSP nova na página do app. Testes: geral 128/128, cérebro 37/37, rosto 168/168, ouvido 81/81, ouvido remoto 159/159, integração 49/49 (rodados de novo pelo Claude principal). Commits `599ee6b` e `efa3459` (local; nada subiu, o repositório segue público). O link do claude.ai continua na versão 8 (ouvido e rosto só existem no app local) · [[2026-10-19 — Jarvis surdo no Edge e o desbloqueio pelo rosto]]
 - **2026-10-15** — **E-mail no `ENV`** (Júlio pediu "me passe esses valores", Claude fez): os 11 campos `IMAP_*` e `SMTP_*` vieram do `Desktop\BI\5. GESTÃO TI\.env.local` por um script que só preenche linhas vazias, confere que o resto do arquivo ficou igual e que o Jarvis lê o mesmo valor que a Vercel usa; as senhas não foram mostradas. Valores que não são segredo: `email-ssl.com.br`, IMAP 993, SMTP 465 com TLS, usuário `cpd@lube.com.br`, pasta `INBOX`, nome "TI - Lube Distribuidora". O Jarvis passa a ler: cérebro Claude, banco, leitura e envio de e-mail · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]
 - **2026-10-15** — Link: o trecho da busca do SharePoint vinha com as marcas de destaque (`<c0>`, `<ddd/>`) e seria lido em voz alta; limpo (Claude, visto numa chamada real) — commit `8b96b9a` · [[2026-10-15 — Jarvis da Lube, o assistente de voz do cérebro]]
