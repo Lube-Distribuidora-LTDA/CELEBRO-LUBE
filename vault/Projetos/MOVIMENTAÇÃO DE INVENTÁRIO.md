@@ -19,8 +19,10 @@ Conversa de origem: [[2026-10-19 — Movimentação de Inventário, rotinas 266 
 
 Mais o `PCEST` de hoje (estoque, bloqueado, avaria, custo financeiro).
 
-- Pasta: `Desktop\BI\16. INVENTARIO` (README, `etl/`, `web/`, `INICIAR.bat`) · Git **só local** (commit `b9554f9`, branch `main`) ·
-  **ainda sem GitHub e sem Vercel** (decisão do Júlio, ver Pendências).
+- Pasta: `Desktop\BI\16. INVENTARIO` (README, `etl/`, `web/`, `INICIAR.bat`) · **GitHub:**
+  [Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO](https://github.com/Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO) (**público**, criado
+  pelo Júlio em 2026-10-20; `main` = `b9554f9`) · **Vercel:** projeto `movimentacao-inventario` (`prj_xVuRpkvAQcpTQUW2LljQYqJiBj7O`),
+  **https://movimentacao-inventario.vercel.app**, fechado pela [[SENTINELA LUBE]] — ver "Publicação na Vercel".
 - Carga: `P:\INTEGRAÇÃO BI\INVENTARIO` (`1 - CONFIGURACAO` com o `ENV` copiado do de leitura do REPOSIÇÕES, `2 - SISTEMA INVENTARIO`,
   `3 - INSTALACAO`, `INSTALAR TUDO.bat`, `ATUALIZAR AGORA.bat`, `DIAGNOSTICO.bat`, `LEIA-ME.txt`). Rotina: [[Inventário - Sync]].
   **Ainda não agendada** (é o `INSTALAR TUDO.bat` na `SRV-IA`, com o Júlio).
@@ -68,6 +70,21 @@ relatório do recorte** (Voltar; Ctrl+clique filtra), foto do produto (a do [[GE
 visão, tema claro/escuro, modo apresentação. O navegador filtra e soma (como o [[REPOSIÇÕES E CHAMADOS]]): 201 mil movimentos,
 telas em 25–90 ms; o pacote fica guardado no navegador e só é baixado de novo quando a carga gera outro.
 
+## Publicação na Vercel (2026-10-20)
+Mesmo molde do [[GESTÃO COMERCIAL TRADE]]: Root Directory `web`, Framework Other, sem build, região `gru1`, Node pelo `engines` (22.x),
+Vercel Authentication Standard (`prod_deployment_urls_and_all_previews`), guarda da Sentinela 1.1.0 (`middleware.ts`, `FECHADO =
+movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/versao` e `api/img` (foto do produto, lida de `trade.produto_miniatura`).
+- **Registro antes do 1º deploy** (migração `registrar_movimentacao_inventario` no banco do portal): `sentinela.sistemas` (`exige_login = true`;
+  `arquivos_proibidos`: `package*.json`, `vercel.json`, `db/`, README, `servidor_local.js`, os `.ts` do guarda), ícone novo `inventario`
+  ("GESTÃO DE INVENTÁRIO") e o cartão `movimentacao-inventario` em `public.sistemas` ("MOVIMENTAÇÃO DE INVENTÁRIO", categoria GESTÃO OPERACIONAL,
+  ordem 10, **`ativo = false`** até o Júlio decidir quem abre).
+- **1º deploy de produção:** `dpl_2xag48pCjMwtPK5SZoRaPaEdyhAk`, commit `b9554f9`, `READY` em 2026-10-20 ~08:11. Daqui em diante, push na `main` publica sozinho.
+- **Provado de fora** (navegador do app, sem login, do escritório): `/` vai para o portal; `/api/versao` responde `{"erro":"login_necessario"}`;
+  `/.sentinela/saude` com `oidc: true`, lista ok, modo proteger. A Sentinela registrou os acessos como `sem_login` (risco 0) e **não bloqueou o IP
+  do escritório**; os robôs de captura de tela da própria Vercel foram barrados (`robo`/`lista`), como no Trade.
+- **Variáveis:** nenhuma ainda (conferido pelos nomes em 2026-10-20). Até o Júlio cadastrar as 5 `SUPABASE_DB_*` e publicar de novo, quem
+  entrar pelo portal vê "Faltam variáveis de ambiente".
+
 ## Validação (2026-10-19)
 - **1147 × PCMOV:** a diferença de cada produto bate com os EI/SI que a 1147 lançou no PCMOV, **41 de 41 meses/tipos**, quantidade
   e valor ao centavo (jan/2025 a out/2026). A carga refaz isso sempre (`conferencia_1147`).
@@ -101,8 +118,10 @@ telas em 25–90 ms; o pacote fica guardado no navegador e só é baixado de nov
 - 2026-10-19 (Claude): **GitHub, Vercel e agendamento ficam com o Júlio** (precedente do Trade e do Reposições: ele cria/indica o repositório e cadastra as senhas).
 
 ## Pendências
-- [ ] **Júlio:** criar o repositório no GitHub (público, por causa do plano Hobby; sugestão `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO`) e avisar — o Claude sobe o commit `b9554f9` (varrido: sem senha, IP ou nome de pessoa).
-- [ ] **Júlio:** projeto na Vercel (Root Directory `web`, Framework Other) e as 5 variáveis `SUPABASE_DB_*` (porta 5432). **Antes do primeiro deploy**, o Claude registra o sistema na [[SENTINELA LUBE]] (`exige_login = true`, projeto `movimentacao-inventario`) e o cartão no portal (inativo até o Júlio decidir quem abre).
+- [x] **GitHub** — Júlio criou `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO` (público) em 2026-10-20; o Claude subiu o `b9554f9` (varrido: sem senha, IP ou nome de pessoa).
+- [x] **Vercel e Sentinela** — Claude, 2026-10-20: projeto `movimentacao-inventario`, registro na Sentinela e cartão inativo antes do 1º deploy, deploy de produção `READY`, provado de fora.
+- [ ] **Júlio:** cadastrar no projeto `movimentacao-inventario` as 5 variáveis `SUPABASE_DB_HOST` (`aws-0-sa-east-1.pooler.supabase.com`), `SUPABASE_DB_PORT` (**5432**), `SUPABASE_DB_NAME` (`postgres`), `SUPABASE_DB_USER` (`postgres.ivcnotrynogaljrvvyes`), `SUPABASE_DB_PASSWORD` (a do ENV, Sensitive) — Production, Preview e Development — e **publicar de novo** (Redeploy), porque variável nova só vale em deploy novo.
+- [ ] **Júlio:** decidir quem abre o cartão no portal (hoje `ativo = false`; quem tem "Todos os sistemas" passaria a ver nome de funcionário e valor de estoque).
 - [ ] **Júlio:** agendar na `SRV-IA` — `P:\INTEGRAÇÃO BI\INVENTARIO\INSTALAR TUDO.bat`; depois o Claude confere em `inventario.controle_carga`.
 - [ ] Corrigir no WinThor o desbloqueio de 17.000.043 paletes (04/07/2025) — logística/TI.
 - [ ] Levar a acurácia de 6,6% e a divergência do "Material Consumo" ao coordenador de logística.
@@ -113,6 +132,7 @@ telas em 25–90 ms; o pacote fica guardado no navegador e só é baixado de nov
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
+- **2026-10-20** — **No GitHub e na Vercel** (Júlio criou o repositório e mandou publicar; Claude fez): push do `b9554f9` para `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO` (público); projeto `movimentacao-inventario` (`prj_xVuRpkvAQcpTQUW2LljQYqJiBj7O`); registro na Sentinela + ícone + cartão inativo no portal (migração `registrar_movimentacao_inventario`, antes do deploy); deploy de produção `dpl_2xag48pCjMwtPK5SZoRaPaEdyhAk` `READY`; provado de fora que só abre com login. **Faltam as variáveis `SUPABASE_DB_*` (Júlio)** · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-19** — **Sistema criado** (Júlio pediu, Claude fez): schema `inventario` no DATA WAREHOUSE (migrações `inventario_01_schema` a `inventario_06_ajuste_cheio`), ETL de 7 consultas com conferência 1147 × PCMOV e pacote comprimido, pasta `P:\INTEGRAÇÃO BI\INVENTARIO` com instalador (não instalado), painel de 7 telas com guarda da Sentinela (não publicado), `INICIAR.bat` local; cargas reais às 18:04 e 18:38 (esta pelo `executar.py`, 9 passos `OK`, 31 s), conferidas em `inventario.controle_carga`; commit local `b9554f9` · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 
 Veja também [[Mapa de sistemas]], [[Glossário WinThor]], [[REPOSIÇÕES E CHAMADOS]] (mesmo desenho de navegador) e [[GESTÃO COMERCIAL TRADE]] (mesma cara e componentes).

@@ -28,6 +28,13 @@ o painel de 7 telas (rodando local; GitHub, Vercel e agendamento esperam o Júli
 5. **Conferência da tela contra o banco** — achou dois erros do próprio Claude (base do "% do estoque bloqueado" e centavos do
    inventário por arredondar linha a linha), corrigidos (migrações 04 a 06); depois disso tudo fechou ao centavo.
 
+### Segunda parte (2026-10-20): GitHub, Vercel e Sentinela
+O Júlio criou o repositório `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO` (público) e mandou publicar: "pode subir o código, criar o
+projeto na Vercel e registrar na Sentinela; as variáveis SUPABASE_DB_* eu cadastro". O Claude subiu o `b9554f9` (só esse commit, por
+referência, para não levar trabalho de outra sessão que usa a mesma pasta), criou o projeto `movimentacao-inventario`, registrou o
+sistema na Sentinela e o cartão inativo no portal **antes** do primeiro deploy, publicou em produção (`READY`) e provou de fora que só
+abre com login. Faltam as variáveis (Júlio) e um novo deploy depois delas.
+
 ## Decisões
 - 2026-10-19 (Claude): schema `inventario`, filiais 1/7/10/11/12, histórico desde 2025-01-01, valor ao custo financeiro de hoje,
   movimento ≥ 1 milhão de unidades fora das somas com aviso, sem KPI de "saldo do período" (o recebimento não aparece no livro),
@@ -52,7 +59,8 @@ o painel de 7 telas (rodando local; GitHub, Vercel e agendamento esperam o Júli
 - Devoluções: mediana de 47 h até o WMS liberar (últimos 30 dias).
 
 ## Pendências
-- [ ] Júlio: criar o repositório no GitHub e o projeto na Vercel (+ 5 variáveis `SUPABASE_DB_*`); Claude sobe o código e registra na Sentinela antes do 1º deploy.
+- [x] GitHub (Júlio criou), Vercel e Sentinela (Claude) — 2026-10-20.
+- [ ] Júlio: as 5 variáveis `SUPABASE_DB_*` no projeto `movimentacao-inventario` (porta 5432) e um Redeploy; decidir quem abre o cartão.
 - [ ] Júlio: `INSTALAR TUDO.bat` na `SRV-IA`; Claude confere `inventario.controle_carga`.
 - [ ] Corrigir no WinThor os 17 milhões de paletes; levar a acurácia ao coordenador de logística.
 - [ ] Guardião vigiar a [[Inventário - Sync]]; avaliar o recebimento (1301) no livro.
