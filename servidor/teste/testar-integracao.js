@@ -90,7 +90,8 @@ async function subir({ extra = [], pastaRosto, perfil }) {
   await fsp.writeFile(path.join(vault, 'Projetos', 'Teste.md'), '---\ntipo: projeto\n---\n# Teste\nNota de teste da integração.\n', 'utf8');
   const env = path.join(tmp, 'ENV');
   await fsp.writeFile(env, '# vazio: o teste não usa banco, e-mail nem a chave do Claude\n', 'utf8');
-  const filho = spawn(process.execPath, [SERVIDOR, '--simulado', `--rosto-pasta=${pastaRosto}`, `--ouvido-perfil=${perfil}`, ...extra], {
+  // --teste-pasta: a pasta do Jarvis, a chave do atalho e o perfil do navegador de teste ficam aqui dentro (apagada no fim)
+  const filho = spawn(process.execPath, [SERVIDOR, '--simulado', `--rosto-pasta=${pastaRosto}`, `--ouvido-perfil=${perfil}`, `--teste-pasta=${path.join(tmp, 'teste')}`, ...extra], {
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     env: { ...process.env, JARVIS_PORTA: String(porta), JARVIS_ENV: env, VAULT_DIR: vault, ARQUIVOS_RAIZES: tmp, JARVIS_SIMULADO: '1' },
   });
@@ -259,7 +260,8 @@ try {
 titulo('sem --simulado, as opções de teste da trava são recusadas (o app não liga)');
 // um comando de teste esquecido não pode desligar a trava do app de verdade. O teste sobe SEM --simulado e sem
 // JARVIS_SIMULADO, mas com ENV vazio, vault e perfil temporários e porta livre: se a recusa falhar, nada de verdade é tocado
-for (const extra of [['--trava-aberta'], [`--rosto-pasta=${path.join(os.tmpdir(), 'cerebro-rosto-nao-usar')}`]]) {
+// --teste-pasta (2026-10-20): a pasta do Jarvis de teste também só vale com --simulado
+for (const extra of [['--trava-aberta'], [`--rosto-pasta=${path.join(os.tmpdir(), 'cerebro-rosto-nao-usar')}`], [`--teste-pasta=${path.join(os.tmpdir(), 'cerebro-teste-nao-usar')}`]]) {
   const porta = await portaLivre();
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'cerebro-recusa-'));
   await fsp.writeFile(path.join(tmp, 'ENV'), '# vazio\n', 'utf8');

@@ -102,7 +102,8 @@ try {
   dec = await decidir(acao.id, 'confirmar');
   ok(!dec.ok && smtp.recebidos.length === 1, 'confirmar de novo não envia outra vez');
   const avisos = tirarAvisos();
-  ok(avisos.some(a => /cancelou/.test(a)) && avisos.some(a => /confirmou/.test(a) && /enviado/.test(a)), 'o desfecho vira aviso para a próxima fala do Jarvis');
+  // desde 2026-10-20 (aprovação por voz, docs/JARVIS-ACOES.md §4.1) o aviso diz "recusou"/"aprovou" e por onde
+  ok(avisos.some(a => /recusou/.test(a)) && avisos.some(a => /aprovou/.test(a) && /enviado/.test(a)), 'o desfecho vira aviso para a próxima fala do Jarvis');
 
   // ---- login errado
   const ruim = { cfg: { ...cfg, imap: { ...cfg.imap, pass: 'errada' } }, emitir: () => {} };

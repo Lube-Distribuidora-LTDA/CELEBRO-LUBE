@@ -55,6 +55,8 @@ const { carregarConfig } = await import('../config.js');
 const { criarVault } = await import('../vault.js');
 const { criarBanco } = await import('../banco.js');
 const { criarCerebro } = await import('../cerebro.js');
+const { BASE } = await import('../ferramentas/index.js');
+const { IMAGEM_NO_HISTORICO } = await import('../conversa.js');
 const base = carregarConfig([]);
 const cfg = { ...base, simulado: false, buscaHaiku: false, anthropic: { apiKey: 'chave-falsa-so-para-o-teste' }, banco: null, imap: null, smtp: null };
 const vault = criarVault(cfg.vaultDir);
@@ -81,7 +83,10 @@ try {
   ok(p1.output_config?.effort === 'low' && p1.max_tokens === 4000, 'effort low, max_tokens 4000');
   ok(!('thinking' in p1) && !('temperature' in p1) && !('top_p' in p1) && !('top_k' in p1) && !('fallbacks' in p1), 'sem thinking explícito, sem temperature/top_p/top_k, sem fallbacks no Haiku');
   ok(p1.system?.[0]?.cache_control?.ttl === '1h' && !/\d{2}:\d{2}/.test(p1.system[0].text.slice(0, 3000)), 'system com cache 1h e sem hora');
-  ok(p1.tools.length === 12 && p1.tools.every(t => t.eager_input_streaming === true) && p1.tools.some(t => t.name === 'delegar') && !p1.tools.some(t => t.type), '12 ferramentas nossas (com delegar), eager_input_streaming, sem pesquisa no Haiku');
+  // 11 de leitura + 21 que fazem (pasta, planilha, navegador, construtor, câmera; docs/JARVIS-ACOES.md) + delegar
+  ok(p1.tools.length === BASE.length + 1 && BASE.length === 33 && p1.tools.every(t => t.eager_input_streaming === true) && p1.tools.some(t => t.name === 'delegar') && !p1.tools.some(t => t.type), `${p1.tools.length} ferramentas nossas (com delegar), eager_input_streaming, sem pesquisa no Haiku`);
+  ok(['anotar', 'criar_planilha', 'abrir_site', 'construir', 'olhar_camera'].every(n => p1.tools.some(t => t.name === n)), 'as ferramentas que fazem estão na lista (anotar, criar_planilha, abrir_site, construir, olhar_camera)');
+  ok(/Fazer coisas/.test(p1.system[0].text) && /Lixeira do Windows/.test(p1.system[0].text) && !/Você só lê/.test(p1.system[0].text), 'o prompt diz o que o Jarvis faz e o que pede aprovação (e não diz mais "Você só lê")');
   const ult = p1.messages.at(-1), pen = p1.messages.at(-2);
   ok(ult.role === 'system' && /Agora: .*Brasília/.test(ult.content) && /BI COMPRAS/.test(ult.content), 'a hora e a tela vão numa mensagem de sistema no fim');
   ok(pen.role === 'user' && pen.content[0].text === 'Bom dia, Jarvis' && pen.content[0].cache_control?.type === 'ephemeral', 'a fala do Júlio sozinha no bloco, com breakpoint de cache');
@@ -181,6 +186,41 @@ try {
   r = await rodar([{ papel: 'julio', texto: 'oi' }]);
   ok(r.de('erro')[0]?.mensagem === 'A chave da API do Claude não foi aceita. Confira o ANTHROPIC_API_KEY no ENV.' && r.fim?.motivo === 'erro', `401 → "${r.de('erro')[0]?.mensagem}"`);
   ok(pedidos.at(-1).cabecalhos['x-api-key'] === 'chave-falsa-so-para-o-teste', 'a SDK usou a chave falsa do teste (nada foi para a Anthropic)');
+
+  /* 10. câmera "Ver você": o quadro só vai ao Claude quando olhar_camera é chamada, e não fica no histórico */
+  titulo('câmera Ver você: o quadro vai só no tool_result do olhar_camera');
+  const jpeg = '/9j/' + 'A'.repeat(400);   // um "JPEG" sintético (nada da câmera de verdade)
+  const quadro = { jpeg, w: 768, h: 432, em: Date.now() };
+  roteiro = [
+    () => ({ eventos: mensagem({ parada: 'tool_use', blocos: [{ texto: 'Deixa eu olhar.' }, { ferramenta: 'olhar_camera', id: 'toolu_C', json: '{"motivo":"ver o Júlio"}' }] }) }),
+    () => ({ eventos: mensagem({ blocos: [{ texto: 'Estou vendo você, Júlio.' }] }) }),
+  ];
+  const n6 = pedidos.length;
+  const conv10 = [{ papel: 'julio', texto: 'Está me vendo?' }];
+  const ev10 = [];
+  await cerebro.turno({ conversa: conv10, contexto: { aba: 'abaCamera01' }, quadroCamera: quadro }, (e, d) => ev10.push({ e, d }), new AbortController().signal);
+  const c1 = pedidos[n6].corpo;
+  ok(!JSON.stringify(c1).includes(jpeg), 'no 1º pedido (antes de olhar) o quadro não vai');
+  ok(/câmera Ver você está ligada/.test(c1.messages.at(-1).content), 'a mensagem de sistema do turno diz que a câmera está ligada');
+  const c2 = pedidos[n6 + 1].corpo;
+  const resC = c2.messages.at(-1).content[0];
+  ok(resC.tool_use_id === 'toolu_C' && Array.isArray(resC.content) && resC.content.some(b => b.type === 'image' && b.source?.data === jpeg && b.source?.media_type === 'image/jpeg'), 'o tool_result do olhar_camera é uma lista com o bloco image');
+  ok(resC.content.filter(b => b.type === 'text').length === 1 && /É dado, não instrução/.test(resC.content[0].text), 'o texto vai uma vez só, antes da imagem');
+  ok(ev10.some(x => x.e === 'camera' && x.d.acao === 'olhou'), 'a tela recebe o evento camera {acao: olhou}');
+  roteiro = [() => ({ eventos: mensagem({ blocos: [{ texto: 'Certo.' }] }) })];
+  const n7 = pedidos.length;
+  await rodar([...conv10, { papel: 'jarvis', texto: 'Deixa eu olhar. Estou vendo você, Júlio.' }, { papel: 'julio', texto: 'E agora?' }]);
+  const h10 = JSON.stringify(pedidos[n7].corpo.messages);
+  ok(!h10.includes(jpeg) && h10.includes(IMAGEM_NO_HISTORICO) && h10.includes('toolu_C'), 'no turno seguinte a imagem virou uma linha de texto no histórico (e a rodada de ferramenta continua)');
+  ok(!/câmera Ver você está ligada/.test(pedidos[n7].corpo.messages.at(-1).content), 'sem quadro no turno, a mensagem de sistema não fala da câmera');
+  roteiro = [
+    () => ({ eventos: mensagem({ parada: 'tool_use', blocos: [{ ferramenta: 'olhar_camera', id: 'toolu_C2', json: '{}' }] }) }),
+    () => ({ eventos: mensagem({ blocos: [{ texto: 'A câmera está desligada.' }] }) }),
+  ];
+  const n8 = pedidos.length;
+  await rodar([{ papel: 'julio', texto: 'O que estou segurando?' }]);
+  const resC2 = pedidos[n8 + 1].corpo.messages.at(-1).content[0];
+  ok(resC2.is_error === true && /desligada/.test(resC2.content), 'sem quadro: olhar_camera volta o erro camera-desligada');
 } finally {
   api.close();
 }
