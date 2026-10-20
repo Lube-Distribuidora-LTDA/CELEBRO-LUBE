@@ -27,7 +27,7 @@ Mais o `PCEST` de hoje (estoque, bloqueado, avaria, custo financeiro).
   entrou em 2026-10-20 09:23) — ver "Publicação na Vercel".
 - Carga: `P:\INTEGRAÇÃO BI\INVENTARIO` (`1 - CONFIGURACAO` com o `ENV` copiado do de leitura do REPOSIÇÕES, `2 - SISTEMA INVENTARIO`,
   `3 - INSTALACAO`, `INSTALAR TUDO.bat`, `ATUALIZAR AGORA.bat`, `DIAGNOSTICO.bat`, `LEIA-ME.txt`). Rotina: [[Inventário - Sync]].
-  **Ainda não agendada** (é o `INSTALAR TUDO.bat` na `SRV-IA`, com o Júlio).
+  **Agendada na `SRV-IA` em 2026-10-20** (Júlio, `INSTALAR TUDO.bat`) e **vigiada pelo [[GUARDIÃO DA LUBE]]** (rotina, tarefa e site).
 - Para ver hoje: **`INICIAR.bat`** na pasta do projeto (`http://localhost:3102`, só esta máquina) ou a configuração `inventario`
   do `.claude/launch.json` do cérebro.
 
@@ -163,7 +163,7 @@ movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/ver
 - [x] **Variáveis `SUPABASE_DB_*`** — Júlio cadastrou e publicou de novo em 2026-10-20.
 - [x] **Cartão no portal** — Júlio decidiu abrir; Claude ativou em 2026-10-20 09:20 e acompanhou a entrada do Júlio (09:23, tudo liberado, sem erro).
 - [ ] **Júlio:** liberar o painel para quem não tem "Todos os sistemas" (logística, coordenador), pelo painel admin do portal.
-- [ ] **Júlio:** agendar na `SRV-IA` — `P:\INTEGRAÇÃO BI\INVENTARIO\INSTALAR TUDO.bat`; depois o Claude confere em `inventario.controle_carga`.
+- [x] **Agendar na `SRV-IA`** — Júlio, 2026-10-20 ~10:03 (`INSTALAR TUDO.bat`); Claude conferiu a carga em `inventario.controle_carga` (10 de 10 `OK`).
 - [x] **Commit do recebimento no ar** — o pacote das 08:30 (tipos 13 a 15) quebrava a tela publicada (`b9554f9`); a sessão principal
   testou o `cf65b78` e fez o push às ~09:00. **Regra daqui em diante:** pacote com formato novo só se grava avisando, para a tela
   publicada e o pacote andarem juntos.
@@ -172,14 +172,15 @@ movimentacao-inventario`). Funções `api/dados` (o pacote comprimido), `api/ver
 - [ ] Ler a devolução ao fornecedor (1302) e a 1322 como saída do bloqueado (PCMOV `SD`/`SR` com `QTBLOQUEADA`).
 - [ ] Perguntar à Kaizen por que o WMS cita a transação de outra nota da mesma carga (o tempo de armazenagem mede 44% das notas).
 - [ ] Levar a acurácia de 6,6% e a divergência do "Material Consumo" ao coordenador de logística.
-- [ ] [[GUARDIÃO DA LUBE]] vigiar a [[Inventário - Sync]] (depois do agendamento).
+- [x] [[GUARDIÃO DA LUBE]] vigiar a [[Inventário - Sync]] — Claude, 2026-10-20 10:27 (migração `saude_v1_inventario`: rotina, tarefa e site).
 - [x] **Recebimento (1301) como entrada no bloqueado** e o **tempo de armazenagem do recebimento** — Claude, 2026-10-20 (pela linha da nota, não pela transação do WMS) · [[2026-10-20 — Recebimento de compra no Movimentação de Inventário]]
 - [ ] Departamento, seção e embalagem no `core.dim_produto` (dono: [[BI COMPRAS]]) para aposentar o `inventario.produto`.
 
 ## Histórico de mudanças
 Tudo o que mudou neste sistema, do mais novo para o mais antigo. Visão de todos os sistemas em [[Registro de mudanças]].
 
-- **2026-10-20 (10:03–10:20)** — **1ª carga fora desta máquina** (Júlio rodou um `.bat` da pasta de rede — disse "ATUALIZAR TUDO", que não existe; `INSTALAR TUDO` ou `ATUALIZAR AGORA`, a confirmar): 10 passos `OK` em 17 min, conferência 1147 igual ao PCMOV, pacote `20261020-101950`; acompanhada pelo Claude em `inventario.controle_carga`. Não estava nesta máquina (sem `C:\BI\INVENTARIO` na LOGISTICA-55). **Agendamento a confirmar** pela carga das 11:05. O Guardião ainda não vigia o Inventário · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
+- **2026-10-20 (10:27)** — **No Guardião** (Júlio pediu, Claude fez): migração `saude_v1_inventario` no DATA WAREHOUSE (commit `977ae31` no `12. GUARDIAO`): rotina, tarefa e site no catálogo; às 10:30 o vigia viu a tarefa na `SRV-IA` e o site respondeu. Falha de carga agora avisa no Telegram e tenta de novo 1 vez · [[GUARDIÃO DA LUBE]]
+- **2026-10-20 (10:03–10:20)** — **Agendado na `SRV-IA`** (Júlio rodou o `INSTALAR TUDO.bat`, tarefa `Inventario - Sync` com 8 horários) e 1ª carga disparada pelo instalador: 10 passos `OK` em 17 min, conferência 1147 igual ao PCMOV, pacote `20261020-101950`; acompanhada pelo Claude em `inventario.controle_carga` · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-20 (09:20)** — **Cartão ativado no portal** (Júlio pediu, Claude fez): `public.sistemas.ativo = true` para `movimentacao-inventario` no banco do [[PAINEL LUBE DISTRIBUIDORA]]. Às 09:23 o Júlio entrou pelo portal: a Sentinela liberou `/`, `/api/versao`, `/api/dados` e 30 fotos com a identidade `cpd@lube.com.br`, sem erro na Vercel. Passa a aparecer para as 6 contas com "Todos os sistemas" · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-20 (~09:00)** — **Variáveis e o recebimento no ar** (Júlio cadastrou as 5 `SUPABASE_DB_*` — Production, Sensitive — e fez o redeploy `dpl_4wjrZ8L4r14xv7NhD6PX4w1RyjVV`; Claude conferiu pelos nomes). O pacote do recebimento (tipos 13–15, gravado às 08:30) **quebraria a tela publicada** (`b9554f9` não conhece esses tipos); o Claude testou o `cf65b78` localmente (7 telas OK com o pacote `20261020-083045`) e fez o push: produção `dpl_DAxsrSoibSCrWDGMyrYWwTWDYb8G` (`cf65b78`) `READY`. Lição: **pacote com formato novo e tela publicada andam juntos** — gravar o pacote antes do push quebra quem abrir. **Falta:** ativar o cartão no portal (o portal só abre cartão ativo) e conferir com login · [[2026-10-19 — Movimentação de Inventário, rotinas 266 e 1147]]
 - **2026-10-20** — **Recebimento de compra (1301) no painel** (sessão aberta pela conversa de origem; Claude fez): investigação só

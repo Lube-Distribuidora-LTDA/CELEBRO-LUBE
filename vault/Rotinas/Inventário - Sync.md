@@ -7,8 +7,9 @@ tags: [bi, inventario, agendador]
 ---
 # Inventário - Sync
 
-**Quando:** 07:05, 09:05, 11:05, 13:05, 15:05, 17:05, 19:05 e 22:05 — **ainda não agendada** (2026-10-19: falta o Júlio rodar o
-`INSTALAR TUDO.bat` na `SRV-IA`).
+**Quando:** 07:05, 09:05, 11:05, 13:05, 15:05, 17:05, 19:05 e 22:05 — **agendada pelo Júlio na `SRV-IA` em 2026-10-20 ~10:03**
+(`INSTALAR TUDO.bat`; o vigia do [[GUARDIÃO DA LUBE]] viu a tarefa às 10:30). **Vigiada pelo Guardião desde 2026-10-20**
+(falha avisa no Telegram e tenta de novo 1 vez).
 **Onde:** Agendador de Tarefas do Windows, na VM `SRV-IA`, rodando de `C:\BI\INVENTARIO` (tarefa `Inventario - Sync`).
 **O que atualiza:** o [[MOVIMENTAÇÃO DE INVENTÁRIO]] — livro de bloqueio (rotina 266), recebimento de compra (1301, desde 2026-10-20),
 inventário rotativo (1147), posição do PCEST e cadastros — confere a 1147 contra o PCMOV e deixa pronto o pacote do painel (`inventario.painel_cache`).
@@ -19,7 +20,7 @@ galpão mexe o dia inteiro.
 
 ## Fluxo
 1. **Gatilho** · Agendador do Windows na `SRV-IA` (tarefa `Inventario - Sync`), às 07:05, 09:05, 11:05, 13:05, 15:05, 17:05, 19:05 e 22:05
-   - **Atenção:** ainda não instalada (2026-10-19); fora do horário, `ATUALIZAR AGORA.bat` roda uma carga sem mexer em tarefa
+   - Instalada em 2026-10-20 ~10:03; fora do horário, `ATUALIZAR AGORA.bat` roda uma carga sem mexer em tarefa
 2. **Processa** · `executar.py` (com `pythonw`, em `C:\BI\INVENTARIO`) chama o `sync_inventario.py` ([[data-warehouse]])
    - **Se falhar:** erro antes de o log existir vai para `falha_inicial.log`; a tranca do `bi_comum.py` pula a rodada se já houver outra carga
 3. **Lê** · [[WinThor]] (Oracle, leitura): `PCLOGDESBLOQUEIO` (266 e companhia, desde 2025), `PCMOV` E/EB/ER da 1301 com a hora da nota no `PCNFENT` (recebimento, desde 2026-10-20), `PCINVENTROT` + `PCLOGATUALIZAINVENT` (1147), `PCEST`, `PCPRODUT`, `PCEMPR`, `PCTABDEV`, `PCFILIAL`
@@ -39,11 +40,12 @@ de 19/10. O `statement_timeout` do pacote é 300 s: se o banco piorar, o passo `
 
 **2026-10-20, 10:03–10:20 (1ª carga rodada pelo Júlio fora desta máquina, provavelmente a `SRV-IA`):** 17 min, **10 passos `OK`** —
 produto 212 s, recebimento 147 s (55.588), livro 440 s (201.188), conferência 1147 igual ao PCMOV, pacote 166 s (versão
-`20261020-101950`). O Júlio disse "rodei o ATUALIZAR TUDO", nome que não existe na pasta: **falta confirmar se foi o `INSTALAR TUDO`**
-(tarefa criada) ou o `ATUALIZAR AGORA` (só uma carga). A prova é a carga das 11:05 aparecer em `controle_carga`.
+`20261020-101950`). Foi a carga que o `INSTALAR TUDO.bat` dispara ao criar a tarefa (o Júlio confirmou; o vigia viu
+"última execução hoje 10:03, sem erro").
 
-**Vigia:** ainda **fora** do [[GUARDIÃO DA LUBE]] (2026-10-20): se a carga falhar, nada chega no Telegram. Ligar só depois de a
-tarefa existir (horário cadastrado sem tarefa = alarme falso).
+**Vigia:** no [[GUARDIÃO DA LUBE]] desde 2026-10-20 10:27 (migração `saude_v1_inventario`): `rotina:inventario-sync` (10 consultas,
+tolerância 10 min para começar, limite 25 min de duração, tranca `carga:inventario:carga`), `tarefa:Inventario - Sync` (vigia
+da VM) e `site:movimentacao-inventario`. AVISO na `conferencia_1147` vira atenção com o motivo.
 
 **A carga entrou?** Responde `inventario.controle_carga` (um registro por passo, mais a `conferencia_1147` e o `pacote`), não o log.
 

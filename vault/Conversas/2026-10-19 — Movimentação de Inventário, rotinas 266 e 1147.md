@@ -43,6 +43,10 @@ e acompanhou pela Sentinela: às 09:23 o Júlio entrou, com página, versão, da
 Depois o Júlio disse "rodei o ATUALIZAR TUDO" (nome que não existe; `INSTALAR TUDO` ou `ATUALIZAR AGORA`): o Claude acompanhou a carga
 das 10:03 passo a passo em `controle_carga` (10 de 10 `OK`, 17 min). O Júlio perguntou se a carga está ligada ao Guardião para avisar
 no Telegram: **ainda não** — o Claude propôs ligar rotina, tarefa e site como no Trade, mas só a rotina depois de confirmada a tarefa.
+O Júlio confirmou ("rodei o INSTALAR TUDO.bat na SRV-IA (a tarefa foi criada). Pode ligar o Inventário no Guardião: rotina, tarefa
+e site") e o Claude aplicou a migração `saude_v1_inventario`, trocando só a lista de schemas na definição que está no banco (lição do
+08, que desfez a correção de outra conversa). Às 10:30 o vigia da `SRV-IA` viu a tarefa e o site respondeu; a rotina passa a ser
+cobrada a partir da carga das 11:05.
 
 ## Decisões
 - 2026-10-19 (Claude): schema `inventario`, filiais 1/7/10/11/12, histórico desde 2025-01-01, valor ao custo financeiro de hoje,
@@ -71,6 +75,6 @@ no Telegram: **ainda não** — o Claude propôs ligar rotina, tarefa e site com
 - [x] GitHub (Júlio criou), Vercel e Sentinela (Claude) — 2026-10-20.
 - [x] Júlio: as 5 variáveis `SUPABASE_DB_*` e o Redeploy; cartão ativado (Claude, a pedido dele) e entrada conferida — 2026-10-20 09:23.
 - [ ] Júlio: liberar o painel para quem não tem "Todos os sistemas" (logística), pelo painel admin.
-- [ ] Júlio: `INSTALAR TUDO.bat` na `SRV-IA`; Claude confere `inventario.controle_carga`.
+- [x] Júlio: `INSTALAR TUDO.bat` na `SRV-IA` (2026-10-20 ~10:03); Claude conferiu a carga e ligou o Guardião (10:27).
 - [ ] Corrigir no WinThor os 17 milhões de paletes; levar a acurácia ao coordenador de logística.
-- [ ] Guardião vigiar a [[Inventário - Sync]]; avaliar o recebimento (1301) no livro.
+- [x] Guardião vigiar a [[Inventário - Sync]] (2026-10-20, `saude_v1_inventario`); recebimento (1301) no painel (2026-10-20, outra sessão).

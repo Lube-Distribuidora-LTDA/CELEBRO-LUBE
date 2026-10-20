@@ -90,7 +90,8 @@ tags: [tag1, tag2]
 - **Movimentação de Inventário:** [[MOVIMENTAÇÃO DE INVENTÁRIO]] (2026-10-19): tudo o que mexe no estoque do galpão, das rotinas
   **266** (livro `PCLOGDESBLOQUEIO`: bloqueio, desbloqueio, avaria, devolução que entra bloqueada, liberação do WMS — **cada
   programa grava os campos de um jeito**) e **1147** (inventário rotativo, conferido ao centavo contra o PCMOV). Schema `inventario`
-  no DATA WAREHOUSE, carga [[Inventário - Sync]] com instalador em `P:\INTEGRAÇÃO BI\INVENTARIO` (**ainda não agendada**), painel de
+  no DATA WAREHOUSE, carga [[Inventário - Sync]] **agendada na `SRV-IA` em 2026-10-20** (8 horários, aos :05) e **vigiada pelo
+  Guardião** (rotina, tarefa e site, migração `saude_v1_inventario`), painel de
   7 telas com análise livre, **publicado em 2026-10-20** em `movimentacao-inventario.vercel.app` (repositório público
   `Lube-Distribuidora-LTDA/MOVIMENTACAO-INVENTARIO`, fechado pela Sentinela), **em uso**: variáveis `SUPABASE_DB_*` cadastradas pelo
   Júlio, cartão ativo no portal (GESTÃO OPERACIONAL) e entrada do Júlio conferida em 2026-10-20 09:23; local pelo
