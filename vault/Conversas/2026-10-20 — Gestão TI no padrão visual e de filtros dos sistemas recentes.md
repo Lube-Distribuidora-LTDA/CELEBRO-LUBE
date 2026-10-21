@@ -49,6 +49,10 @@ sistemas seguintes evoluíram. Ele voltou ao padrão atual, com o código do [[G
   Fornecedores, Kanban e Faturas em 375 px sem rolagem lateral; `npm run build` limpo; produção conferida pelo
   `/fonts/` respondendo 200 (a versão antiga responde 401).
 
+- 2026-10-21: **a partir do dia 15, o mês seguinte entra nos atalhos de data** do filtro (Júlio: "a partir do dia 15
+  de todo mês, precisa adicionar o mês seguinte no filtro"). Em 21/10 a lista fica Nov/26, Out/26 … Mai/26; até o dia 14,
+  só os 6 meses até o atual. É quando as faturas do mês seguinte começam a chegar. Commit `299110e`.
+
 ## Pendências
 - [ ] **Tema claro**: o padrão pede claro e escuro, e o Gestão TI ainda é só escuro. As telas têm muita classe de
       transparência sobre fundo escuro (`bg-white/…`); vale como próximo passo, se o Júlio quiser.
