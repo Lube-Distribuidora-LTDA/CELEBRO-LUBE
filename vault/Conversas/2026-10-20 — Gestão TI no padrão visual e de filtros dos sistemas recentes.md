@@ -51,7 +51,7 @@ sistemas seguintes evoluíram. Ele voltou ao padrão atual, com o código do [[G
 
 - 2026-10-21: **a partir do dia 15, o mês seguinte entra nos atalhos de data** do filtro (Júlio: "a partir do dia 15
   de todo mês, precisa adicionar o mês seguinte no filtro"). Em 21/10 a lista fica Nov/26, Out/26 … Mai/26; até o dia 14,
-  só os 6 meses até o atual. É quando as faturas do mês seguinte começam a chegar. Commit `299110e`.
+  só os 6 meses até o atual. É quando as faturas do mês seguinte começam a chegar. Commit `299110e`; o push não gerou deploy na Vercel e foi preciso um commit vazio (`21dccd3`) para ele sair — no ar (READY) em 2026-10-21.
 
 ## Pendências
 - [ ] **Tema claro**: o padrão pede claro e escuro, e o Gestão TI ainda é só escuro. As telas têm muita classe de
