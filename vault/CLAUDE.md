@@ -109,7 +109,7 @@ tags: [tag1, tag2]
   [[Fiscal - Sync]] com instalador em `P:\INTEGRAÇÃO BI\FISCAL` (**de 30 em 30 min, 07:10 a 19:40**, no ar desde 2026-10-20 16:10), conferida contra a PCTABPR em
   toda carga; painel de 4 telas em **`gestao-fiscal-olive.vercel.app`** (repositório público `Lube-Distribuidora-LTDA/GESTAO-FISCAL`,
   projeto `gestao-fiscal`, fechado pela Sentinela; o `gestao-fiscal.vercel.app` é de outra conta). Em uso desde 2026-10-20 (cartão
-  ativo em CONTABILIDADE). **Falta o Júlio:** `ATUALIZAR AGORA.bat` na `SRV-IA` (a regra do estoque nas filiais 1, 11 e 12). Local: `Desktop\BI\17. FISCAL\INICIAR.bat` (porta 3103).
+  ativo em CONTABILIDADE); a VM roda a regra do estoque desde 2026-10-20 17:10. Local: `Desktop\BI\17. FISCAL\INICIAR.bat` (porta 3103).
 - **Folha de pagamento:** [[SISTEMA FINANCEIRO]] (no ar desde 2026-09-25, `gestao-finaceiro.vercel.app`): Validação de
   Folha das cinco empresas (LUBE, LUBE RJ, L LOG, IMPÉRIO LOG, SERMAR) no schema `financeiro` do DATA WAREHOUSE. A
   folha entra em PDF do DP e só grava se bater com o resumo impresso. Rotina: [[Validação mensal da folha]].

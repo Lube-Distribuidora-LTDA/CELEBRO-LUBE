@@ -76,5 +76,5 @@ pelo departamento; o tipo de mercadoria MC marca até Guaraná Antarctica) e o p
 - [ ] Júlio: a região 1 (Espírito Santo) fica de fora mesmo?
 - [x] GitHub, Vercel e Sentinela (Claude, a pedido do Júlio); `INSTALAR TUDO.bat` (Júlio, 11:34; carga conferida).
 - [x] Júlio: as 5 `SUPABASE_DB_*` e o Redeploy; cartão ativado (Claude, com o aceite dele).
-- [ ] Júlio: `ATUALIZAR AGORA.bat` na `SRV-IA` (regra dos ativos).
+- [x] Júlio: `ATUALIZAR AGORA.bat` na `SRV-IA` (regra dos ativos e do estoque) — feito em 2026-10-20 antes das 17:10; conferido em 2026-10-21.
 - [ ] Ligar no [[GUARDIÃO DA LUBE]] (rotina, tarefa e site).

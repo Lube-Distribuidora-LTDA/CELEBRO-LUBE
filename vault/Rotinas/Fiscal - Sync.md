@@ -26,7 +26,7 @@ carga) e a tranca do banco impede duas ao mesmo tempo. _Até 2026-10-20 eram 5 c
    - Fora do horário, `ATUALIZAR AGORA.bat` roda uma carga sem mexer em tarefa
 2. **Processa** · `executar.py` (com `pythonw`, em `C:\BI\FISCAL`) chama o `sync_fiscal.py` ([[data-warehouse]])
    - **Se falhar:** erro antes de o log existir vai para `falha_inicial.log`; a tranca do `bi_comum.py` pula a rodada se já houver outra carga
-3. **Lê** · [[WinThor]] (Oracle, leitura, numa transação só de leitura): `PCTRIBUT`, `PCREGIAO` + `PCCLIENT`/`PCPRACA`, `PCPRODUT` + `PCEST`, `PCMOV` (venda 12 meses), `PCTABPR` (produtos de revenda não excluídos × as 16 regiões do `ENV`)
+3. **Lê** · [[WinThor]] (Oracle, leitura, numa transação só de leitura): `PCTRIBUT`, `PCREGIAO` + `PCCLIENT`/`PCPRACA`, `PCPRODUT` + `PCEST`, `PCMOV` (venda 12 meses), `PCTABPR` (produtos ativos com estoque nas filiais 1, 11 ou 12 × as 16 regiões do `ENV`)
 4. **Grava** · [[Supabase]] DATA WAREHOUSE, schema `fiscal`: `TRUNCATE` + `INSERT` nos fatos e no produto, upsert em região e tributação; registra cada passo em `controle_carga`
 5. **Confere** · `conferencia`: região a região, linhas, sem tributação e sem preço no banco contra a `PCTABPR`, na mesma foto do Oracle; diferença vira `AVISO`
 6. **Processa** · monta o pacote do painel (`fiscal.painel_dados(12)`), comprime em gzip e guarda em `fiscal.painel_cache` (passo `pacote`)
@@ -34,6 +34,9 @@ carga) e a tranca do banco impede duas ao mesmo tempo. _Até 2026-10-20 eram 5 c
 7. **Entrega** · painel do [[GESTÃO FISCAL]]: a tela abre com a cópia guardada no navegador e baixa o pacote novo por trás (o botão Atualizar acende)
 
 ## Duração medida
+**Em produção (conferido em 2026-10-21):** as cargas da VM saem nos :10 e :40 — 20/10 de 16:10 a 19:40 e 21/10 de 07:10 a
+10:40, todas com 7 passos `OK` e a conferência igual ao WinThor; ~4.265 produtos ativos com estoque por carga.
+
 **2026-10-20, 11:34 (carga do instalador, fora desta máquina):** ~16 s, 7 de 7 `OK` — preço 9,8 s (116.432), venda 2,3 s,
 produto 1,0 s, conferência 0,5 s (igual ao WinThor nas 16 regiões), pacote 1,6 s (versão `20261020-113428`).
 
